@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sonartra Signals Results</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-page="results">
+    <header class="site-header">
+      <div class="container nav-wrap">
+        <a class="logo" href="index.html">Sonartra</a>
+        <nav>
+          <a href="assessment.html">Assessment</a>
+          <a href="signals.html">Signals</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container section-gap">
+      <p class="eyebrow">Signals Output</p>
+      <h1>Behavioural score summary</h1>
+      <p class="lead narrow" id="summaryLine"></p>
+
+      <section class="card">
+        <h2>Interpretation</h2>
+        <p id="interpretation"></p>
+      </section>
+
+      <section class="score-grid" id="scoreList"></section>
+
+      <div class="button-row">
+        <a class="button button-ghost" href="assessment.html">Return to Assessment</a>
+        <button id="retakeButton" class="button">Reset & Retake</button>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <p>Rules-based interpretation for MVP. AI layer added in future phases.</p>
+      </div>
+    </footer>
+
+    <script src="questions.js"></script>
+    <script src="signals.js"></script>
+  </body>
+</html>
