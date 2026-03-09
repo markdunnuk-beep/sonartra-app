@@ -955,3 +955,28 @@ h3 {
     position: static;
   }
 }
+.metric-empty {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 0.92rem;
+}
+
+.lead-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lead-form label span {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.58);
+  font-weight: 700;
+}
+
+.form-status {
+  margin: 14px 0 0;
+  color: #86efac;
+  font-size: 0.92rem;
+}
