@@ -20,6 +20,16 @@
     <main class="results-page">
       <section class="results-hero">
         <div class="container">
+          <p class="section-label">Sonartra Signals</p>
+          <h1>Behavioural Performance Intelligence Dashboard</h1>
+          <p class="results-intro" id="summaryLine"></p>
+
+          <div class="results-summary-grid" id="summaryCards"></div>
+
+          <section class="results-interpretation">
+            <h2>Strategic interpretation</h2>
+            <p id="interpretation"></p>
+          </section>
           <p class="section-label">Sonartra Signals Report</p>
           <h1>Behavioural Performance Intelligence Profile</h1>
           <p class="results-intro" id="summaryLine"></p>
@@ -56,6 +66,24 @@
       </section>
 
       <section class="results-section">
+        <div class="container results-grid-layout">
+          <div class="results-panel">
+            <div class="results-grid" id="scoreSections"></div>
+
+            <div class="button-row">
+              <a class="button button-ghost" href="assessment.html">Return to Assessment</a>
+              <button id="retakeButton" class="button">Reset & Retake</button>
+            </div>
+          </div>
+
+          <aside class="radar-panel results-card">
+            <div class="radar-header">
+              <h3>Style profile visual</h3>
+              <p>Primary behavioural architecture</p>
+            </div>
+            <svg id="profileRadar" viewBox="0 0 320 320" aria-label="Behavioural style radar chart"></svg>
+            <div class="radar-legend" id="radarLegend"></div>
+          </aside>
         <div class="container">
           <div class="results-grid">
             <article class="results-card">
@@ -90,6 +118,37 @@
         <div class="container org-pivot-wrap">
           <div class="org-copy">
             <p class="section-label">Organisation Intelligence</p>
+            <h2>Now imagine this across your organisation.</h2>
+            <p>
+              Sonartra extends individual signal data into organisation-wide intelligence. Teams gain visibility into behavioural concentration,
+              leadership architecture, conflict and stress patterns, and how talent can be deployed for performance outcomes.
+            </p>
+            <p>
+              This is the shift from personality outputs to enterprise-grade performance intelligence.
+            </p>
+          </div>
+
+          <div class="org-preview-card">
+            <h3>Organisation snapshot preview</h3>
+            <div class="org-mini-grid">
+              <article>
+                <span>Team Balance</span>
+                <strong>Style concentration by function</strong>
+              </article>
+              <article>
+                <span>Leadership Architecture</span>
+                <strong>Results vs Process distribution</strong>
+              </article>
+              <article>
+                <span>Risk Patterning</span>
+                <strong>Conflict + stress hotspots</strong>
+              </article>
+              <article>
+                <span>Deployment Signal</span>
+                <strong>Performance placement opportunities</strong>
+              </article>
+            </div>
+          </div>
             <h2>Now imagine this across your leadership team.</h2>
             <p>
               Individual insight is useful, but organisational performance comes from understanding
@@ -119,6 +178,42 @@
         <div class="container lead-capture-wrap">
           <div class="lead-copy">
             <p class="section-label">Bring Sonartra to your organisation</p>
+            <h2>See how Sonartra can improve team performance.</h2>
+            <p>
+              Register interest for a tailored walkthrough of Sonartra's organisational intelligence layer.
+            </p>
+          </div>
+
+          <form class="lead-form" id="leadForm">
+            <div class="form-grid">
+              <label>
+                Name
+                <input name="name" type="text" placeholder="Your name" required />
+              </label>
+              <label>
+                Work email
+                <input name="email" type="email" placeholder="you@company.com" required />
+              </label>
+              <label>
+                Organisation
+                <input name="organisation" type="text" placeholder="Organisation" required />
+              </label>
+              <label>
+                Role / title
+                <input name="role" type="text" placeholder="Role / title" required />
+              </label>
+              <label>
+                Team size
+                <input name="teamSize" type="text" placeholder="Approx. team size" required />
+              </label>
+              <label>
+                What interested you most
+                <input name="interest" type="text" placeholder="Key use case" required />
+              </label>
+            </div>
+
+            <button type="submit" class="button">Request organisational demo</button>
+            <p class="form-success" id="leadSuccess" role="status" aria-live="polite"></p>
             <h2>See how Sonartra can improve team performance</h2>
             <p>
               Sonartra is a performance intelligence platform for organisations that need deeper,
