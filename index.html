@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -15,7 +15,9 @@
         </a>
         <nav>
           <a href="signals.html">Signals</a>
-          <a class="button button-small" href="assessment.html">Start Assessment</a>
+          <a class="button button-small" href="assessment.html"
+            >Start Assessment</a
+          >
         </nav>
       </div>
     </header>
@@ -27,68 +29,165 @@
             <p class="eyebrow">Human Performance Intelligence Platform</p>
             <h1>The operating system for human performance intelligence.</h1>
             <p class="lead">
-              Sonartra transforms behavioural signals into structured intelligence — revealing
-              how individuals think, teams function, and organisations perform.
+              Sonartra transforms behavioural signals into structured
+              intelligence — revealing how individuals think, teams function,
+              and organisations perform.
             </p>
             <div class="hero-actions">
-              <a class="button" href="assessment.html">Start the Sonartra Signals Assessment</a>
-              <a class="button button-ghost" href="#intelligence-system">Explore the Intelligence System</a>
+              <a class="button" href="assessment.html"
+                >Start the Sonartra Signals Assessment</a
+              >
+              <a class="button button-ghost" href="#intelligence-system"
+                >Explore the Intelligence System</a
+              >
             </div>
           </div>
-          <div class="hero-visual" aria-hidden="true">
-            <div class="sonar-grid"></div>
-            <div class="sonar-ring ring-1"></div>
-            <div class="sonar-ring ring-2"></div>
-            <div class="sonar-ring ring-3"></div>
-            <div class="sonar-sweep"></div>
-            <div class="signal-dot dot-1"></div>
-            <div class="signal-dot dot-2"></div>
-            <div class="signal-dot dot-3"></div>
+          <div
+            class="hero-visual intelligence-radar"
+            role="img"
+            aria-label="Sonartra Intelligence System radar showing progression from Individual to Team to Organisational Intelligence"
+          >
+            <svg
+              class="intelligence-radar-svg"
+              viewBox="0 0 320 320"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <defs>
+                <radialGradient id="radarGlow" cx="50%" cy="50%" r="60%">
+                  <stop offset="0%" stop-color="rgba(107, 164, 255, 0.22)" />
+                  <stop offset="100%" stop-color="rgba(107, 164, 255, 0)" />
+                </radialGradient>
+              </defs>
+
+              <circle cx="160" cy="160" r="140" class="radar-boundary" />
+              <circle cx="160" cy="160" r="136" fill="url(#radarGlow)" />
+
+              <g class="radar-grid">
+                <line x1="20" y1="160" x2="300" y2="160" />
+                <line x1="160" y1="20" x2="160" y2="300" />
+                <line x1="61" y1="61" x2="259" y2="259" />
+                <line x1="259" y1="61" x2="61" y2="259" />
+              </g>
+
+              <g class="radar-rings">
+                <circle
+                  cx="160"
+                  cy="160"
+                  r="52"
+                  class="intelligence-ring ring-individual"
+                />
+                <circle
+                  cx="160"
+                  cy="160"
+                  r="90"
+                  class="intelligence-ring ring-team"
+                />
+                <circle
+                  cx="160"
+                  cy="160"
+                  r="128"
+                  class="intelligence-ring ring-org"
+                />
+              </g>
+
+              <g class="radar-sweep-group">
+                <path
+                  d="M160 160 L160 24 A136 136 0 0 1 250 58 Z"
+                  class="radar-sweep"
+                />
+              </g>
+
+              <g class="radar-nodes">
+                <circle
+                  cx="160"
+                  cy="160"
+                  r="5"
+                  class="signal-node node-individual"
+                />
+                <circle
+                  cx="118"
+                  cy="121"
+                  r="4"
+                  class="signal-node node-individual pulse-delay-1"
+                />
+                <circle cx="216" cy="146" r="4" class="signal-node node-team" />
+                <circle
+                  cx="98"
+                  cy="206"
+                  r="4"
+                  class="signal-node node-team pulse-delay-2"
+                />
+                <circle cx="256" cy="195" r="4" class="signal-node node-org" />
+                <circle
+                  cx="74"
+                  cy="90"
+                  r="4"
+                  class="signal-node node-org pulse-delay-3"
+                />
+              </g>
+            </svg>
+
+            <div class="layer-label layer-label-individual" tabindex="0">
+              <span>Individual Intelligence</span>
+            </div>
+            <div class="layer-label layer-label-team" tabindex="0">
+              <span>Team Intelligence</span>
+            </div>
+            <div class="layer-label layer-label-org" tabindex="0">
+              <span>Organisational Intelligence</span>
+            </div>
           </div>
         </div>
       </section>
 
       <section class="container section section-problem fade-in-up">
         <p class="section-label">Positioning</p>
-        <h2>Most organisations measure financial performance. Very few measure human performance.</h2>
+        <h2>
+          Most organisations measure financial performance. Very few measure
+          human performance.
+        </h2>
         <p class="section-text narrow">
-          Leadership teams track revenue, margins, and operational metrics with precision. But the
-          human systems that produce those results — behaviour, motivation, decision-making,
-          leadership dynamics — often remain invisible. Sonartra makes human performance measurable.
+          Leadership teams track revenue, margins, and operational metrics with
+          precision. But the human systems that produce those results —
+          behaviour, motivation, decision-making, leadership dynamics — often
+          remain invisible. Sonartra makes human performance measurable.
         </p>
       </section>
 
       <section class="container section fade-in-up" id="intelligence-system">
         <p class="section-label">Intelligence Architecture</p>
         <h2>The Sonartra Intelligence System</h2>
-        <p class="section-text">Behavioural signals analysed across three layers.</p>
+        <p class="section-text">
+          Behavioural signals analysed across three layers.
+        </p>
 
         <div class="intelligence-stack">
           <article class="card intelligence-layer">
             <span class="layer-tag">Layer 01</span>
             <h3>Individual Intelligence</h3>
             <p>
-              Understand the architecture of individual performance. Sonartra analyses behavioural
-              signals to reveal how people think, lead, make decisions, respond to pressure, and
-              contribute inside teams.
+              Understand the architecture of individual performance. Sonartra
+              analyses behavioural signals to reveal how people think, lead,
+              make decisions, respond to pressure, and contribute inside teams.
             </p>
           </article>
           <article class="card intelligence-layer">
             <span class="layer-tag">Layer 02</span>
             <h3>Team Intelligence</h3>
             <p>
-              Build balanced, high-performance teams. Sonartra identifies leadership balance,
-              complementary thinking styles, conflict risk, decision-making dynamics, and cognitive
-              diversity across groups.
+              Build balanced, high-performance teams. Sonartra identifies
+              leadership balance, complementary thinking styles, conflict risk,
+              decision-making dynamics, and cognitive diversity across groups.
             </p>
           </article>
           <article class="card intelligence-layer">
             <span class="layer-tag">Layer 03</span>
             <h3>Organisational Intelligence</h3>
             <p>
-              Decode organisational performance patterns. At scale, Sonartra reveals cultural
-              alignment, leadership distribution, stress signals, structural weaknesses, and
-              decision-making patterns across the organisation.
+              Decode organisational performance patterns. At scale, Sonartra
+              reveals cultural alignment, leadership distribution, stress
+              signals, structural weaknesses, and decision-making patterns
+              across the organisation.
             </p>
           </article>
         </div>
@@ -98,10 +197,12 @@
         <div class="card signals-engine">
           <div>
             <p class="section-label">Sonartra Signals</p>
-            <h2>The behavioural engine powering the Sonartra intelligence system.</h2>
+            <h2>
+              The behavioural engine powering the Sonartra intelligence system.
+            </h2>
             <p class="section-text">
-              Signals is a structured behavioural assessment designed to reveal how individuals
-              perform inside real organisational environments.
+              Signals is a structured behavioural assessment designed to reveal
+              how individuals perform inside real organisational environments.
             </p>
             <ul class="signals-list">
               <li>Behavioural style</li>
@@ -112,9 +213,14 @@
             </ul>
           </div>
           <div class="signals-cta-panel">
-            <p class="signals-statement">Take the most comprehensive performance assessment on the planet.</p>
+            <p class="signals-statement">
+              Take the most comprehensive performance assessment on the planet.
+            </p>
             <a class="button" href="assessment.html">Start the Assessment</a>
-            <p class="microcopy">80 questions · approximately 10 minutes · instant intelligence report</p>
+            <p class="microcopy">
+              80 questions · approximately 10 minutes · instant intelligence
+              report
+            </p>
           </div>
         </div>
       </section>
@@ -123,8 +229,8 @@
         <p class="section-label">Intelligence Output</p>
         <h2>Your performance architecture — visualised.</h2>
         <p class="section-text narrow">
-          Signals results are delivered through a structured dashboard that translates behavioural
-          data into actionable intelligence.
+          Signals results are delivered through a structured dashboard that
+          translates behavioural data into actionable intelligence.
         </p>
 
         <div class="grid cards-2 dashboard-preview">
@@ -164,9 +270,10 @@
           <p class="section-label">Enterprise Deployment</p>
           <h2>Built for leadership teams and organisations.</h2>
           <p class="section-text narrow">
-            While individuals can run the Signals assessment independently, Sonartra becomes more
-            powerful when deployed across teams and organisations — enabling leadership teams to
-            analyse behavioural patterns, team composition, decision-making dynamics, and cultural
+            While individuals can run the Signals assessment independently,
+            Sonartra becomes more powerful when deployed across teams and
+            organisations — enabling leadership teams to analyse behavioural
+            patterns, team composition, decision-making dynamics, and cultural
             alignment at scale.
           </p>
         </div>
@@ -175,8 +282,8 @@
       <section class="container section final-cta fade-in-up">
         <h2>Discover how you perform.</h2>
         <p class="section-text narrow">
-          Run the Sonartra Signals assessment and uncover the behavioural architecture driving your
-          performance.
+          Run the Sonartra Signals assessment and uncover the behavioural
+          architecture driving your performance.
         </p>
         <a class="button" href="assessment.html">Start the Assessment</a>
       </section>
