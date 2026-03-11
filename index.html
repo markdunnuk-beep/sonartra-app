@@ -90,6 +90,43 @@
                 />
               </g>
 
+              <g class="radar-triangulation">
+                <line
+                  x1="160"
+                  y1="160"
+                  x2="222"
+                  y2="133"
+                  class="tri-link"
+                />
+                <line
+                  x1="222"
+                  y1="133"
+                  x2="95"
+                  y2="225"
+                  class="tri-link"
+                />
+                <line
+                  x1="95"
+                  y1="225"
+                  x2="160"
+                  y2="160"
+                  class="tri-link"
+                />
+
+                <g class="tri-node tri-node-individual">
+                  <circle cx="160" cy="160" r="9" class="tri-node-ring" />
+                  <circle cx="160" cy="160" r="3" class="tri-node-core" />
+                </g>
+                <g class="tri-node tri-node-team">
+                  <circle cx="222" cy="133" r="8" class="tri-node-ring" />
+                  <circle cx="222" cy="133" r="3" class="tri-node-core" />
+                </g>
+                <g class="tri-node tri-node-org">
+                  <circle cx="95" cy="225" r="8" class="tri-node-ring" />
+                  <circle cx="95" cy="225" r="3" class="tri-node-core" />
+                </g>
+              </g>
+
               <g class="radar-sweep-group">
                 <path
                   d="M160 160 L160 24 A136 136 0 0 1 250 58 Z"
@@ -99,31 +136,19 @@
 
               <g class="radar-nodes">
                 <circle
-                  cx="160"
-                  cy="160"
-                  r="5"
-                  class="signal-node node-individual"
-                />
-                <circle
                   cx="118"
                   cy="121"
-                  r="4"
+                  r="3"
                   class="signal-node node-individual pulse-delay-1"
                 />
-                <circle cx="216" cy="146" r="4" class="signal-node node-team" />
+                <circle cx="216" cy="146" r="3" class="signal-node node-team" />
                 <circle
                   cx="98"
                   cy="206"
-                  r="4"
+                  r="3"
                   class="signal-node node-team pulse-delay-2"
                 />
-                <circle cx="256" cy="195" r="4" class="signal-node node-org" />
-                <circle
-                  cx="74"
-                  cy="90"
-                  r="4"
-                  class="signal-node node-org pulse-delay-3"
-                />
+                <circle cx="256" cy="195" r="3" class="signal-node node-org" />
               </g>
             </svg>
 
