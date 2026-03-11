@@ -223,6 +223,42 @@ nav a:hover {
   filter: drop-shadow(0 0 9px rgba(184, 204, 255, 0.72));
 }
 
+.radar-triangulation {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tri-link {
+  stroke: rgba(126, 186, 255, 0.5);
+  stroke-width: 1.15;
+  fill: none;
+  filter: drop-shadow(0 0 6px rgba(107, 164, 255, 0.42));
+  animation: triLinkPulse 5.5s ease-in-out infinite;
+}
+
+.tri-node-ring {
+  fill: rgba(7, 14, 27, 0.65);
+  stroke: rgba(153, 202, 255, 0.86);
+  stroke-width: 1.15;
+  filter: drop-shadow(0 0 8px rgba(131, 188, 255, 0.48));
+  animation: triNodePulse 4.6s ease-in-out infinite;
+}
+
+.tri-node-core {
+  fill: #e4efff;
+  filter: drop-shadow(0 0 8px rgba(169, 214, 255, 0.82));
+}
+
+.tri-node-team .tri-node-ring,
+.tri-node-team .tri-node-core {
+  animation-delay: 0.75s;
+}
+
+.tri-node-org .tri-node-ring,
+.tri-node-org .tri-node-core {
+  animation-delay: 1.4s;
+}
+
 .pulse-delay-1 {
   animation-delay: 0.5s;
 }
@@ -236,14 +272,22 @@ nav a:hover {
 .layer-label {
   position: absolute;
   z-index: 2;
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.085em;
   text-transform: uppercase;
-  color: rgba(243, 247, 255, 0.85);
-  background: rgba(8, 14, 27, 0.66);
-  border: 1px solid rgba(107, 164, 255, 0.24);
+  color: rgba(248, 251, 255, 0.96);
+  background: linear-gradient(
+    130deg,
+    rgba(11, 20, 38, 0.92),
+    rgba(12, 24, 44, 0.76)
+  );
+  border: 1px solid rgba(141, 191, 255, 0.5);
   border-radius: 999px;
-  padding: 0.3rem 0.55rem;
+  padding: 0.42rem 0.85rem;
+  box-shadow:
+    0 0 0 1px rgba(107, 164, 255, 0.16),
+    0 0 18px rgba(107, 164, 255, 0.18);
   transition:
     border-color 0.2s ease,
     transform 0.2s ease,
@@ -270,13 +314,13 @@ nav a:hover {
 }
 
 .layer-label-team {
-  right: 12%;
-  top: 28%;
+  right: 16%;
+  top: 32%;
 }
 
 .layer-label-org {
-  left: 9%;
-  bottom: 17%;
+  left: 14%;
+  bottom: 21%;
 }
 
 .section {
@@ -678,10 +722,34 @@ h3 {
   }
 }
 
+@keyframes triLinkPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
+@keyframes triNodePulse {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .intelligence-ring,
   .radar-sweep-group,
   .signal-node,
+  .tri-link,
+  .tri-node-ring,
   .fade-in-up {
     animation: none;
   }
@@ -699,8 +767,19 @@ h3 {
   }
 
   .layer-label {
-    font-size: 0.62rem;
+    font-size: 0.66rem;
     letter-spacing: 0.06em;
+    padding: 0.38rem 0.72rem;
+  }
+
+  .layer-label-team {
+    right: 14%;
+    top: 34%;
+  }
+
+  .layer-label-org {
+    left: 12%;
+    bottom: 20%;
   }
 }
 
