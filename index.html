@@ -57,6 +57,11 @@
                   <stop offset="0%" stop-color="rgba(107, 164, 255, 0.22)" />
                   <stop offset="100%" stop-color="rgba(107, 164, 255, 0)" />
                 </radialGradient>
+                <radialGradient id="radarDepth" cx="50%" cy="50%" r="68%">
+                  <stop offset="0%" stop-color="rgba(9, 21, 39, 0.08)" />
+                  <stop offset="65%" stop-color="rgba(6, 14, 26, 0.45)" />
+                  <stop offset="100%" stop-color="rgba(4, 8, 16, 0.85)" />
+                </radialGradient>
                 <radialGradient id="coreGlow" cx="50%" cy="50%" r="70%">
                   <stop offset="0%" stop-color="rgba(39, 215, 161, 0.35)" />
                   <stop offset="100%" stop-color="rgba(39, 215, 161, 0)" />
@@ -64,6 +69,7 @@
               </defs>
 
               <circle cx="160" cy="160" r="140" class="radar-boundary" />
+              <circle cx="160" cy="160" r="136" fill="url(#radarDepth)" />
               <circle cx="160" cy="160" r="136" fill="url(#radarGlow)" />
 
               <g class="radar-grid">
@@ -95,44 +101,52 @@
               </g>
 
               <g class="radar-core" aria-hidden="true">
-                <circle cx="160" cy="160" r="20" class="core-halo" />
-                <circle cx="160" cy="160" r="7" class="core-node" />
+                <circle cx="160" cy="160" r="28" class="core-halo" />
+                <circle cx="160" cy="160" r="20" class="core-emblem-shell" />
+                <image
+                  href="assets/Sonartra_S_Mark.svg"
+                  x="147"
+                  y="146"
+                  width="26"
+                  height="26"
+                  class="core-emblem"
+                />
               </g>
 
               <g class="radar-triangulation">
                 <line
                   x1="160"
-                  y1="108"
-                  x2="82"
-                  y2="205"
+                  y1="78"
+                  x2="72"
+                  y2="216"
                   class="tri-link tri-link-ind-team"
                 />
                 <line
-                  x1="82"
-                  y1="205"
-                  x2="271"
-                  y2="224"
+                  x1="72"
+                  y1="216"
+                  x2="248"
+                  y2="216"
                   class="tri-link tri-link-team-org"
                 />
                 <line
-                  x1="271"
-                  y1="224"
+                  x1="248"
+                  y1="216"
                   x2="160"
-                  y2="108"
+                  y2="78"
                   class="tri-link tri-link-org-ind"
                 />
 
                 <g class="tri-node tri-node-individual">
-                  <circle cx="160" cy="108" r="10" class="tri-node-ring" />
-                  <circle cx="160" cy="108" r="3.2" class="tri-node-core" />
+                  <circle cx="160" cy="78" r="10" class="tri-node-ring" />
+                  <circle cx="160" cy="78" r="3.2" class="tri-node-core" />
                 </g>
                 <g class="tri-node tri-node-team">
-                  <circle cx="82" cy="205" r="9" class="tri-node-ring" />
-                  <circle cx="82" cy="205" r="3.2" class="tri-node-core" />
+                  <circle cx="72" cy="216" r="9" class="tri-node-ring" />
+                  <circle cx="72" cy="216" r="3.2" class="tri-node-core" />
                 </g>
                 <g class="tri-node tri-node-org">
-                  <circle cx="271" cy="224" r="9.5" class="tri-node-ring" />
-                  <circle cx="271" cy="224" r="3.2" class="tri-node-core" />
+                  <circle cx="248" cy="216" r="9.5" class="tri-node-ring" />
+                  <circle cx="248" cy="216" r="3.2" class="tri-node-core" />
                 </g>
               </g>
 
@@ -144,24 +158,11 @@
               </g>
 
               <g class="radar-nodes">
-                <circle
-                  cx="110"
-                  cy="205"
-                  r="2.4"
-                  class="signal-node node-team pulse-delay-1"
-                />
-                <circle cx="121" cy="228" r="2.5" class="signal-node node-team" />
-                <circle
-                  cx="101"
-                  cy="176"
-                  r="2.3"
-                  class="signal-node node-team pulse-delay-2"
-                />
-                <circle cx="228" cy="205" r="2.4" class="signal-node node-org" />
-                <circle cx="252" cy="181" r="2.5" class="signal-node node-org pulse-delay-2" />
-                <circle cx="280" cy="185" r="2.3" class="signal-node node-org pulse-delay-3" />
-                <circle cx="248" cy="236" r="2.4" class="signal-node node-org pulse-delay-1" />
-                <circle cx="281" cy="231" r="2.2" class="signal-node node-org" />
+                <circle cx="102" cy="196" r="2.3" class="signal-node node-team pulse-delay-1" />
+                <circle cx="114" cy="232" r="2.4" class="signal-node node-team" />
+                <circle cx="228" cy="198" r="2.3" class="signal-node node-org pulse-delay-2" />
+                <circle cx="266" cy="232" r="2.2" class="signal-node node-org" />
+                <circle cx="183" cy="116" r="2.1" class="signal-node pulse-delay-3" />
               </g>
             </svg>
 

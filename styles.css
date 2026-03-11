@@ -204,15 +204,23 @@ nav a:hover {
 
 .core-halo {
   fill: url(#coreGlow);
-  opacity: 0.45;
+  opacity: 0.4;
   animation: corePulse 5.2s ease-in-out infinite;
 }
 
-.core-node {
-  fill: rgba(229, 247, 255, 0.82);
-  stroke: rgba(107, 164, 255, 0.75);
-  stroke-width: 0.8;
-  filter: drop-shadow(0 0 8px rgba(107, 164, 255, 0.7));
+.core-emblem-shell {
+  fill: rgba(8, 19, 36, 0.82);
+  stroke: rgba(152, 203, 255, 0.68);
+  stroke-width: 1;
+  filter:
+    drop-shadow(0 0 12px rgba(96, 169, 255, 0.42))
+    drop-shadow(0 0 5px rgba(39, 215, 161, 0.24));
+}
+
+.core-emblem {
+  color: rgba(235, 245, 255, 0.98);
+  opacity: 0.96;
+  filter: drop-shadow(0 0 6px rgba(126, 186, 255, 0.8));
 }
 
 .radar-sweep-group {
@@ -247,14 +255,14 @@ nav a:hover {
 }
 
 .tri-link {
-  stroke: rgba(126, 186, 255, 0.5);
-  stroke-width: 1.15;
+  stroke: rgba(134, 196, 255, 0.56);
+  stroke-width: 1;
   fill: none;
-  stroke-dasharray: 5 12;
-  filter: drop-shadow(0 0 6px rgba(107, 164, 255, 0.42));
+  stroke-dasharray: 6 11;
+  filter: drop-shadow(0 0 5px rgba(107, 164, 255, 0.34));
   animation:
     triLinkPulse 5.5s ease-in-out infinite,
-    signalFlow 4.8s linear infinite,
+    signalFlow 5.4s linear infinite,
     linkSweepHit 7.5s linear infinite;
 }
 
@@ -312,22 +320,22 @@ nav a:hover {
 .layer-label {
   position: absolute;
   z-index: 2;
-  font-size: 0.76rem;
-  font-weight: 600;
-  letter-spacing: 0.085em;
+  font-size: 0.79rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: rgba(248, 251, 255, 0.96);
-  background: linear-gradient(
-    130deg,
-    rgba(11, 20, 38, 0.92),
-    rgba(12, 24, 44, 0.76)
-  );
-  border: 1px solid rgba(141, 191, 255, 0.5);
+  color: rgba(248, 251, 255, 0.98);
+  background:
+    linear-gradient(130deg, rgba(8, 17, 32, 0.96), rgba(11, 23, 42, 0.84)),
+    rgba(12, 24, 44, 0.82);
+  border: 1px solid rgba(162, 206, 255, 0.6);
   border-radius: 999px;
-  padding: 0.42rem 0.85rem;
+  padding: 0.5rem 1.02rem;
   box-shadow:
-    0 0 0 1px rgba(107, 164, 255, 0.16),
-    0 0 18px rgba(107, 164, 255, 0.18);
+    0 0 0 1px rgba(107, 164, 255, 0.2),
+    0 0 24px rgba(107, 164, 255, 0.24),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(5px);
   transition:
     border-color 0.2s ease,
     transform 0.2s ease,
@@ -344,7 +352,7 @@ nav a:hover {
 
 .layer-label-individual {
   left: 50%;
-  top: 16%;
+  top: 5%;
   transform: translate(-50%, -50%);
 }
 
@@ -354,13 +362,13 @@ nav a:hover {
 }
 
 .layer-label-team {
-  left: 12%;
-  bottom: 24%;
+  left: -3%;
+  bottom: 29%;
 }
 
 .layer-label-org {
-  right: 10%;
-  bottom: 20%;
+  right: -3%;
+  bottom: 29%;
 }
 
 .section {
@@ -768,7 +776,7 @@ h3 {
     opacity: 0.35;
   }
   50% {
-    opacity: 0.82;
+    opacity: 0.72;
   }
 }
 
@@ -824,7 +832,7 @@ h3 {
   6% {
     stroke: rgba(183, 225, 255, 0.95);
     opacity: 1;
-    stroke-width: 1.45;
+    stroke-width: 1.25;
   }
 }
 @keyframes signalFlow {
@@ -888,23 +896,23 @@ h3 {
   }
 
   .layer-label {
-    font-size: 0.66rem;
-    letter-spacing: 0.06em;
-    padding: 0.38rem 0.72rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.065em;
+    padding: 0.4rem 0.76rem;
   }
 
   .layer-label-individual {
-    top: 14%;
+    top: 9%;
   }
 
   .layer-label-team {
-    left: 9%;
-    bottom: 24%;
+    left: 2%;
+    bottom: 27%;
   }
 
   .layer-label-org {
-    right: 8%;
-    bottom: 20%;
+    right: 2%;
+    bottom: 27%;
   }
 }
 
