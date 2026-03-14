@@ -1,11 +1,10 @@
-import { clsx } from 'clsx'
 import Image from 'next/image'
 import Link from 'next/link'
+import { clsx } from 'clsx'
 
 type SonartraLogoProps = {
   mode?: 'full' | 'mark'
   size?: 'sm' | 'md' | 'lg'
-  tone?: 'default' | 'light'
   className?: string
   href?: string
   priority?: boolean
@@ -32,14 +31,7 @@ const logoConfig = {
   },
 } as const
 
-export function SonartraLogo({
-  mode = 'full',
-  size = 'md',
-  tone = 'default',
-  className,
-  href,
-  priority = false,
-}: SonartraLogoProps) {
+export function SonartraLogo({ mode = 'full', size = 'md', className, href, priority = false }: SonartraLogoProps) {
   const config = logoConfig[mode]
   const dimensions = config.sizes[size]
   const image = (
@@ -49,7 +41,7 @@ export function SonartraLogo({
       width={dimensions.width}
       height={dimensions.height}
       priority={priority}
-      className={clsx('w-auto shrink-0 object-contain', tone === 'light' && 'invert brightness-0', className)}
+      className={clsx('h-auto w-auto object-contain', className)}
     />
   )
 
