@@ -10,7 +10,7 @@ export default function LoginPage() {
       <PublicNav />
       <section className="section flex justify-center">
         <Card className="w-full max-w-md space-y-4">
-          <SonartraLogo mode="full" size="md" />
+          <SonartraLogo mode="full" size="md" tone="light" />
           <h1 className="text-2xl font-semibold">Log in</h1>
           <Input placeholder="Email" type="email" />
           <Input placeholder="Password" type="password" />

@@ -16,42 +16,38 @@ const logoConfig = {
     src: '/logo/sonartra-logo.svg',
     alt: 'Sonartra',
     sizes: {
-      sm: { width: 120, height: 28 },
-      md: { width: 150, height: 34 },
-      lg: { width: 180, height: 42 },
+      sm: { width: 118, height: 26, className: 'h-[26px] w-[118px]' },
+      md: { width: 136, height: 30, className: 'h-[30px] w-[136px]' },
+      lg: { width: 160, height: 36, className: 'h-[36px] w-[160px]' },
     },
   },
   mark: {
     src: '/logo/sonartra-mark.svg',
     alt: 'Sonartra mark',
     sizes: {
-      sm: { width: 24, height: 24 },
-      md: { width: 30, height: 30 },
-      lg: { width: 36, height: 36 },
+      sm: { width: 20, height: 20, className: 'h-5 w-5' },
+      md: { width: 24, height: 24, className: 'h-6 w-6' },
+      lg: { width: 28, height: 28, className: 'h-7 w-7' },
     },
   },
 } as const
 
-export function SonartraLogo({
-  mode = 'full',
-  size = 'md',
-  tone = 'default',
-  className,
-  href,
-  priority = false,
-}: SonartraLogoProps) {
+export function SonartraLogo({ mode = 'full', size = 'md', tone = 'default', className, href, priority = false }: SonartraLogoProps) {
   const config = logoConfig[mode]
   const dimensions = config.sizes[size]
+
   const image = (
-    <Image
-      src={config.src}
-      alt={config.alt}
-      width={dimensions.width}
-      height={dimensions.height}
-      priority={priority}
-      style={tone === 'light' ? { filter: 'brightness(0) invert(1)' } : undefined}
-      className={clsx('h-auto w-auto shrink-0 object-contain', className)}
-    />
+    <span className={clsx('inline-flex shrink-0 items-center justify-center', dimensions.className, className)}>
+      <Image
+        src={config.src}
+        alt={config.alt}
+        width={dimensions.width}
+        height={dimensions.height}
+        priority={priority}
+        style={tone === 'light' ? { filter: 'brightness(0) invert(1)' } : undefined}
+        className="h-full w-full object-contain"
+      />
+    </span>
   )
 
   if (href) {

@@ -1,40 +1,24 @@
-"use client";
+'use client'
 
-import { motion } from "framer-motion";
-import { PulseRings } from "./PulseRings";
-import { BackgroundSignals } from "./BackgroundSignals";
-import { SonartraMark } from "./SonartraMark";
+import { motion } from 'framer-motion'
+import { PulseRings } from './PulseRings'
+import { BackgroundSignals } from './BackgroundSignals'
+import { SonartraMark } from './SonartraMark'
 
 type IntelligenceTriangleProps = {
-  reducedMotion: boolean;
-  pointerX: number;
-  pointerY: number;
-};
+  reducedMotion?: boolean
+  pointerX?: number
+  pointerY?: number
+}
 
 const nodeData = [
-  { id: "individual", label: "Individual Intelligence", x: 200, y: 96, textAnchor: "middle" as const, lx: 200, ly: 68 },
-  { id: "team", label: "Team Intelligence", x: 110, y: 266, textAnchor: "end" as const, lx: 88, ly: 286 },
-  {
-    id: "organisational",
-    label: "Organisational Intelligence",
-    x: 290,
-    y: 266,
-    textAnchor: "start" as const,
-    lx: 312,
-    ly: 286,
-  },
-];
+  { id: 'individual', label: 'Individual Intelligence', x: 200, y: 96, textAnchor: 'middle' as const, lx: 200, ly: 68 },
+  { id: 'team', label: 'Team Intelligence', x: 110, y: 266, textAnchor: 'end' as const, lx: 88, ly: 286 },
+  { id: 'organisational', label: 'Organisational Intelligence', x: 290, y: 266, textAnchor: 'start' as const, lx: 312, ly: 286 },
+]
 
-export function IntelligenceTriangle({
-  reducedMotion,
-  pointerX,
-  pointerY,
-}: IntelligenceTriangleProps) {
-  const parallaxStyle = reducedMotion
-    ? undefined
-    : {
-        transform: `translate3d(${pointerX * 6}px, ${pointerY * 6}px, 0)`,
-      };
+export function IntelligenceTriangle({ reducedMotion = false, pointerX = 0, pointerY = 0 }: IntelligenceTriangleProps) {
+  const parallaxStyle = reducedMotion ? undefined : { transform: `translate3d(${pointerX * 6}px, ${pointerY * 6}px, 0)` }
 
   return (
     <motion.div
@@ -45,37 +29,16 @@ export function IntelligenceTriangle({
       style={parallaxStyle}
     >
       <svg viewBox="0 0 400 400" className="h-full w-full" role="img" aria-label="Sonartra intelligence triangulation map">
-        <defs>
-          <radialGradient id="hero-bg" cx="50%" cy="42%" r="72%">
-            <stop offset="0%" stopColor="#131a24" />
-            <stop offset="56%" stopColor="#0d121a" />
-            <stop offset="100%" stopColor="#070b11" />
-          </radialGradient>
-          <radialGradient id="hero-glow" cx="50%" cy="52%" r="50%">
-            <stop offset="0%" stopColor="rgba(122,146,171,0.2)" />
-            <stop offset="100%" stopColor="rgba(122,146,171,0)" />
-          </radialGradient>
-          <linearGradient id="line-gradient" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="rgba(162,185,209,0.26)" />
-            <stop offset="50%" stopColor="rgba(189,205,222,0.42)" />
-            <stop offset="100%" stopColor="rgba(162,185,209,0.26)" />
-          </linearGradient>
-        </defs>
-
         <BackgroundSignals reducedMotion={reducedMotion} />
         <PulseRings reducedMotion={reducedMotion} />
 
-        <motion.g
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.9, duration: 0.7 }}
-        >
-          <line x1="200" y1="210" x2="200" y2="96" stroke="url(#line-gradient)" strokeWidth="1.4" />
-          <line x1="200" y1="210" x2="110" y2="266" stroke="url(#line-gradient)" strokeWidth="1.4" />
-          <line x1="200" y1="210" x2="290" y2="266" stroke="url(#line-gradient)" strokeWidth="1.4" />
-          <line x1="200" y1="96" x2="110" y2="266" stroke="url(#line-gradient)" strokeWidth="1.1" />
-          <line x1="110" y1="266" x2="290" y2="266" stroke="url(#line-gradient)" strokeWidth="1.1" />
-          <line x1="290" y1="266" x2="200" y2="96" stroke="url(#line-gradient)" strokeWidth="1.1" />
+        <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9, duration: 0.7 }}>
+          <line x1="200" y1="210" x2="200" y2="96" stroke="rgba(162,185,209,0.38)" strokeWidth="1.4" />
+          <line x1="200" y1="210" x2="110" y2="266" stroke="rgba(162,185,209,0.38)" strokeWidth="1.4" />
+          <line x1="200" y1="210" x2="290" y2="266" stroke="rgba(162,185,209,0.38)" strokeWidth="1.4" />
+          <line x1="200" y1="96" x2="110" y2="266" stroke="rgba(162,185,209,0.26)" strokeWidth="1.1" />
+          <line x1="110" y1="266" x2="290" y2="266" stroke="rgba(162,185,209,0.26)" strokeWidth="1.1" />
+          <line x1="290" y1="266" x2="200" y2="96" stroke="rgba(162,185,209,0.26)" strokeWidth="1.1" />
         </motion.g>
 
         {nodeData.map((node, index) => (
@@ -93,22 +56,12 @@ export function IntelligenceTriangle({
             transition={
               reducedMotion
                 ? { delay: 0.8 + index * 0.15, duration: 0.45 }
-                : {
-                    duration: 4.8,
-                    delay: 1.15 + index * 0.35,
-                    repeat: Number.POSITIVE_INFINITY,
-                    ease: "easeInOut",
-                  }
+                : { duration: 4.8, delay: 1.15 + index * 0.35, repeat: Number.POSITIVE_INFINITY, ease: 'easeInOut' }
             }
           >
             <circle cx={node.x} cy={node.y} r="10" className="fill-slate-300/10 stroke-slate-200/55" strokeWidth="1" />
             <circle cx={node.x} cy={node.y} r="3.25" className="fill-slate-100/90" />
-            <text
-              x={node.lx}
-              y={node.ly}
-              textAnchor={node.textAnchor}
-              className="fill-slate-200/92 text-[11px] tracking-[0.16em] md:text-[10px]"
-            >
+            <text x={node.lx} y={node.ly} textAnchor={node.textAnchor} className="fill-slate-200/92 text-[11px] tracking-[0.16em] md:text-[10px]">
               {node.label.toUpperCase()}
             </text>
           </motion.g>
@@ -120,5 +73,5 @@ export function IntelligenceTriangle({
         </motion.g>
       </svg>
     </motion.div>
-  );
+  )
 }

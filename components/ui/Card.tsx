@@ -5,8 +5,8 @@ export function Card({ children, className }: { children: ReactNode; className?:
   return (
     <div
       className={clsx(
-        'relative overflow-hidden rounded-xl border border-border/80 bg-panel/90 p-5 shadow-panel backdrop-blur-sm sm:p-6',
-        'before:pointer-events-none before:absolute before:inset-0 before:bg-gradient-to-b before:from-white/[0.02] before:to-transparent',
+        'surface relative overflow-hidden p-6 sm:p-7',
+        'before:pointer-events-none before:absolute before:inset-0 before:bg-gradient-to-b before:from-white/[0.02] before:via-transparent before:to-transparent',
         className,
       )}
     >
