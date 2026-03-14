@@ -8,7 +8,7 @@ import { organisationResults } from '@/data/mockData'
 export default function OrganisationResultsPage() {
   return (
     <AppShell>
-      <div className="space-y-6 lg:space-y-8">
+      <div className="space-y-7 lg:space-y-9">
         <TopHeader title="Organisation Intelligence" subtitle="Team and enterprise behavioural signals" />
 
         <section className="space-y-3">

@@ -26,20 +26,25 @@ export default function AssessmentPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6 lg:space-y-8">
+      <div className="space-y-7 lg:space-y-9">
         <TopHeader title="Sonartra Signals Assessment" subtitle="Behavioural signal capture" />
 
         {!started ? (
-          <Card className="max-w-2xl space-y-4">
+          <Card className="max-w-3xl space-y-5">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Readiness</p>
             <h2 className="text-2xl font-semibold">Start Assessment</h2>
             <p className="text-sm leading-6 text-textSecondary">
               80 questions • approximately 10–12 minutes • structured behavioural output.
             </p>
-            <Button onClick={() => setStarted(true)}>Begin</Button>
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={() => setStarted(true)}>Begin Assessment</Button>
+              <Button variant="secondary" href="/dashboard">
+                Return to Dashboard
+              </Button>
+            </div>
           </Card>
         ) : completed ? (
-          <Card className="max-w-2xl space-y-4 border-accent/40">
+          <Card className="max-w-3xl space-y-4 border-accent/40">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Complete</p>
             <h2 className="text-2xl font-semibold">Assessment complete</h2>
             <p className="text-sm leading-6 text-textSecondary">
@@ -56,12 +61,8 @@ export default function AssessmentPage() {
               <p>{progress}% complete</p>
             </div>
             <ProgressBar value={progress} />
-            <div key={index} className="transition-opacity duration-200 ease-out">
-              <AssessmentQuestionCard
-                question={assessmentQuestions[index]}
-                onSelect={onAnswer}
-                selected={answers[index]}
-              />
+            <div key={index} className="transition-opacity duration-300 ease-out">
+              <AssessmentQuestionCard question={assessmentQuestions[index]} onSelect={onAnswer} selected={answers[index]} />
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" onClick={() => setIndex((i) => Math.max(0, i - 1))}>

@@ -8,7 +8,7 @@ import { dashboardSummary, individualResults, measurePillars } from '@/data/mock
 export default function DashboardPage() {
   return (
     <AppShell>
-      <div className="space-y-6 lg:space-y-8">
+      <div className="space-y-7 lg:space-y-9">
         <TopHeader title="Dashboard" subtitle="High-level intelligence overview" />
 
         <section className="space-y-3">
