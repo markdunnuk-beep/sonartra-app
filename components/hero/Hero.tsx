@@ -1,89 +1,55 @@
-"use client";
+'use client'
 
-import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
-import { useMemo, useState } from "react";
-import { IntelligenceTriangle } from "./IntelligenceTriangle";
+import Link from 'next/link'
+import { motion, useReducedMotion } from 'framer-motion'
+import { IntelligenceTriangle } from './IntelligenceTriangle'
 
 export function Hero() {
-  const prefersReducedMotion = useReducedMotion() ?? false;
-  const [pointer, setPointer] = useState({ x: 0, y: 0 });
-
-  const glowStyle = useMemo(() => {
-    if (prefersReducedMotion) {
-      return { background: "radial-gradient(circle at 50% 45%, rgba(128,147,173,0.16), rgba(6,10,16,0) 58%)" };
-    }
-
-    return {
-      background: `radial-gradient(circle at ${50 + pointer.x * 8}% ${45 + pointer.y * 8}%, rgba(128,147,173,0.24), rgba(6,10,16,0) 58%)`,
-    };
-  }, [pointer.x, pointer.y, prefersReducedMotion]);
+  const prefersReducedMotion = useReducedMotion() ?? false
 
   return (
-    <section
-      className="relative isolate min-h-[95vh] overflow-hidden bg-[#06090f] text-slate-100"
-      onPointerMove={(event) => {
-        if (prefersReducedMotion) return;
-        const rect = event.currentTarget.getBoundingClientRect();
-        const x = (event.clientX - rect.left) / rect.width - 0.5;
-        const y = (event.clientY - rect.top) / rect.height - 0.5;
-        setPointer({ x, y });
-      }}
-      onPointerLeave={() => setPointer({ x: 0, y: 0 })}
-      aria-labelledby="hero-title"
-    >
+    <section className="section grid items-center gap-10 pt-12 lg:grid-cols-[1.08fr_0.92fr] lg:pt-16">
       <motion.div
-        className="pointer-events-none absolute inset-0"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.9, ease: "easeOut" }}
-        style={glowStyle}
-      />
-
-      <div className="relative mx-auto grid min-h-[95vh] max-w-7xl items-center gap-14 px-6 py-20 md:grid-cols-[1.06fr_0.94fr] md:px-10 lg:py-24">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-          className="order-2 space-y-6 md:order-1"
-        >
-          <p className="text-xs uppercase tracking-[0.26em] text-slate-300/80">Performance Intelligence Platform</p>
-          <h1
-            id="hero-title"
-            className="max-w-2xl text-balance text-4xl font-medium leading-tight tracking-[-0.02em] text-slate-50 sm:text-5xl lg:text-[3.5rem]"
+        initial={prefersReducedMotion ? undefined : { opacity: 0, y: 10 }}
+        animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+        className="space-y-7"
+      >
+        <p className="eyebrow">Performance Intelligence Platform</p>
+        <h1 className="max-w-2xl text-4xl font-semibold leading-tight md:text-5xl lg:text-6xl">
+          Improve execution quality with behavioural intelligence.
+        </h1>
+        <p className="prose-copy">
+          Sonartra maps individual, team, and organisational performance signals into clear operating insight for better
+          strategic decisions.
+        </p>
+        <div className="flex flex-wrap gap-3 pt-1">
+          <Link
+            href="/assessment"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-accent/70 bg-accent px-5 text-sm font-medium text-[#031126] transition hover:-translate-y-0.5 hover:bg-[#6BAFFF]"
           >
-            Performance intelligence for individuals, teams, and organisations.
-          </h1>
-          <p className="max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
-            Sonartra maps behavioural signals, leadership dynamics, and organisational patterns to help build
-            higher-performing teams.
-          </p>
+            Start Signals Assessment
+          </Link>
+          <Link
+            href="/platform"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border/90 bg-panel/80 px-5 text-sm font-medium text-textPrimary transition hover:border-accent/50"
+          >
+            Explore Platform
+          </Link>
+        </div>
+      </motion.div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Link
-              href="/signals.html"
-              className="inline-flex items-center justify-center rounded-md border border-slate-300/20 bg-slate-100/95 px-5 py-3 text-sm font-medium tracking-[0.08em] text-slate-950 transition hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-100"
-            >
-              Explore Sonartra Signals
-            </Link>
-            <Link
-              href="#intelligence-system"
-              className="inline-flex items-center justify-center rounded-md border border-slate-500/40 px-5 py-3 text-sm font-medium tracking-[0.08em] text-slate-100 transition hover:border-slate-300/60 hover:bg-slate-200/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-300"
-            >
-              View platform overview
-            </Link>
-          </div>
-        </motion.div>
-
-        <motion.div
-          className="order-1 md:order-2"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <IntelligenceTriangle reducedMotion={prefersReducedMotion} pointerX={pointer.x} pointerY={pointer.y} />
-        </motion.div>
-      </div>
+      <motion.div
+        initial={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.98 }}
+        animate={prefersReducedMotion ? undefined : { opacity: 1, scale: 1 }}
+        transition={{ duration: 0.8, delay: 0.08 }}
+        className="surface relative overflow-hidden p-4 sm:p-6"
+      >
+        <div className="absolute inset-x-6 top-0 h-28 bg-gradient-to-b from-accent/20 to-transparent blur-3xl" />
+        <div className="relative rounded-xl border border-border/70 bg-bg/70 p-6">
+          <IntelligenceTriangle />
+        </div>
+      </motion.div>
     </section>
-  );
+  )
 }

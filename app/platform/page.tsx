@@ -14,17 +14,17 @@ export default function PlatformPage() {
           title="Performance intelligence for organisational systems"
           description="Sonartra converts behavioural data into strategic operating intelligence."
         />
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-5 md:grid-cols-2">
           <Card>
-            <h3 className="font-medium">Why performance is often misunderstood</h3>
-            <p className="mt-2 text-sm text-textSecondary">
+            <h3 className="text-lg font-semibold">Why performance is often misunderstood</h3>
+            <p className="mt-3 text-sm leading-6 text-textSecondary">
               Most organisations track outputs but miss the behavioural system creating those outputs. Sonartra measures
               the underlying performance architecture.
             </p>
           </Card>
           <Card>
-            <h3 className="font-medium">Different from personality tests</h3>
-            <p className="mt-2 text-sm text-textSecondary">
+            <h3 className="text-lg font-semibold">Different from personality tests</h3>
+            <p className="mt-3 text-sm leading-6 text-textSecondary">
               Traditional tools classify traits. Sonartra models operating conditions, decision dynamics, and risk
               signals tied directly to execution.
             </p>
@@ -33,11 +33,11 @@ export default function PlatformPage() {
       </section>
       <section className="section pt-0">
         <SectionHeading title="Three intelligence layers" />
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-3">
           {layerData.map((layer) => (
             <Card key={layer.title}>
-              <h3>{layer.title}</h3>
-              <p className="mt-2 text-sm text-textSecondary">{layer.description}</p>
+              <h3 className="text-lg font-semibold">{layer.title}</h3>
+              <p className="mt-3 text-sm leading-6 text-textSecondary">{layer.description}</p>
             </Card>
           ))}
         </div>

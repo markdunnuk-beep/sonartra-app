@@ -17,7 +17,7 @@ export default function SignalsPage() {
           right={<Button href="/assessment">Start Assessment</Button>}
         />
         <Card>
-          <p className="text-textSecondary">
+          <p className="prose-copy max-w-none">
             Signals uses 80 questions in approximately 10–12 minutes to produce structured outputs including Dominant
             Behaviour Style, Leadership Architecture, Stress Derailer Risk, and Culture Tension Index.
           </p>
@@ -25,9 +25,11 @@ export default function SignalsPage() {
       </section>
       <section className="section pt-0">
         <SectionHeading title="What Signals measures" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {measurePillars.map((p) => (
-            <Card key={p}>{p}</Card>
+            <Card key={p}>
+              <p className="font-medium">{p}</p>
+            </Card>
           ))}
         </div>
       </section>
