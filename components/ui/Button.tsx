@@ -12,9 +12,9 @@ type ButtonProps = {
 }
 
 const classes = {
-  base: 'inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-  primary: 'bg-accent text-white hover:bg-blue-500',
-  secondary: 'border border-border bg-panel text-textPrimary hover:border-accent/60',
+  base: 'inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium transition-all',
+  primary: 'bg-accent text-white shadow-[0_8px_20px_-10px_rgba(76,163,255,0.7)] hover:-translate-y-0.5 hover:bg-blue-500',
+  secondary: 'border border-border/80 bg-panel text-textPrimary hover:border-accent/60 hover:bg-bg/70',
   ghost: 'text-textSecondary hover:text-textPrimary',
 }
 

@@ -14,7 +14,7 @@ export default function HomePage() {
           <p className="mb-3 text-xs uppercase tracking-[0.2em] text-textSecondary">Sonartra Platform</p>
           <h1 className="text-4xl font-semibold leading-tight md:text-6xl">Performance Intelligence for Modern Organisations</h1>
           <p className="mt-5 max-w-xl text-textSecondary">Sonartra analyses behavioural signals across individuals, teams, and organisations to improve execution quality, leadership alignment, and operating performance.</p>
-          <div className="mt-7 flex gap-3"><Button href="/app/assessment">Take the Signals Assessment</Button><Button href="/contact" variant="secondary">Book a Demo</Button></div>
+          <div className="mt-7 flex gap-3"><Button href="/assessment">Take the Signals Assessment</Button><Button href="/contact" variant="secondary">Book a Demo</Button></div>
         </div>
         <Card className="relative h-80 overflow-hidden">
           <div className="absolute inset-6 rounded-full border border-accent/30" /><div className="absolute inset-12 rounded-full border border-accent/20" /><div className="absolute inset-20 rounded-full border border-accent/30" /><div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent" />
