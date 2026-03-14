@@ -7,7 +7,7 @@ export function TopHeader({ title, subtitle }: { title: string; subtitle: string
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="mb-3 flex items-center gap-2">
-            <SonartraLogo mode="mark" size="sm" />
+            <SonartraLogo mode="mark" size="sm" tone="light" className="h-5" />
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-textSecondary/80">Executive Console</p>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-textPrimary lg:text-3xl">{title}</h1>

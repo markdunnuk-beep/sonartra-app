@@ -21,12 +21,7 @@ export function Sidebar() {
   return (
     <aside className="sticky top-0 z-20 w-full border-b border-border/80 bg-panel/95 px-4 py-4 backdrop-blur-md lg:flex lg:h-screen lg:flex-col lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
       <div className="flex items-center justify-between lg:justify-start">
-        <div className="hidden lg:block">
-          <SonartraLogo mode="mark" size="lg" href="/dashboard" />
-        </div>
-        <div className="lg:hidden">
-          <SonartraLogo mode="mark" size="md" href="/dashboard" />
-        </div>
+        <SonartraLogo mode="mark" size="md" tone="light" className="h-6" href="/dashboard" />
         <div className="ml-3 min-w-0">
           <p className="text-sm font-semibold tracking-tight text-textPrimary">Sonartra Workspace</p>
           <p className="text-[11px] uppercase tracking-[0.18em] text-textSecondary/80">Executive Console</p>
