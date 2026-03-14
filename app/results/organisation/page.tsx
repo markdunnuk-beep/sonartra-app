@@ -11,11 +11,14 @@ export default function OrganisationResultsPage() {
       <div className="space-y-6 lg:space-y-8">
         <TopHeader title="Organisation Intelligence" subtitle="Team and enterprise behavioural signals" />
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {organisationResults.stats.map((s) => (
-            <StatCard key={s.label} label={s.label} value={s.value} />
-          ))}
-        </div>
+        <section className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Organisation summary</p>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {organisationResults.stats.map((s) => (
+              <StatCard key={s.label} label={s.label} value={s.value} />
+            ))}
+          </div>
+        </section>
 
         <TeamMatrix members={organisationResults.members} />
 
@@ -37,7 +40,7 @@ export default function OrganisationResultsPage() {
             </p>
           </Card>
           <Card>
-            <h3 className="text-base font-semibold">Cognitive Diversity Snapshot</h3>
+            <h3 className="text-base font-semibold">Team Intelligence Matrix Signal</h3>
             <p className="mt-3 text-sm leading-6 text-textSecondary">
               Strategist and Integrator blend healthy. Catalyst representation below target.
             </p>
