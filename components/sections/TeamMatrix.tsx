@@ -4,7 +4,10 @@ import { PillTag } from '@/components/ui/PillTag'
 export function TeamMatrix({ members }: { members: { name: string; style: string; leadership: string; risk: string; alignment: string }[] }) {
   return (
     <Card>
-      <h3 className="mb-4 text-lg font-semibold tracking-tight text-textPrimary">Team Intelligence Map</h3>
+      <div className="mb-4 flex items-end justify-between gap-2 border-b border-border/70 pb-3">
+        <h3 className="text-lg font-semibold tracking-tight text-textPrimary">Team Intelligence Matrix</h3>
+        <p className="text-xs uppercase tracking-[0.16em] text-textSecondary">Live cohort</p>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[700px] text-left text-sm">
           <thead className="text-xs uppercase tracking-wide text-textSecondary">

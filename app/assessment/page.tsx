@@ -31,6 +31,7 @@ export default function AssessmentPage() {
 
         {!started ? (
           <Card className="max-w-2xl space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Readiness</p>
             <h2 className="text-2xl font-semibold">Start Assessment</h2>
             <p className="text-sm leading-6 text-textSecondary">
               80 questions • approximately 10–12 minutes • structured behavioural output.
@@ -38,7 +39,8 @@ export default function AssessmentPage() {
             <Button onClick={() => setStarted(true)}>Begin</Button>
           </Card>
         ) : completed ? (
-          <Card className="max-w-2xl space-y-4">
+          <Card className="max-w-2xl space-y-4 border-accent/40">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Complete</p>
             <h2 className="text-2xl font-semibold">Assessment complete</h2>
             <p className="text-sm leading-6 text-textSecondary">
               Signal profile generated successfully. Review your structured report.
@@ -47,16 +49,25 @@ export default function AssessmentPage() {
           </Card>
         ) : (
           <div className="max-w-3xl space-y-5">
-            <p className="text-sm font-medium text-textSecondary">
-              Question {index + 1} of {assessmentQuestions.length}
-            </p>
+            <div className="flex items-center justify-between gap-3 text-sm text-textSecondary">
+              <p className="font-medium">
+                Question {index + 1} of {assessmentQuestions.length}
+              </p>
+              <p>{progress}% complete</p>
+            </div>
             <ProgressBar value={progress} />
-            <AssessmentQuestionCard question={assessmentQuestions[index]} onSelect={onAnswer} />
+            <div key={index} className="transition-opacity duration-200 ease-out">
+              <AssessmentQuestionCard
+                question={assessmentQuestions[index]}
+                onSelect={onAnswer}
+                selected={answers[index]}
+              />
+            </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" onClick={() => setIndex((i) => Math.max(0, i - 1))}>
                 Back
               </Button>
-              <Button onClick={() => setIndex((i) => i + 1)}>Next</Button>
+              <Button onClick={() => setIndex((i) => Math.min(assessmentQuestions.length, i + 1))}>Next</Button>
             </div>
           </div>
         )}
