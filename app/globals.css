@@ -2,12 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: dark; }
+:root {
+  color-scheme: dark;
+}
 
 body {
   @apply bg-bg text-textPrimary antialiased;
 }
 
 .section {
-  @apply mx-auto max-w-6xl px-6 py-16;
+  @apply mx-auto max-w-6xl px-6 py-16 lg:py-20;
 }
