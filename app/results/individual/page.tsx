@@ -9,7 +9,7 @@ import { individualResults } from '@/data/mockData'
 export default function IndividualResultsPage() {
   return (
     <AppShell>
-      <div className="space-y-6 lg:space-y-8">
+      <div className="space-y-7 lg:space-y-9">
         <TopHeader title="Individual Results" subtitle="Executive behavioural intelligence report" />
 
         <ResultsSection title="Executive Summary">
@@ -40,23 +40,23 @@ export default function IndividualResultsPage() {
           </div>
 
           <div className="space-y-4">
-            <ResultsSection title="Leadership Pattern">
+            <ResultsSection title="Leadership">
               <p className="text-sm leading-6 text-textSecondary">
                 Operates as a precision-oriented strategic driver. Effective in complex execution contexts requiring clarity
                 and pace.
               </p>
             </ResultsSection>
-            <ResultsSection title="Conflict Dynamics">
+            <ResultsSection title="Conflict">
               <p className="text-sm leading-6 text-textSecondary">
                 Direct and structured. Prefers explicit problem framing and rapid path-to-resolution.
               </p>
             </ResultsSection>
-            <ResultsSection title="Cultural Alignment">
+            <ResultsSection title="Culture">
               <p className="text-sm leading-6 text-textSecondary">
                 High alignment in systems with transparent accountability and data-led decision governance.
               </p>
             </ResultsSection>
-            <ResultsSection title="Stress Signal">
+            <ResultsSection title="Stress">
               <p className="text-sm leading-6 text-textSecondary">
                 Moderate risk under prolonged ambiguity. Mitigation: increase decision rights clarity and operating cadence.
               </p>
