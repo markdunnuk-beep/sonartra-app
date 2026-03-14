@@ -61,13 +61,13 @@ export function Hero() {
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link
-              href="#"
+              href="/signals.html"
               className="inline-flex items-center justify-center rounded-md border border-slate-300/20 bg-slate-100/95 px-5 py-3 text-sm font-medium tracking-[0.08em] text-slate-950 transition hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-100"
             >
               Explore Sonartra Signals
             </Link>
             <Link
-              href="#"
+              href="#intelligence-system"
               className="inline-flex items-center justify-center rounded-md border border-slate-500/40 px-5 py-3 text-sm font-medium tracking-[0.08em] text-slate-100 transition hover:border-slate-300/60 hover:bg-slate-200/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-300"
             >
               View platform overview
