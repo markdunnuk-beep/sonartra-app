@@ -1,19 +1,18 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "Sonartra | Performance Intelligence Platform",
-  description:
-    "Sonartra maps behavioural signals, leadership dynamics, and organisational patterns to build higher-performing teams.",
-  icons: {
-    icon: "/assets/Sonartra_S_Mark.svg",
-  },
-};
+  title: 'Sonartra | Performance Intelligence Platform',
+  description: 'Performance intelligence platform for organisations.',
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className={inter.className}>{children}</body>
     </html>
-  );
+  )
 }
