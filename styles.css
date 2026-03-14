@@ -124,6 +124,28 @@ nav a:hover {
   overflow: hidden;
 }
 
+
+.sonartra-hero {
+  min-height: 92vh;
+  display: flex;
+  align-items: center;
+}
+
+.hero-glow {
+  --hero-glow-x: 50%;
+  --hero-glow-y: 45%;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.95;
+  background: radial-gradient(
+    circle at var(--hero-glow-x) var(--hero-glow-y),
+    rgba(128, 147, 173, 0.24),
+    rgba(6, 10, 16, 0) 58%
+  );
+  transition: background-position 120ms linear;
+}
+
 .hero-premium::after {
   content: "";
   position: absolute;

@@ -23,23 +23,19 @@
     </header>
 
     <main>
-      <section class="hero hero-premium">
+      <section class="hero hero-premium sonartra-hero" id="home-hero" aria-labelledby="hero-title">
+        <div class="hero-glow" aria-hidden="true"></div>
         <div class="container hero-layout fade-in-up">
           <div class="hero-copy">
-            <p class="eyebrow">Human Performance Intelligence Platform</p>
-            <h1>The operating system for human performance intelligence.</h1>
+            <p class="eyebrow">Performance Intelligence Platform</p>
+            <h1 id="hero-title">Performance intelligence for individuals, teams, and organisations.</h1>
             <p class="lead">
-              Sonartra transforms behavioural signals into structured
-              intelligence — revealing how individuals think, teams function,
-              and organisations perform.
+              Sonartra maps behavioural signals, leadership dynamics, and organisational patterns to help build
+              higher-performing teams.
             </p>
             <div class="hero-actions">
-              <a class="button" href="assessment.html"
-                >Start the Sonartra Signals Assessment</a
-              >
-              <a class="button button-ghost" href="#intelligence-system"
-                >Explore the Intelligence System</a
-              >
+              <a class="button" href="signals.html">Explore Sonartra Signals</a>
+              <a class="button button-ghost" href="#intelligence-system">View platform overview</a>
             </div>
           </div>
           <div
@@ -333,5 +329,27 @@
         <p>Sonartra MVP • Static prototype for Signals assessment flow</p>
       </div>
     </footer>
+
+    <script>
+      (function () {
+        const hero = document.getElementById("home-hero");
+        const glow = hero ? hero.querySelector(".hero-glow") : null;
+        if (!hero || !glow) return;
+
+        hero.addEventListener("pointermove", (event) => {
+          const rect = hero.getBoundingClientRect();
+          const x = ((event.clientX - rect.left) / rect.width - 0.5) * 8;
+          const y = ((event.clientY - rect.top) / rect.height - 0.5) * 8;
+          glow.style.setProperty("--hero-glow-x", `${50 + x}%`);
+          glow.style.setProperty("--hero-glow-y", `${45 + y}%`);
+          glow.style.opacity = "1";
+        });
+
+        hero.addEventListener("pointerleave", () => {
+          glow.style.setProperty("--hero-glow-x", "50%");
+          glow.style.setProperty("--hero-glow-y", "45%");
+        });
+      })();
+    </script>
   </body>
 </html>
