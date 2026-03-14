@@ -1,0 +1,25 @@
+import Link from 'next/link'
+import { clsx } from 'clsx'
+import { ReactNode } from 'react'
+
+type ButtonProps = {
+  children: ReactNode
+  href?: string
+  variant?: 'primary' | 'secondary' | 'ghost'
+  className?: string
+  type?: 'button' | 'submit'
+  onClick?: () => void
+}
+
+const classes = {
+  base: 'inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+  primary: 'bg-accent text-white hover:-translate-y-0.5 hover:bg-blue-500',
+  secondary: 'border border-border bg-panel text-textPrimary hover:-translate-y-0.5 hover:border-accent/60',
+  ghost: 'text-textSecondary hover:bg-panel hover:text-textPrimary',
+}
+
+export function Button({ children, href, variant = 'primary', className, type = 'button', onClick }: ButtonProps) {
+  const style = clsx(classes.base, classes[variant], className)
+  if (href) return <Link href={href} className={style}>{children}</Link>
+  return <button type={type} onClick={onClick} className={style}>{children}</button>
+}
