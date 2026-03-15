@@ -30,7 +30,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section section-spacious">
         <SectionHeading
           eyebrow="Signals"
           title="What Sonartra Measures"
@@ -53,7 +53,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section section-spacious">
         <SectionHeading eyebrow="Platform" title="How it Works" />
         <div className="grid gap-5 md:grid-cols-4">
           {['Assess', 'Analyse', 'Interpret', 'Optimise'].map((step, i) => (
@@ -65,7 +65,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section section-spacious">
         <SectionHeading eyebrow="Results" title="Pilot Outcomes" />
         <div className="grid gap-5 lg:grid-cols-3">
           {caseStudies.map((c) => (
@@ -76,7 +76,7 @@ export default function HomePage() {
             </Card>
           ))}
         </div>
-        <div className="mt-5 grid gap-5 lg:grid-cols-3">
+        <div className="mt-7 grid gap-5 lg:grid-cols-3 md:mt-8">
           {testimonials.map((t) => (
             <Card key={t.name}>
               <p className="text-muted-meta">“{t.quote}”</p>
@@ -86,8 +86,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="section pt-0">
-        <Card className="text-center">
+      <section className="section pt-4 md:pt-8">
+        <Card className="p-8 text-center sm:p-10">
           <p className="eyebrow mb-4">Decision Support</p>
           <h3 className="text-3xl font-semibold text-[#ECF2FC]">
             Deploy <span className="headline-emphasis">performance intelligence</span> at scale.
@@ -95,7 +95,7 @@ export default function HomePage() {
           <p className="prose-support mx-auto mt-4 max-w-2xl">
             Run Sonartra Signals and generate actionable behavioural outputs for sharper strategic insight.
           </p>
-          <div className="mt-7 flex justify-center">
+          <div className="mt-8 flex justify-center">
             <Button href="/signup">Start with Sonartra Signals</Button>
           </div>
         </Card>
