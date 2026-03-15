@@ -4,24 +4,40 @@ import { navLinks } from '@/data/mockData'
 
 export function PublicNav() {
   return (
-    <header className="sticky top-0 z-50 border-b border-border/80 bg-bg/75 backdrop-blur-xl">
-      <div className="mx-auto flex h-20 w-full max-w-6xl items-center justify-between gap-6 px-6">
-        <div className="flex items-center gap-8">
-          <SonartraLogo href="/" mode="full" size="md" tone="light" priority />
-          <nav className="hidden items-center gap-6 text-sm text-textSecondary lg:flex">
+    <header className="sticky top-3 z-50 px-4 sm:top-4 sm:px-6">
+      <div className="header-shell mx-auto w-full max-w-6xl">
+        <div className="flex h-16 items-center gap-4 px-4 sm:h-[4.5rem] sm:px-6 lg:grid lg:grid-cols-[auto_1fr_auto] lg:items-center lg:gap-6 lg:px-7">
+          <div className="flex items-center lg:pr-2">
+            <SonartraLogo
+              href="/"
+              mode="full"
+              size="lg"
+              tone="light"
+              className="h-[34px] w-[152px] sm:h-[38px] sm:w-[170px]"
+              priority
+            />
+          </div>
+
+          <nav className="header-nav hidden w-fit items-center gap-2 justify-self-center text-sm text-textSecondary lg:flex">
             {navLinks.map((link) => (
-              <a key={link.href} href={link.href} className="transition-colors hover:text-textPrimary">
+              <a
+                key={link.href}
+                href={link.href}
+                className="rounded-lg px-3 py-2 transition-colors hover:bg-panel/80 hover:text-textPrimary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+              >
                 {link.label}
               </a>
             ))}
           </nav>
-        </div>
 
-        <div className="flex items-center gap-2.5">
-          <Button href="/login" variant="ghost" className="hidden sm:inline-flex">
-            Log in
-          </Button>
-          <Button href="/signup">Get Started</Button>
+          <div className="ml-auto flex items-center gap-2 sm:gap-2.5 lg:gap-2.5">
+            <Button href="/login" variant="ghost" className="hidden sm:inline-flex">
+              Log in
+            </Button>
+            <Button href="/signup" className="px-4 sm:px-5">
+              Get Started
+            </Button>
+          </div>
         </div>
       </div>
     </header>

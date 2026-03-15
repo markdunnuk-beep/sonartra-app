@@ -47,4 +47,13 @@
   .prose-copy {
     @apply max-w-2xl text-base leading-7 text-textSecondary;
   }
+
+  .header-shell {
+    @apply rounded-2xl border border-[#8FB8FF1F] bg-bg/70 shadow-[0_10px_30px_-18px_rgba(59,130,246,0.35)] backdrop-blur-xl;
+  }
+
+  .header-nav {
+    @apply rounded-xl border border-border/70 bg-panel/55 p-1;
+  }
+
 }
