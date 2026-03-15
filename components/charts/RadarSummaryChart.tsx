@@ -4,7 +4,7 @@ import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar } fro
 
 export function RadarSummaryChart({ data }: { data: { name: string; score: number }[] }) {
   return (
-    <div className="h-72 w-full rounded-xl border border-border/70 bg-bg/45 p-3 sm:p-4">
+    <div className="h-72 w-full rounded-xl border border-border/70 bg-bg/45 p-3 motion-safe:transition-opacity motion-safe:duration-700 sm:p-4">
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart data={data} outerRadius="68%">
           <PolarGrid stroke="#2A2F36" />
