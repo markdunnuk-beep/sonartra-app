@@ -6,13 +6,15 @@ const metrics = [
 
 export function PlatformDashboardPreview() {
   return (
-    <div className="visual-shell visual-grid-overlay rounded-2xl p-5">
+    <div className="visual-shell visual-grid-overlay interactive-surface dashboard-preview relative rounded-2xl p-5">
       <div className="flex items-center justify-between">
         <p className="eyebrow">Executive Intelligence Console</p>
-        <span className="rounded-full border border-accent/35 bg-accent/10 px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-[#afd0ff]">
+        <span className="live-indicator rounded-full border border-accent/35 bg-accent/10 px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-[#afd0ff]">
           live telemetry
         </span>
       </div>
+
+      <div className="dashboard-scan" aria-hidden />
 
       <div className="mt-4 grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-xl border border-white/10 bg-[#0e1827]/85 p-4">

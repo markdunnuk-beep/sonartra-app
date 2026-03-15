@@ -1,6 +1,6 @@
 export function ArchitectureDiagram() {
   return (
-    <div className="visual-shell visual-grid-overlay rounded-2xl p-5">
+    <div className="visual-shell visual-grid-overlay interactive-surface rounded-2xl p-5">
       <svg viewBox="0 0 420 280" className="h-full w-full" role="img" aria-label="Triangulated architecture diagram of Sonartra intelligence layers">
         <circle cx="210" cy="140" r="108" className="fill-none stroke-white/10" />
         <circle cx="210" cy="140" r="82" className="fill-none stroke-white/10" />

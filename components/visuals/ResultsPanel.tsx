@@ -7,7 +7,7 @@ const leadershipMetrics = [
 
 export function ResultsPanel() {
   return (
-    <div className="visual-shell rounded-2xl border border-border/80 bg-[#0c1624]/85 p-5">
+    <div className="visual-shell interactive-surface rounded-2xl border border-border/80 bg-[#0c1624]/85 p-5">
       <p className="eyebrow">Generated Insight Preview</p>
       <div className="mt-4 rounded-xl border border-white/10 bg-[#0f1b2b]/80 p-4">
         <p className="text-sm font-medium text-[#e2ecfb]">Leadership Architecture</p>

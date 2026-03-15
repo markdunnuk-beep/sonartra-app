@@ -2,7 +2,7 @@ const options = ['Seek broad input', 'Analyse independently', 'Act quickly then 
 
 export function SignalsPreview() {
   return (
-    <div className="visual-shell rounded-2xl border border-border/80 bg-[#0c1522]/85 p-5">
+    <div className="visual-shell interactive-surface rounded-2xl border border-border/80 bg-[#0c1522]/85 p-5">
       <p className="eyebrow">Signals Assessment</p>
       <div className="mt-4 flex items-center justify-between text-xs text-[#9fb3ce]">
         <span>Question 7 of 24</span>
@@ -21,7 +21,7 @@ export function SignalsPreview() {
           <button
             type="button"
             key={option}
-            className="rounded-lg border border-white/10 bg-[#111e2f]/75 px-3 py-2.5 text-left text-sm text-[#c7d7ec] transition hover:border-accent/45 hover:bg-[#16263d]"
+            className="rounded-lg border border-white/10 bg-[#111e2f]/75 px-3 py-2.5 text-left text-sm text-[#c7d7ec] interaction-control hover:border-accent/45 hover:bg-[#16263d]"
           >
             <span className="mr-2 text-[#86a6cd]">0{index + 1}</span>
             {option}
