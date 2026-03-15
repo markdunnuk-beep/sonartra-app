@@ -52,7 +52,7 @@ export function SonartraLogo({ mode = 'full', size = 'md', tone = 'default', cla
 
   if (href) {
     return (
-      <Link href={href} aria-label="Sonartra home" className="inline-flex items-center">
+      <Link href={href} aria-label="Sonartra home" className="inline-flex items-center rounded-md transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/65 focus-visible:ring-offset-2 focus-visible:ring-offset-bg">
         {image}
       </Link>
     )
