@@ -89,12 +89,14 @@ export function TraitScoreCard({
   detail,
   descriptor,
   strengthLabel,
+  comparisonRows,
 }: {
   name: string
   score: number
   detail?: string
   descriptor?: string
   strengthLabel?: string
+  comparisonRows?: Array<{ label: string; value: number }>
 }) {
   return (
     <Card className="space-y-4 border-border/80 bg-panel/70" interactive>
@@ -109,6 +111,148 @@ export function TraitScoreCard({
       <div className="space-y-1">
         {detail ? <p className="text-xs font-medium leading-5 text-textPrimary/90">{detail}</p> : null}
         {descriptor ? <p className="text-xs leading-5 text-textSecondary">{descriptor}</p> : null}
+        {comparisonRows?.length ? (
+          <div className="pt-1">
+            {comparisonRows.map((row) => (
+              <div key={row.label} className="flex items-center justify-between text-[11px] uppercase tracking-[0.12em] text-textSecondary">
+                <span>{row.label}</span>
+                <span className="font-semibold text-textPrimary/90">{row.value}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </Card>
+  )
+}
+
+export function SignalDeltaIndicator({
+  delta,
+  comparator,
+  percentileLabel,
+}: {
+  delta: number
+  comparator: string
+  percentileLabel?: string
+}) {
+  const isPositive = delta >= 0
+  const deltaLabel = `${isPositive ? '+' : '−'}${Math.abs(delta)} vs ${comparator}`
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <SignalChip tone={isPositive ? 'accent' : 'neutral'}>{deltaLabel}</SignalChip>
+      {percentileLabel ? <SignalChip tone="neutral">{percentileLabel}</SignalChip> : null}
+    </div>
+  )
+}
+
+export function SignalDistributionBar({
+  label,
+  min,
+  max,
+  value,
+  benchmark,
+}: {
+  label: string
+  min: number
+  max: number
+  value: number
+  benchmark?: number
+}) {
+  const spread = Math.max(max - min, 1)
+  const valuePosition = ((value - min) / spread) * 100
+  const benchmarkPosition = benchmark === undefined ? undefined : ((benchmark - min) / spread) * 100
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-xs text-textSecondary">
+        <p className="uppercase tracking-[0.14em]">{label}</p>
+        <p className="font-medium text-textPrimary/90">
+          Range {min}–{max}
+        </p>
+      </div>
+      <div className="relative h-2.5 overflow-hidden rounded-full bg-bg/80">
+        <div className="h-full w-full rounded-full bg-gradient-to-r from-[#4f6789] via-[#6a86ad] to-[#8eb2df]" />
+        <span className="absolute -top-1 h-4 w-[2px] rounded-full bg-textPrimary" style={{ left: `${valuePosition}%` }} />
+        {benchmarkPosition !== undefined ? (
+          <span className="absolute -top-0.5 h-3.5 w-[2px] rounded-full bg-accent/90" style={{ left: `${benchmarkPosition}%` }} />
+        ) : null}
+      </div>
+      <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.12em] text-textSecondary">
+        <span>Observed: {value}</span>
+        {benchmark === undefined ? null : <span>Benchmark: {benchmark}</span>}
+      </div>
+    </div>
+  )
+}
+
+export function SignalRankList({ title, items }: { title: string; items: Array<{ label: string; score: number; note?: string }> }) {
+  const sorted = [...items].sort((a, b) => b.score - a.score)
+
+  return (
+    <Card className="space-y-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">{title}</p>
+      <ol className="space-y-2">
+        {sorted.map((item, index) => (
+          <li key={item.label} className="rounded-xl border border-border/70 bg-bg/40 px-3 py-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.14em] text-textSecondary">Rank {index + 1}</p>
+                <p className="text-sm font-medium text-textPrimary">{item.label}</p>
+                {item.note ? <p className="text-xs text-textSecondary">{item.note}</p> : null}
+              </div>
+              <p className="text-xl font-semibold tracking-tight text-textPrimary">{item.score}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </Card>
+  )
+}
+
+export function SignalComparisonGrid({
+  title,
+  description,
+  rows,
+}: {
+  title: string
+  description?: string
+  rows: Array<{
+    signal: string
+    subjectLabel: string
+    subjectScore: number
+    comparisons: Array<{ label: string; score: number; percentileLabel?: string }>
+  }>
+}) {
+  return (
+    <Card className="space-y-4">
+      <div className="space-y-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">{title}</p>
+        {description ? <p className="text-sm text-textSecondary">{description}</p> : null}
+      </div>
+      <div className="space-y-2">
+        {rows.map((row) => (
+          <div key={row.signal} className="rounded-xl border border-border/70 bg-bg/35 p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.14em] text-textSecondary">{row.signal}</p>
+                <p className="text-sm text-textPrimary/95">
+                  {row.subjectLabel}: <span className="font-semibold">{row.subjectScore}</span>
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {row.comparisons.map((comparison) => (
+                  <SignalDeltaIndicator
+                    key={comparison.label}
+                    delta={row.subjectScore - comparison.score}
+                    comparator={comparison.label}
+                    percentileLabel={comparison.percentileLabel}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </Card>
   )

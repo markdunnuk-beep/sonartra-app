@@ -7,11 +7,12 @@ import {
   ResultsHero,
   ResultsSectionBlock,
   ResultsWorkspaceShell,
+  SignalComparisonGrid,
   TraitScoreCard,
 } from '@/components/results/ResultsPrimitives'
 import { Reveal, RevealGroup, RevealItem } from '@/components/ui/motion/Reveal'
 import { BarList } from '@/components/ui/BarList'
-import { individualResults } from '@/data/mockData'
+import { individualResults, organisationSignalAverages, teamResults } from '@/data/mockData'
 
 const interpretationModules = [
   {
@@ -55,6 +56,9 @@ function signalStrengthLabel(score: number) {
 }
 
 export default function IndividualResultsPage() {
+  const teamRadarByName = Object.fromEntries(teamResults.radar.map((signal) => [signal.name, signal.score]))
+  const orgRadarByName = Object.fromEntries(organisationSignalAverages.map((signal) => [signal.name, signal.score]))
+
   return (
     <AppShell>
       <ResultsWorkspaceShell
@@ -88,10 +92,38 @@ export default function IndividualResultsPage() {
                     detail={`Signal score — ${item.score}`}
                     descriptor={signalDescriptors[item.name] ?? 'Behavioural intelligence indicator'}
                     strengthLabel={signalStrengthLabel(item.score)}
+                    comparisonRows={
+                      teamRadarByName[item.name] !== undefined && orgRadarByName[item.name] !== undefined
+                        ? [
+                            { label: 'Team Avg', value: teamRadarByName[item.name] },
+                            { label: 'Organisation Avg', value: orgRadarByName[item.name] },
+                          ]
+                        : undefined
+                    }
                   />
                 </RevealItem>
               ))}
             </RevealGroup>
+          </ResultsSectionBlock>
+        </Reveal>
+
+        <Reveal as="section" y={16}>
+          <ResultsSectionBlock
+            title="Cross-Entity Comparison Context"
+            description="Lightweight benchmarking against current team and organisation averages for each measured signal."
+          >
+            <SignalComparisonGrid
+              title="Individual vs Team vs Organisation"
+              rows={individualResults.radar.map((signal) => ({
+                signal: signal.name,
+                subjectLabel: 'Individual',
+                subjectScore: signal.score,
+                comparisons: [
+                  { label: 'team', score: teamRadarByName[signal.name] ?? signal.score },
+                  { label: 'organisation', score: orgRadarByName[signal.name] ?? signal.score },
+                ],
+              }))}
+            />
           </ResultsSectionBlock>
         </Reveal>
 

@@ -99,3 +99,36 @@ export const organisationResults = {
     { name: 'Liam Carter', style: 'Integrator', leadership: 'Coordinator', risk: 'Low', alignment: 'High' },
   ],
 }
+
+export const teamResults = {
+  profile: {
+    teamName: 'Product Strategy Pod',
+    dominant: 'Strategist-Integrator Blend',
+    secondary: 'Operator Reinforcement',
+    summary:
+      'Team profile reflects strong strategic interpretation and execution cadence with moderate spread in conflict handling under compressed timelines.',
+  },
+  radar: [
+    { name: 'Behaviour', score: 76 },
+    { name: 'Motivators', score: 72 },
+    { name: 'Leadership', score: 79 },
+    { name: 'Conflict', score: 65 },
+    { name: 'Culture', score: 74 },
+    { name: 'Stress', score: 68 },
+  ],
+  distribution: [
+    { label: 'Behaviour', min: 62, max: 88, value: 76 },
+    { label: 'Leadership', min: 58, max: 91, value: 79 },
+    { label: 'Conflict', min: 49, max: 78, value: 65 },
+    { label: 'Stress', min: 52, max: 83, value: 68 },
+  ],
+}
+
+export const organisationSignalAverages = [
+  { name: 'Behaviour', score: 73 },
+  { name: 'Motivators', score: 69 },
+  { name: 'Leadership', score: 74 },
+  { name: 'Conflict', score: 61 },
+  { name: 'Culture', score: 71 },
+  { name: 'Stress', score: 64 },
+]
