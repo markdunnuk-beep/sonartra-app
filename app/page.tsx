@@ -3,7 +3,7 @@ import { PublicFooter } from '@/components/layout/PublicFooter'
 import { PublicNav } from '@/components/layout/PublicNav'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { FadeIn } from '@/components/ui/FadeIn'
+import { RevealGroup, RevealItem } from '@/components/ui/motion/Reveal'
 import { SectionHeading } from '@/components/ui/SectionHeading'
 import { ArchitectureDiagram } from '@/components/visuals/ArchitectureDiagram'
 import { PlatformDashboardPreview } from '@/components/visuals/PlatformDashboardPreview'
@@ -21,19 +21,19 @@ export default function HomePage() {
         <SectionHeading eyebrow="Architecture" title="Three-layer intelligence model" />
         <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
           <ArchitectureDiagram />
-          <div className="grid gap-5">
+          <RevealGroup className="grid gap-5">
             {layerData.map((layer) => (
-              <FadeIn key={layer.title}>
-                <Card>
+              <RevealItem key={layer.title}>
+                <Card interactive>
                   <h3 className="text-lg font-semibold text-[#E4EBF8]">
                     <span className="text-accent-soft">{layer.title.split(' ')[0]}</span>{' '}
                     <span>{layer.title.split(' ').slice(1).join(' ')}</span>
                   </h3>
                   <p className="text-muted-meta mt-3">{layer.description}</p>
                 </Card>
-              </FadeIn>
+              </RevealItem>
             ))}
-          </div>
+          </RevealGroup>
         </div>
       </section>
 
@@ -44,21 +44,23 @@ export default function HomePage() {
           description="Signals analyses six behavioural domains critical to sustained performance and decision quality."
         />
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <RevealGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {measurePillars.map((pillar) => (
-              <Card key={pillar} className="transition-colors hover:border-accent/40">
-                <p className="text-base font-medium text-[#DEE7F6]">
-                  {pillar.includes('Intelligence') ? (
-                    <>
-                      {pillar.replace(' Intelligence', '')} <span className="text-accent-soft">Intelligence</span>
-                    </>
-                  ) : (
-                    pillar
-                  )}
-                </p>
-              </Card>
+              <RevealItem key={pillar}>
+                <Card interactive>
+                  <p className="text-base font-medium text-[#DEE7F6]">
+                    {pillar.includes('Intelligence') ? (
+                      <>
+                        {pillar.replace(' Intelligence', '')} <span className="text-accent-soft">Intelligence</span>
+                      </>
+                    ) : (
+                      pillar
+                    )}
+                  </p>
+                </Card>
+              </RevealItem>
             ))}
-          </div>
+          </RevealGroup>
           <SignalsPreview />
         </div>
       </section>
@@ -66,14 +68,16 @@ export default function HomePage() {
       <section className="section section-spacious">
         <SectionHeading eyebrow="Platform" title="How it Works" />
         <div className="grid items-start gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className="grid gap-5 sm:grid-cols-2">
+          <RevealGroup className="grid gap-5 sm:grid-cols-2">
             {['Assess', 'Analyse', 'Interpret', 'Optimise'].map((step, i) => (
-              <Card key={step}>
-                <p className="eyebrow">0{i + 1}</p>
-                <p className="mt-3 text-lg font-semibold text-[#E2EAF8]">{step}</p>
-              </Card>
+              <RevealItem key={step}>
+                <Card interactive>
+                  <p className="eyebrow">0{i + 1}</p>
+                  <p className="mt-3 text-lg font-semibold text-[#E2EAF8]">{step}</p>
+                </Card>
+              </RevealItem>
             ))}
-          </div>
+          </RevealGroup>
           <PlatformDashboardPreview />
         </div>
       </section>
@@ -81,29 +85,33 @@ export default function HomePage() {
       <section className="section section-spacious">
         <SectionHeading eyebrow="Results" title="Pilot Outcomes" />
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="grid gap-5 lg:grid-cols-3">
+          <RevealGroup className="grid gap-5 lg:grid-cols-3">
             {caseStudies.map((c) => (
-              <Card key={c.company}>
-                <p className="text-muted-meta">{c.company}</p>
-                <p className="mt-3 text-2xl font-semibold text-accent">{c.metric}</p>
-                <p className="text-muted-meta mt-3">{c.outcome}</p>
-              </Card>
+              <RevealItem key={c.company}>
+                <Card interactive>
+                  <p className="text-muted-meta">{c.company}</p>
+                  <p className="mt-3 text-2xl font-semibold text-accent">{c.metric}</p>
+                  <p className="text-muted-meta mt-3">{c.outcome}</p>
+                </Card>
+              </RevealItem>
             ))}
-          </div>
+          </RevealGroup>
           <ResultsPanel />
         </div>
-        <div className="mt-7 grid gap-5 lg:grid-cols-3 md:mt-8">
+        <RevealGroup className="mt-7 grid gap-5 md:mt-8 lg:grid-cols-3">
           {testimonials.map((t) => (
-            <Card key={t.name}>
-              <p className="text-muted-meta">“{t.quote}”</p>
-              <p className="mt-4 text-sm text-[#D9E4F5]">{t.name}</p>
-            </Card>
+            <RevealItem key={t.name}>
+              <Card interactive>
+                <p className="text-muted-meta">“{t.quote}”</p>
+                <p className="mt-4 text-sm text-[#D9E4F5]">{t.name}</p>
+              </Card>
+            </RevealItem>
           ))}
-        </div>
+        </RevealGroup>
       </section>
 
       <section className="section pt-4 md:pt-8">
-        <Card className="p-8 text-center sm:p-10">
+        <Card interactive className="p-8 text-center sm:p-10">
           <p className="eyebrow mb-4">Decision Support</p>
           <h3 className="text-3xl font-semibold text-[#ECF2FC]">
             Deploy <span className="headline-emphasis">performance intelligence</span> at scale.
