@@ -37,7 +37,7 @@
   }
 
   .eyebrow {
-    @apply text-[11px] font-semibold uppercase tracking-[0.2em] text-textSecondary/90;
+    @apply text-[10.5px] font-semibold uppercase tracking-[0.24em] text-[#9BB2CF];
   }
 
   .surface {
@@ -45,7 +45,35 @@
   }
 
   .prose-copy {
-    @apply max-w-2xl text-base leading-7 text-textSecondary;
+    @apply max-w-2xl text-base leading-7 text-[#AEBACC];
+  }
+
+  .prose-support {
+    @apply max-w-2xl text-base leading-7 text-[#A5B2C5];
+  }
+
+  .text-muted-meta {
+    @apply text-sm leading-6 text-[#8E9BB0];
+  }
+
+  .headline-display {
+    @apply max-w-2xl text-4xl font-semibold leading-[1.08] text-[#F2F6FD] md:text-5xl lg:text-6xl;
+  }
+
+  .headline-section {
+    @apply text-3xl font-semibold leading-tight text-[#E8EEF8] md:text-4xl;
+  }
+
+  .headline-emphasis {
+    @apply text-accent;
+  }
+
+  .text-strategic {
+    @apply font-medium text-[#CEE2FF];
+  }
+
+  .text-accent-soft {
+    @apply text-[#8EBEFF];
   }
 
   .header-shell {
