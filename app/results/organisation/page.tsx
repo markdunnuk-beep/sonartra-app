@@ -1,13 +1,17 @@
 import { AppShell } from '@/components/layout/AppShell'
 import {
+  CrossLayerInsightPanel,
   InsightCard,
   InterpretationPanel,
+  LeadershipBalancePanel,
   RecommendationBlock,
+  RiskSignalPanel,
   ResultsHero,
   ResultsSectionBlock,
   SignalComparisonGrid,
   SignalDistributionBar,
   SignalRankList,
+  SignalVarianceIndicator,
   ResultsWorkspaceShell,
 } from '@/components/results/ResultsPrimitives'
 import { TeamMatrix } from '@/components/sections/TeamMatrix'
@@ -22,6 +26,21 @@ const organisationDistribution = [
   { label: 'Stress', min: 41, max: 82, value: 64 },
 ]
 
+
+
+const organisationLeadershipDistribution = [
+  { archetype: 'Strategist' as const, share: 24, note: 'Strategic guidance is present but concentrated in senior layers.' },
+  { archetype: 'Operator' as const, share: 44, note: 'Operator leadership is dominant across execution-critical functions.' },
+  { archetype: 'Integrator' as const, share: 20, note: 'Integrator coverage supports core coordination but is thin in frontier units.' },
+  { archetype: 'Catalyst' as const, share: 12, note: 'Catalyst leadership is underrepresented in transformation portfolios.' },
+]
+
+const organisationRiskSignals = [
+  { category: 'Execution Risk', signal: 'Moderate' as const, rationale: 'Low Integrator coverage in two scaling functions increases handoff friction.' },
+  { category: 'Alignment Risk', signal: 'Elevated' as const, rationale: 'High cultural variance across growth units indicates alignment drift risk.' },
+  { category: 'Escalation Risk', signal: 'Elevated' as const, rationale: 'Conflict and stress clustering in interdependent programmes may amplify escalation loops.' },
+  { category: 'Volatility Risk', signal: 'Moderate' as const, rationale: 'Wide behavioural spread in critical functions can produce uneven delivery reliability.' },
+]
 export default function OrganisationResultsPage() {
   const teamRadarByName = Object.fromEntries(teamResults.radar.map((signal) => [signal.name, signal.score]))
   const averageSignal = calculateSignalAverage(organisationSignalAverages)
@@ -70,23 +89,29 @@ export default function OrganisationResultsPage() {
               <InsightCard title="Average Signal" detail={`${averageSignal} / 100`}
               />
               <InsightCard title="Signal Range" detail={`${range.min} to ${range.max}`} />
-              <InsightCard title="Signal Variance" detail={`${variance} variance points across aggregate architecture.`} />
+              <SignalVarianceIndicator
+                score={variance}
+                insight="Stress variance remains high across teams, signalling potential operational instability under sustained pressure."
+              />
             </div>
           </div>
         </ResultsSectionBlock>
 
         <ResultsSectionBlock title="Signal Concentration" description="Distribution bars show where enterprise behavioural strength and concentration currently cluster.">
-          <div className="rounded-2xl border border-border/70 bg-panel/55 p-4 space-y-4">
-            {organisationDistribution.map((distributionItem) => (
-              <SignalDistributionBar
-                key={distributionItem.label}
-                label={distributionItem.label}
-                min={distributionItem.min}
-                max={distributionItem.max}
-                value={distributionItem.value}
-                benchmark={teamRadarByName[distributionItem.label]}
-              />
-            ))}
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <div className="rounded-2xl border border-border/70 bg-panel/55 p-4 space-y-4">
+              {organisationDistribution.map((distributionItem) => (
+                <SignalDistributionBar
+                  key={distributionItem.label}
+                  label={distributionItem.label}
+                  min={distributionItem.min}
+                  max={distributionItem.max}
+                  value={distributionItem.value}
+                  benchmark={teamRadarByName[distributionItem.label]}
+                />
+              ))}
+            </div>
+            <LeadershipBalancePanel distribution={organisationLeadershipDistribution} />
           </div>
         </ResultsSectionBlock>
 
@@ -122,15 +147,36 @@ export default function OrganisationResultsPage() {
           title="Cross-Layer Comparison"
           description="Organisation and team level comparisons provide a baseline for future multi-entity analytics."
         >
-          <SignalComparisonGrid
-            title="Organisation vs Team"
-            rows={organisationSignalAverages.map((signal) => ({
-              signal: signal.name,
-              subjectLabel: 'Organisation',
-              subjectScore: signal.score,
-              comparisons: [{ label: 'team', score: teamRadarByName[signal.name] ?? signal.score }],
-            }))}
-          />
+          <div className="space-y-4">
+            <SignalComparisonGrid
+              title="Organisation vs Team"
+              rows={organisationSignalAverages.map((signal) => ({
+                signal: signal.name,
+                subjectLabel: 'Organisation',
+                subjectScore: signal.score,
+                comparisons: [{ label: 'team', score: teamRadarByName[signal.name] ?? signal.score }],
+              }))}
+            />
+            <CrossLayerInsightPanel
+              insights={[
+                {
+                  title: 'Team vs Organisation Leadership',
+                  observation: 'Team leadership signal exceeds organisational baseline but variance indicates uneven capability distribution.',
+                  implication: 'Leadership strength is concentrated in specific units and requires broader deployment design.',
+                },
+                {
+                  title: 'Variance Synthesis',
+                  observation: 'Enterprise variance remains clustered with stress and conflict dimensions carrying the widest spread.',
+                  implication: 'Governance and escalation architecture should be tightened before additional scale phases.',
+                },
+                {
+                  title: 'Distribution Synthesis',
+                  observation: 'Operator dominance and Catalyst scarcity create a reliable but less adaptive leadership architecture.',
+                  implication: 'Transformation initiatives will benefit from targeted Catalyst injections with Integrator safeguards.',
+                },
+              ]}
+            />
+          </div>
         </ResultsSectionBlock>
 
         <ResultsSectionBlock title="Team Intelligence Matrix" description="Member-level signal spread across style, leadership architecture, and risk alignment.">
@@ -138,20 +184,23 @@ export default function OrganisationResultsPage() {
         </ResultsSectionBlock>
 
         <ResultsSectionBlock title="Interpretive Briefing" description="Critical implications grouped for faster executive reading.">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <InsightCard title="Leadership Distribution" detail="Operator profiles dominate 44% of assessed population." />
-            <InsightCard
-              title="Cultural Alignment"
-              detail="Highest alignment appears in Product and Operations with emerging tension in GTM pods."
-            />
-            <InsightCard
-              title="Risk Indicators"
-              detail="Escalation risk is concentrated in two high-interdependency functions requiring clearer escalation pathways."
-            />
-            <InsightCard
-              title="Matrix Signal"
-              detail="Strategist and Integrator blend remains healthy while Catalyst representation is below target composition."
-            />
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <InsightCard title="Leadership Distribution" detail="Operator leadership dominant at 44% of assessed population." />
+              <InsightCard
+                title="Cultural Alignment"
+                detail="Highest alignment appears in Product and Operations with emerging tension in GTM pods."
+              />
+              <InsightCard
+                title="Risk Indicators"
+                detail="Escalation risk is concentrated in two high-interdependency functions requiring clearer escalation pathways."
+              />
+              <InsightCard
+                title="Matrix Signal"
+                detail="Strategist and Integrator blend remains healthy while Catalyst representation is below target composition."
+              />
+            </div>
+            <RiskSignalPanel risks={organisationRiskSignals} />
           </div>
         </ResultsSectionBlock>
 
@@ -161,20 +210,37 @@ export default function OrganisationResultsPage() {
         >
           <RecommendationBlock
             title="Organisation Operating Model Recommendations"
-            items={[
+            categories={[
               {
-                label: 'Escalation Framework',
-                detail: 'Standardise escalation pathways across high interdependency functions to reduce conflict volatility and decision latency.',
+                category: 'Operating environments',
+                items: ['High accountability execution phases', 'Structured delivery programmes with explicit ownership boundaries'],
               },
               {
-                label: 'Leadership Portfolio Balance',
-                detail: 'Increase Catalyst-profile deployment in innovation streams while preserving Integrator coverage in execution-critical units.',
+                category: 'Leadership deployment',
+                items: [
+                  {
+                    label: 'Decision architecture',
+                    detail: 'Position Strategist profiles in enterprise decision architecture roles across critical functions.',
+                  },
+                  {
+                    label: 'Delivery reinforcement',
+                    detail: 'Reinforce Integrator coverage in delivery functions with high dependency density.',
+                  },
+                ],
               },
               {
-                label: 'Governance Cadence',
-                detail: 'Implement tighter cross-unit decision checkpoints to sustain strategic alignment during rapid operating model shifts.',
+                category: 'Team composition adjustments',
+                items: [
+                  'Increase Catalyst representation in transformation initiatives to expand innovation throughput.',
+                  'Avoid over-concentration of Operator profiles in exploratory programmes.',
+                ],
+              },
+              {
+                category: 'Governance recommendations',
+                items: ['Tighten escalation pathways', 'Introduce cross-unit decision cadence and standardised risk checkpoints'],
               },
             ]}
+            items={[]}
             ctaLabel="Download Organisation Intelligence Brief"
           />
         </ResultsSectionBlock>

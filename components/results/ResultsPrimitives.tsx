@@ -314,36 +314,197 @@ export function InterpretationPanel({
 export function RecommendationBlock({
   title,
   items,
+  categories,
   ctaLabel,
 }: {
   title: string
   items: Array<string | { label: string; detail: string }>
+  categories?: Array<{ category: string; items: Array<string | { label: string; detail: string }> }>
   ctaLabel: string
 }) {
+  const sections = categories?.length ? categories : [{ category: 'Priority Actions', items }]
+
   return (
     <Card className="space-y-5">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Action Framing</p>
         <h3 className="mt-2 text-lg font-semibold tracking-tight text-textPrimary">{title}</h3>
       </div>
-      <ul className="space-y-2">
-        {items.map((item) => (
-          <li
-            key={typeof item === 'string' ? item : item.label}
-            className="rounded-xl border border-border/70 bg-bg/40 px-3 py-2 text-sm text-textSecondary"
-          >
-            {typeof item === 'string' ? (
-              item
-            ) : (
-              <div>
-                <p className="font-medium text-textPrimary/95">{item.label}</p>
-                <p className="mt-1 text-xs leading-5 text-textSecondary">{item.detail}</p>
-              </div>
-            )}
-          </li>
+      <div className="space-y-4">
+        {sections.map((section) => (
+          <div key={section.category} className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-textSecondary">{section.category}</p>
+            <ul className="space-y-2">
+              {section.items.map((item) => (
+                <li
+                  key={`${section.category}-${typeof item === 'string' ? item : item.label}`}
+                  className="rounded-xl border border-border/70 bg-bg/40 px-3 py-2 text-sm text-textSecondary"
+                >
+                  {typeof item === 'string' ? (
+                    item
+                  ) : (
+                    <div>
+                      <p className="font-medium text-textPrimary/95">{item.label}</p>
+                      <p className="mt-1 text-xs leading-5 text-textSecondary">{item.detail}</p>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
-      </ul>
+      </div>
       <Button>{ctaLabel}</Button>
+    </Card>
+  )
+}
+
+export function SignalVarianceIndicator({
+  score,
+  insight,
+}: {
+  score: number
+  insight: string
+}) {
+  const profile =
+    score <= 12
+      ? { label: 'Balanced', descriptor: 'Signal expression is tightly consistent across the cohort.' }
+      : score <= 22
+        ? { label: 'Clustered', descriptor: 'Signals are concentrated around a dominant operating pattern.' }
+        : score <= 34
+          ? { label: 'Fragmented', descriptor: 'Diverse behavioural expression requires stronger coordination design.' }
+          : { label: 'Volatile', descriptor: 'Signal spread indicates elevated execution instability under pressure.' }
+
+  return (
+    <Card className="space-y-3 border-border/80 bg-panel/70">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Signal Variance Diagnostic</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-3xl font-semibold tracking-tight text-textPrimary">{score}</p>
+        <SignalChip tone={score > 34 ? 'accent' : 'neutral'}>{profile.label}</SignalChip>
+      </div>
+      <p className="text-xs leading-5 text-textSecondary">{profile.descriptor}</p>
+      <p className="text-xs font-medium leading-5 text-textPrimary/95">{insight}</p>
+    </Card>
+  )
+}
+
+export function TeamCompatibilityMatrix({
+  rows,
+}: {
+  rows: Array<{
+    pairing: string
+    primaryStyle: string
+    leadershipPattern: string
+    compatibility: string
+    frictionPoint: string
+  }>
+}) {
+  return (
+    <Card className="space-y-4">
+      <div className="space-y-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Team Compatibility Matrix</p>
+        <p className="text-sm text-textSecondary">Behavioural style interactions mapped to execution implications.</p>
+      </div>
+      <div className="space-y-2">
+        {rows.map((row) => (
+          <div key={row.pairing} className="rounded-xl border border-border/70 bg-bg/35 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium text-textPrimary">{row.pairing}</p>
+              <SignalChip tone="neutral">{row.compatibility}</SignalChip>
+            </div>
+            <div className="mt-2 grid gap-2 text-xs text-textSecondary sm:grid-cols-3">
+              <p>
+                <span className="uppercase tracking-[0.13em] text-textSecondary/80">Primary Style:</span> {row.primaryStyle}
+              </p>
+              <p>
+                <span className="uppercase tracking-[0.13em] text-textSecondary/80">Leadership Pattern:</span> {row.leadershipPattern}
+              </p>
+              <p>
+                <span className="uppercase tracking-[0.13em] text-textSecondary/80">Potential Friction:</span> {row.frictionPoint}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+export function LeadershipBalancePanel({
+  distribution,
+}: {
+  distribution: Array<{ archetype: 'Strategist' | 'Operator' | 'Integrator' | 'Catalyst'; share: number; note: string }>
+}) {
+  const dominant = [...distribution].sort((a, b) => b.share - a.share)[0]
+  const underrepresented = distribution.filter((item) => item.share <= 18).map((item) => item.archetype)
+
+  return (
+    <Card className="space-y-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Leadership Architecture Balance</p>
+      <div className="space-y-3">
+        {distribution.map((item) => (
+          <div key={item.archetype} className="space-y-1">
+            <div className="flex items-center justify-between text-xs text-textSecondary">
+              <span className="uppercase tracking-[0.13em]">{item.archetype}</span>
+              <span className="font-semibold text-textPrimary/95">{item.share}%</span>
+            </div>
+            <ScoreMeter value={item.share} />
+            <p className="text-[11px] leading-5 text-textSecondary">{item.note}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <InsightCard title="Dominant Type" detail={`${dominant.archetype} leadership is currently dominant.`} compact />
+        <InsightCard
+          title="Underrepresented Types"
+          detail={underrepresented.length ? underrepresented.join(', ') : 'No archetype is materially underrepresented.'}
+          compact
+        />
+      </div>
+    </Card>
+  )
+}
+
+export function RiskSignalPanel({
+  risks,
+}: {
+  risks: Array<{ category: string; signal: 'Low' | 'Moderate' | 'Elevated'; rationale: string }>
+}) {
+  return (
+    <Card className="space-y-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Organisational Risk Indicators</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {risks.map((risk) => (
+          <div key={risk.category} className="rounded-xl border border-border/70 bg-bg/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs uppercase tracking-[0.13em] text-textSecondary">{risk.category}</p>
+              <SignalChip tone={risk.signal === 'Elevated' ? 'accent' : 'neutral'}>{risk.signal}</SignalChip>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-textSecondary">{risk.rationale}</p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+export function CrossLayerInsightPanel({
+  insights,
+}: {
+  insights: Array<{ title: string; observation: string; implication: string }>
+}) {
+  return (
+    <Card className="space-y-4 border-accent/20 bg-panel/75">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Cross-Layer Intelligence Synthesis</p>
+      <div className="space-y-2">
+        {insights.map((insight) => (
+          <div key={insight.title} className="rounded-xl border border-border/70 bg-bg/35 p-3">
+            <p className="text-sm font-medium text-textPrimary">{insight.title}</p>
+            <p className="mt-1 text-xs leading-5 text-textSecondary">{insight.observation}</p>
+            <p className="mt-1 text-xs font-medium leading-5 text-textPrimary/95">Implication: {insight.implication}</p>
+          </div>
+        ))}
+      </div>
     </Card>
   )
 }
