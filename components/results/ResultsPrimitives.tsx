@@ -34,23 +34,38 @@ export function ResultsHero({
   summary,
   standoutFinding,
   confidence,
+  dominantArchitecture,
+  keySignalPattern,
+  operationalImplication,
 }: {
   dominant: string
   secondary: string
   summary: string
   standoutFinding: string
   confidence: string
+  dominantArchitecture?: string
+  keySignalPattern?: string
+  operationalImplication?: string
 }) {
+  const architectureInsight = dominantArchitecture ?? `Primary behavioural architecture is anchored in ${dominant} with ${secondary} as the stabilising secondary signal.`
+
   return (
-    <Card className="space-y-5 border-accent/20 bg-panel/90">
+    <Card className="space-y-6 border-accent/25 bg-panel/90">
       <div className="flex flex-wrap items-center gap-2">
         <SignalChip tone="accent">Dominant: {dominant}</SignalChip>
         <SignalChip tone="neutral">Secondary: {secondary}</SignalChip>
         <SignalChip tone="neutral">Confidence: {confidence}</SignalChip>
       </div>
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <NarrativeSummary title="Executive Summary">{summary}</NarrativeSummary>
-        <InsightCard title="Standout Finding" detail={standoutFinding} compact />
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
+        <NarrativeSummary
+          title="Executive Summary"
+          dominantArchitecture={architectureInsight}
+          keySignalPattern={keySignalPattern}
+          operationalImplication={operationalImplication}
+        >
+          {summary}
+        </NarrativeSummary>
+        <InsightCard title="Standout Finding" detail={standoutFinding} compact emphasized />
       </div>
     </Card>
   )
@@ -68,15 +83,33 @@ export function ResultsSectionBlock({ title, description, children }: { title: s
   )
 }
 
-export function TraitScoreCard({ name, score, detail }: { name: string; score: number; detail?: string }) {
+export function TraitScoreCard({
+  name,
+  score,
+  detail,
+  descriptor,
+  strengthLabel,
+}: {
+  name: string
+  score: number
+  detail?: string
+  descriptor?: string
+  strengthLabel?: string
+}) {
   return (
-    <Card className="space-y-4" interactive>
+    <Card className="space-y-4 border-border/80 bg-panel/70" interactive>
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-sm font-medium uppercase tracking-[0.12em] text-textSecondary">{name}</h3>
-        <p className="text-2xl font-semibold text-textPrimary">{score}</p>
+        <div className="space-y-1">
+          <h3 className="text-sm font-medium uppercase tracking-[0.12em] text-textSecondary">{name}</h3>
+          {strengthLabel ? <p className="text-[11px] uppercase tracking-[0.14em] text-accent/80">{strengthLabel}</p> : null}
+        </div>
+        <p className="text-3xl font-semibold tracking-tight text-textPrimary">{score}</p>
       </div>
       <ScoreMeter value={score} />
-      {detail ? <p className="text-xs leading-5 text-textSecondary">{detail}</p> : null}
+      <div className="space-y-1">
+        {detail ? <p className="text-xs font-medium leading-5 text-textPrimary/90">{detail}</p> : null}
+        {descriptor ? <p className="text-xs leading-5 text-textSecondary">{descriptor}</p> : null}
+      </div>
     </Card>
   )
 }
@@ -84,30 +117,65 @@ export function TraitScoreCard({ name, score, detail }: { name: string; score: n
 export function ScoreMeter({ value }: { value: number }) {
   return (
     <div className="h-2.5 w-full overflow-hidden rounded-full bg-bg/80">
-      <div className="h-full rounded-full bg-gradient-to-r from-[#78aef8] via-[#6f9fe8] to-[#8bc0ff]" style={{ width: `${value}%` }} />
+      <div
+        className="h-full rounded-full bg-gradient-to-r from-[#78aef8] via-[#6f9fe8] to-[#8bc0ff] motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-out"
+        style={{ width: `${value}%` }}
+      />
     </div>
   )
 }
 
-export function InsightCard({ title, detail, compact = false }: { title: string; detail: string; compact?: boolean }) {
+export function InsightCard({
+  title,
+  detail,
+  compact = false,
+  emphasized = false,
+}: {
+  title: string
+  detail: string
+  compact?: boolean
+  emphasized?: boolean
+}) {
   return (
-    <Card className={clsx('space-y-2', compact ? 'p-5 sm:p-5' : '')}>
+    <Card className={clsx('space-y-2', compact ? 'p-5 sm:p-5' : '', emphasized ? 'border-accent/35 bg-accent/5' : '')}>
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">{title}</p>
       <p className="text-sm leading-6 text-textPrimary/95">{detail}</p>
     </Card>
   )
 }
 
-export function InterpretationPanel({ label, content }: { label: string; content: string }) {
+export function InterpretationPanel({
+  label,
+  content,
+  emphasis = 'supporting',
+}: {
+  label: string
+  content: string
+  emphasis?: 'primary' | 'supporting' | 'context'
+}) {
+  const emphasisStyles = {
+    primary: 'border-accent/35 bg-panel',
+    supporting: 'border-border/90 bg-panel/75',
+    context: 'border-border/70 bg-bg/50',
+  }
+
   return (
-    <Card className="space-y-2 border-border/90 bg-panel/75">
+    <Card className={clsx('space-y-2', emphasisStyles[emphasis])}>
       <p className="text-xs uppercase tracking-[0.16em] text-textSecondary">{label}</p>
-      <p className="text-sm leading-6 text-textSecondary">{content}</p>
+      <p className={clsx('text-sm leading-6', emphasis === 'primary' ? 'text-textPrimary/95' : 'text-textSecondary')}>{content}</p>
     </Card>
   )
 }
 
-export function RecommendationBlock({ title, items, ctaLabel }: { title: string; items: string[]; ctaLabel: string }) {
+export function RecommendationBlock({
+  title,
+  items,
+  ctaLabel,
+}: {
+  title: string
+  items: Array<string | { label: string; detail: string }>
+  ctaLabel: string
+}) {
   return (
     <Card className="space-y-5">
       <div>
@@ -116,8 +184,18 @@ export function RecommendationBlock({ title, items, ctaLabel }: { title: string;
       </div>
       <ul className="space-y-2">
         {items.map((item) => (
-          <li key={item} className="rounded-xl border border-border/70 bg-bg/40 px-3 py-2 text-sm text-textSecondary">
-            {item}
+          <li
+            key={typeof item === 'string' ? item : item.label}
+            className="rounded-xl border border-border/70 bg-bg/40 px-3 py-2 text-sm text-textSecondary"
+          >
+            {typeof item === 'string' ? (
+              item
+            ) : (
+              <div>
+                <p className="font-medium text-textPrimary/95">{item.label}</p>
+                <p className="mt-1 text-xs leading-5 text-textSecondary">{item.detail}</p>
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -139,11 +217,37 @@ export function SignalChip({ children, tone = 'neutral' }: { children: ReactNode
   )
 }
 
-export function NarrativeSummary({ title, children }: { title: string; children: ReactNode }) {
+export function NarrativeSummary({
+  title,
+  children,
+  dominantArchitecture,
+  keySignalPattern,
+  operationalImplication,
+}: {
+  title: string
+  children: ReactNode
+  dominantArchitecture?: string
+  keySignalPattern?: string
+  operationalImplication?: string
+}) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">{title}</p>
-      <p className="text-sm leading-6 text-textSecondary">{children}</p>
+      <p className="text-sm leading-6 text-textPrimary/95">{children}</p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {dominantArchitecture ? <NarrativeKeyPoint title="Dominant Architecture" detail={dominantArchitecture} /> : null}
+        {keySignalPattern ? <NarrativeKeyPoint title="Key Signal Pattern" detail={keySignalPattern} /> : null}
+        {operationalImplication ? <NarrativeKeyPoint title="Operational Implication" detail={operationalImplication} /> : null}
+      </div>
+    </div>
+  )
+}
+
+function NarrativeKeyPoint({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="rounded-xl border border-border/65 bg-bg/50 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.13em] text-textSecondary">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-textSecondary">{detail}</p>
     </div>
   )
 }
