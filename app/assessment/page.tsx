@@ -64,16 +64,18 @@ export default function AssessmentPage() {
         <TopHeader title="Sonartra Signals Assessment" subtitle="Behavioural signal capture" />
 
         {!started ? (
-          <AssessmentShell>
-            <Card className="space-y-5 border-border/70 bg-bg/35">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Readiness</p>
-              <h2 className="text-2xl font-semibold">Begin your signal capture session</h2>
-              <p className="text-sm leading-6 text-textSecondary">
+          <AssessmentShell className="max-w-[70rem] p-5 sm:p-8 lg:p-10">
+            <Card className="mx-auto w-full max-w-3xl space-y-8 border-border/75 bg-bg/40 px-6 py-8 sm:px-9 sm:py-10 lg:px-12 lg:py-12">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-textSecondary/90">Readiness</p>
+              <h2 className="text-3xl font-semibold tracking-tight sm:text-[2.15rem]">Begin your signal capture session</h2>
+              <p className="max-w-2xl text-base leading-7 text-textSecondary">
                 80 questions • approximately 10–12 minutes • structured behavioural output.
               </p>
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={() => setStarted(true)}>Begin Assessment</Button>
-                <Button variant="secondary" href="/dashboard">
+              <div className="flex flex-wrap items-center gap-3.5 pt-1 sm:gap-4">
+                <Button onClick={() => setStarted(true)} className="min-w-[11rem] px-6">
+                  Begin Assessment
+                </Button>
+                <Button variant="secondary" href="/dashboard" className="min-w-[11rem] px-6">
                   Return to Dashboard
                 </Button>
               </div>
