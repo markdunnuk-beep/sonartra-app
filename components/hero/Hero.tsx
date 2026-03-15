@@ -16,12 +16,12 @@ export function Hero() {
         className="space-y-7"
       >
         <p className="eyebrow">Performance Intelligence Platform</p>
-        <h1 className="max-w-2xl text-4xl font-semibold leading-tight md:text-5xl lg:text-6xl">
-          Improve execution quality with behavioural intelligence.
+        <h1 className="headline-display">
+          Improve execution quality with <span className="headline-emphasis">behavioural intelligence</span>.
         </h1>
-        <p className="prose-copy">
-          Sonartra maps individual, team, and organisational performance signals into clear operating insight for better
-          strategic decisions.
+        <p className="prose-support max-w-[38rem]">
+          Sonartra maps <span className="text-strategic">Individual Intelligence</span>, <span className="text-strategic">Team Intelligence</span>, and{' '}
+          <span className="text-strategic">Organisational Intelligence</span> into clear operating insight for better strategic decisions.
         </p>
         <div className="flex flex-wrap gap-3 pt-1">
           <Link
