@@ -23,7 +23,7 @@ export function PublicNav() {
               <a
                 key={link.href}
                 href={link.href}
-                className="rounded-lg px-3 py-2 transition-colors hover:bg-panel/80 hover:text-textPrimary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                className="nav-link"
               >
                 {link.label}
               </a>
