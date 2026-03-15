@@ -3,7 +3,7 @@ import { PublicFooter } from '@/components/layout/PublicFooter'
 import { PublicNav } from '@/components/layout/PublicNav'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { RevealGroup, RevealItem } from '@/components/ui/motion/Reveal'
+import { Reveal, RevealGroup, RevealItem } from '@/components/ui/motion/Reveal'
 import { SectionHeading } from '@/components/ui/SectionHeading'
 import { ArchitectureDiagram } from '@/components/visuals/ArchitectureDiagram'
 import { PlatformDashboardPreview } from '@/components/visuals/PlatformDashboardPreview'
@@ -20,8 +20,10 @@ export default function HomePage() {
       <section className="section section-tight">
         <SectionHeading eyebrow="Architecture" title="Three-layer intelligence model" />
         <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-          <ArchitectureDiagram />
-          <RevealGroup className="grid gap-5">
+          <Reveal y={10} className="architecture-anchor-effect">
+            <ArchitectureDiagram />
+          </Reveal>
+          <RevealGroup className="grid gap-5" staggerChildren={0.06} delayChildren={0.02}>
             {layerData.map((layer) => (
               <RevealItem key={layer.title}>
                 <Card interactive>
@@ -44,7 +46,7 @@ export default function HomePage() {
           description="Signals analyses six behavioural domains critical to sustained performance and decision quality."
         />
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <RevealGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <RevealGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" staggerChildren={0.05}>
             {measurePillars.map((pillar) => (
               <RevealItem key={pillar}>
                 <Card interactive>
@@ -61,14 +63,16 @@ export default function HomePage() {
               </RevealItem>
             ))}
           </RevealGroup>
-          <SignalsPreview />
+          <Reveal y={8}>
+            <SignalsPreview />
+          </Reveal>
         </div>
       </section>
 
       <section className="section section-spacious">
         <SectionHeading eyebrow="Platform" title="How it Works" />
         <div className="grid items-start gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-          <RevealGroup className="grid gap-5 sm:grid-cols-2">
+          <RevealGroup className="grid gap-5 sm:grid-cols-2" staggerChildren={0.06}>
             {['Assess', 'Analyse', 'Interpret', 'Optimise'].map((step, i) => (
               <RevealItem key={step}>
                 <Card interactive>
@@ -78,14 +82,16 @@ export default function HomePage() {
               </RevealItem>
             ))}
           </RevealGroup>
-          <PlatformDashboardPreview />
+          <Reveal y={12} delay={0.08} className="platform-anchor-effect">
+            <PlatformDashboardPreview />
+          </Reveal>
         </div>
       </section>
 
       <section className="section section-spacious">
         <SectionHeading eyebrow="Results" title="Pilot Outcomes" />
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <RevealGroup className="grid gap-5 lg:grid-cols-3">
+          <RevealGroup className="grid gap-5 lg:grid-cols-3" staggerChildren={0.06}>
             {caseStudies.map((c) => (
               <RevealItem key={c.company}>
                 <Card interactive>
@@ -96,9 +102,11 @@ export default function HomePage() {
               </RevealItem>
             ))}
           </RevealGroup>
-          <ResultsPanel />
+          <Reveal y={10} className="results-anchor-effect">
+            <ResultsPanel />
+          </Reveal>
         </div>
-        <RevealGroup className="mt-7 grid gap-5 md:mt-8 lg:grid-cols-3">
+        <RevealGroup className="mt-7 grid gap-5 md:mt-8 lg:grid-cols-3" staggerChildren={0.06}>
           {testimonials.map((t) => (
             <RevealItem key={t.name}>
               <Card interactive>
@@ -111,18 +119,20 @@ export default function HomePage() {
       </section>
 
       <section className="section pt-4 md:pt-8">
-        <Card interactive className="p-8 text-center sm:p-10">
-          <p className="eyebrow mb-4">Decision Support</p>
-          <h3 className="text-3xl font-semibold text-[#ECF2FC]">
-            Deploy <span className="headline-emphasis">performance intelligence</span> at scale.
-          </h3>
-          <p className="prose-support mx-auto mt-4 max-w-2xl">
-            Run Sonartra Signals and generate actionable behavioural outputs for sharper strategic insight.
-          </p>
-          <div className="mt-8 flex justify-center">
-            <Button href="/signup">Start with Sonartra Signals</Button>
-          </div>
-        </Card>
+        <Reveal y={8}>
+          <Card interactive className="p-8 text-center sm:p-10">
+            <p className="eyebrow mb-4">Decision Support</p>
+            <h3 className="text-3xl font-semibold text-[#ECF2FC]">
+              Deploy <span className="headline-emphasis">performance intelligence</span> at scale.
+            </h3>
+            <p className="prose-support mx-auto mt-4 max-w-2xl">
+              Run Sonartra Signals and generate actionable behavioural outputs for sharper strategic insight.
+            </p>
+            <div className="mt-8 flex justify-center">
+              <Button href="/signup">Start with Sonartra Signals</Button>
+            </div>
+          </Card>
+        </Reveal>
       </section>
       <PublicFooter />
     </div>
