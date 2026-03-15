@@ -15,10 +15,10 @@ export function AssessmentFlowTransition({ children, transitionKey }: { children
     <AnimatePresence mode="wait" initial={false}>
       <motion.div
         key={transitionKey}
-        initial={{ opacity: 0, y: 8 }}
+        initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -8 }}
-        transition={{ duration: motionDuration.fast, ease: motionEase.standard }}
+        exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: motionDuration.instant, ease: motionEase.standard }}
       >
         {children}
       </motion.div>
