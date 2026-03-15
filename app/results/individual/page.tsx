@@ -1,83 +1,103 @@
-import { AppShell } from '@/components/layout/AppShell'
-import { TopHeader } from '@/components/layout/TopHeader'
 import { RadarSummaryChart } from '@/components/charts/RadarSummaryChart'
+import { AppShell } from '@/components/layout/AppShell'
+import {
+  InsightCard,
+  InterpretationPanel,
+  RecommendationBlock,
+  ResultsHero,
+  ResultsSectionBlock,
+  ResultsWorkspaceShell,
+  TraitScoreCard,
+} from '@/components/results/ResultsPrimitives'
 import { BarList } from '@/components/ui/BarList'
-import { Button } from '@/components/ui/Button'
-import { ResultsSection } from '@/components/ui/ResultsSection'
 import { individualResults } from '@/data/mockData'
+
+const interpretationModules = [
+  {
+    label: 'Leadership Interpretation',
+    content:
+      'Operates as a precision-oriented strategic driver. Highest performance appears in execution environments with clear accountability and decision tempo.',
+  },
+  {
+    label: 'Conflict Interpretation',
+    content:
+      'Conflict posture is direct and structured. The profile performs best when issues are framed explicitly and resolved against measurable outcomes.',
+  },
+  {
+    label: 'Culture Interpretation',
+    content:
+      'Alignment increases in systems with transparent operating standards and cross-functional visibility over strategic priorities.',
+  },
+  {
+    label: 'Stress Interpretation',
+    content:
+      'Moderate risk signal under prolonged ambiguity. Decision-rights clarity and tighter operating cadence reduce potential drag.',
+  },
+]
 
 export default function IndividualResultsPage() {
   return (
     <AppShell>
-      <div className="space-y-7 lg:space-y-9">
-        <TopHeader title="Individual Results" subtitle="Executive behavioural intelligence report" />
+      <ResultsWorkspaceShell
+        title="Individual Results"
+        subtitle="Executive behavioural intelligence briefing for Sonartra Signals. Review the dominant behavioural architecture, supporting dimensions, and recommended operating actions."
+      >
+        <ResultsHero
+          dominant={individualResults.profile.dominant}
+          secondary={individualResults.profile.secondary}
+          summary={individualResults.profile.summary}
+          standoutFinding="Execution discipline and strategic pattern recognition are materially above baseline, with the highest signal concentration in Behaviour and Leadership dimensions."
+          confidence="High"
+        />
 
-        <ResultsSection title="Executive Summary">
-          <p className="text-sm leading-6 text-textSecondary">
-            Dominant style: <span className="text-textPrimary">{individualResults.profile.dominant}</span> • Secondary style:{' '}
-            <span className="text-textPrimary">{individualResults.profile.secondary}</span>
-          </p>
-          <p className="text-sm leading-6 text-textSecondary">{individualResults.profile.summary}</p>
-        </ResultsSection>
+        <ResultsSectionBlock
+          title="Behavioural Signal Overview"
+          description="Top-line dimensions are structured to separate dominant signal strength from supporting behavioural detail."
+        >
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {individualResults.radar.map((item) => (
+              <TraitScoreCard key={item.name} name={item.name} score={item.score} detail="Signal score" />
+            ))}
+          </div>
+        </ResultsSectionBlock>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          {individualResults.radar.map((item) => (
-            <ResultsSection key={item.name} title={item.name}>
-              <p className="text-3xl font-semibold tracking-tight text-textPrimary">{item.score}</p>
-              <p className="text-xs uppercase tracking-[0.16em] text-textSecondary">Signal score</p>
-            </ResultsSection>
-          ))}
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-3">
-          <div className="space-y-4 xl:col-span-2">
-            <ResultsSection title="Behaviour Architecture">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <ResultsSectionBlock
+            title="Primary Intelligence"
+            description="Core behavioural architecture and motivator distribution provide the main explanatory layer for this profile."
+          >
+            <div className="space-y-4">
+              <InsightCard title="Behaviour Architecture" detail="Aggregated axis view of behavioural and contextual dimensions." />
               <RadarSummaryChart data={individualResults.radar} />
-            </ResultsSection>
-            <ResultsSection title="Motivational Drivers">
+              <InsightCard title="Motivational Drivers" detail="Relative motivator weighting highlights sustained behavioural energy sources." />
               <BarList items={individualResults.motivators} />
-            </ResultsSection>
-          </div>
+            </div>
+          </ResultsSectionBlock>
 
-          <div className="space-y-4">
-            <ResultsSection title="Leadership">
-              <p className="text-sm leading-6 text-textSecondary">
-                Operates as a precision-oriented strategic driver. Effective in complex execution contexts requiring clarity
-                and pace.
-              </p>
-            </ResultsSection>
-            <ResultsSection title="Conflict">
-              <p className="text-sm leading-6 text-textSecondary">
-                Direct and structured. Prefers explicit problem framing and rapid path-to-resolution.
-              </p>
-            </ResultsSection>
-            <ResultsSection title="Culture">
-              <p className="text-sm leading-6 text-textSecondary">
-                High alignment in systems with transparent accountability and data-led decision governance.
-              </p>
-            </ResultsSection>
-            <ResultsSection title="Stress">
-              <p className="text-sm leading-6 text-textSecondary">
-                Moderate risk under prolonged ambiguity. Mitigation: increase decision rights clarity and operating cadence.
-              </p>
-            </ResultsSection>
-          </div>
+          <ResultsSectionBlock
+            title="Interpretation Modules"
+            description="Translation of measured outputs into operating implications."
+          >
+            <div className="space-y-4">
+              {interpretationModules.map((module) => (
+                <InterpretationPanel key={module.label} label={module.label} content={module.content} />
+              ))}
+            </div>
+          </ResultsSectionBlock>
         </div>
 
-        <ResultsSection title="Recommended Environments">
-          <p className="text-sm leading-6 text-textSecondary">
-            Best in strategic build phases, transformation programmes, and cross-functional delivery with measurable
-            targets.
-          </p>
-        </ResultsSection>
-
-        <ResultsSection title="Report Export">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-textSecondary">Export a board-ready summary of behavioural architecture and risk signals.</p>
-            <Button>Download PDF</Button>
-          </div>
-        </ResultsSection>
-      </div>
+        <ResultsSectionBlock title="Action and Next Step" description="Prioritised recommendations to apply profile intelligence in execution contexts.">
+          <RecommendationBlock
+            title="Recommended Environments"
+            items={[
+              'Strategic build phases with high accountability and clear ownership boundaries.',
+              'Cross-functional transformation programmes tied to measurable targets.',
+              'Roles requiring structured decision framing under moderate complexity.',
+            ]}
+            ctaLabel="Download Board-Ready Report"
+          />
+        </ResultsSectionBlock>
+      </ResultsWorkspaceShell>
     </AppShell>
   )
 }
