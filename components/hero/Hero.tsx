@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { motion, useReducedMotion } from 'framer-motion'
-import { IntelligenceTriangle } from './IntelligenceTriangle'
+import { HeroIntelligenceMap } from '@/components/visuals/HeroIntelligenceMap'
 
 export function Hero() {
   const prefersReducedMotion = useReducedMotion() ?? false
@@ -47,7 +47,7 @@ export function Hero() {
       >
         <div className="absolute inset-x-6 top-0 h-28 bg-gradient-to-b from-accent/20 to-transparent blur-3xl" />
         <div className="relative rounded-xl border border-border/70 bg-bg/70 p-6">
-          <IntelligenceTriangle />
+          <HeroIntelligenceMap />
         </div>
       </motion.div>
     </section>

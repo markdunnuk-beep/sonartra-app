@@ -88,4 +88,78 @@
     @apply rounded-xl border border-border/70 bg-panel/55 p-1;
   }
 
+  .visual-shell {
+    @apply relative overflow-hidden border border-border/80 bg-panel/80 shadow-panel backdrop-blur;
+  }
+
+  .visual-grid-overlay::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(rgba(159, 180, 206, 0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(159, 180, 206, 0.07) 1px, transparent 1px);
+    background-size: 28px 28px;
+    pointer-events: none;
+  }
+
+  .intelligence-node-pulse {
+    animation: nodePulse 6s ease-in-out infinite;
+    transform-origin: center;
+  }
+
+  .intelligence-glow {
+    animation: corePulse 7s ease-in-out infinite;
+    transform-origin: center;
+  }
+
+  .intelligence-rotate {
+    animation: slowRotate 24s linear infinite;
+    transform-origin: center;
+  }
+
+  .intelligence-rotate-reverse {
+    animation: slowRotateReverse 30s linear infinite;
+    transform-origin: center;
+  }
+
+  @keyframes nodePulse {
+    0%,
+    100% {
+      opacity: 0.8;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes corePulse {
+    0%,
+    100% {
+      opacity: 0.9;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.035);
+    }
+  }
+
+  @keyframes slowRotate {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes slowRotateReverse {
+    from {
+      transform: rotate(360deg);
+    }
+    to {
+      transform: rotate(0deg);
+    }
+  }
+
 }
