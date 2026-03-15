@@ -1,52 +1,65 @@
 import { AppShell } from '@/components/layout/AppShell'
-import { TopHeader } from '@/components/layout/TopHeader'
+import {
+  InsightCard,
+  ResultsSectionBlock,
+  ResultsWorkspaceShell,
+  SignalChip,
+  TraitScoreCard,
+} from '@/components/results/ResultsPrimitives'
 import { TeamMatrix } from '@/components/sections/TeamMatrix'
-import { Card } from '@/components/ui/Card'
 import { StatCard } from '@/components/ui/StatCard'
 import { organisationResults } from '@/data/mockData'
 
 export default function OrganisationResultsPage() {
   return (
     <AppShell>
-      <div className="space-y-7 lg:space-y-9">
-        <TopHeader title="Organisation Intelligence" subtitle="Team and enterprise behavioural signals" />
-
-        <section className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Organisation summary</p>
+      <ResultsWorkspaceShell
+        title="Organisation Intelligence"
+        subtitle="Team-level behavioural intelligence summary with leadership balance, alignment, and risk concentration indicators."
+        statusLabel="Organisation Signals"
+      >
+        <ResultsSectionBlock title="Executive Snapshot" description="Top-line metrics establish current enterprise behavioural posture.">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {organisationResults.stats.map((s) => (
               <StatCard key={s.label} label={s.label} value={s.value} />
             ))}
           </div>
-        </section>
+        </ResultsSectionBlock>
 
-        <TeamMatrix members={organisationResults.members} />
+        <ResultsSectionBlock title="Team Intelligence Matrix" description="Member-level signal spread across style, leadership architecture, and risk alignment.">
+          <TeamMatrix members={organisationResults.members} />
+        </ResultsSectionBlock>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Card>
-            <h3 className="text-base font-semibold">Leadership Distribution</h3>
-            <p className="mt-3 text-sm leading-6 text-textSecondary">Operator profiles dominate 44% of assessed population.</p>
-          </Card>
-          <Card>
-            <h3 className="text-base font-semibold">Cultural Alignment</h3>
-            <p className="mt-3 text-sm leading-6 text-textSecondary">
-              Highest alignment in Product and Operations. Emerging tension in GTM pods.
-            </p>
-          </Card>
-          <Card>
-            <h3 className="text-base font-semibold">Risk Indicators</h3>
-            <p className="mt-3 text-sm leading-6 text-textSecondary">
-              Escalation risk concentrated in two high-interdependency functions.
-            </p>
-          </Card>
-          <Card>
-            <h3 className="text-base font-semibold">Team Intelligence Matrix Signal</h3>
-            <p className="mt-3 text-sm leading-6 text-textSecondary">
-              Strategist and Integrator blend healthy. Catalyst representation below target.
-            </p>
-          </Card>
-        </div>
-      </div>
+        <ResultsSectionBlock title="Interpretive Briefing" description="Critical implications grouped for faster executive reading.">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <InsightCard title="Leadership Distribution" detail="Operator profiles dominate 44% of assessed population." />
+            <InsightCard
+              title="Cultural Alignment"
+              detail="Highest alignment appears in Product and Operations with emerging tension in GTM pods."
+            />
+            <InsightCard
+              title="Risk Indicators"
+              detail="Escalation risk is concentrated in two high-interdependency functions requiring clearer escalation pathways."
+            />
+            <InsightCard
+              title="Matrix Signal"
+              detail="Strategist and Integrator blend remains healthy while Catalyst representation is below target composition."
+            />
+          </div>
+        </ResultsSectionBlock>
+
+        <ResultsSectionBlock title="Signal Anchors" description="Reusable trait meter foundation for future team-wide score visualisations.">
+          <div className="grid gap-4 md:grid-cols-3">
+            <TraitScoreCard name="Behaviour Balance" score={72} detail="Team behaviour balance score" />
+            <TraitScoreCard name="Culture Risk" score={64} detail="Lower indicates greater instability risk" />
+            <div className="surface space-y-3 p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Readout State</p>
+              <p className="text-sm text-textSecondary">Deeper organisational narrative and export formatting will extend from this foundation in Pass 2.</p>
+              <SignalChip tone="accent">Pass 1 Foundation Ready</SignalChip>
+            </div>
+          </div>
+        </ResultsSectionBlock>
+      </ResultsWorkspaceShell>
     </AppShell>
   )
 }
