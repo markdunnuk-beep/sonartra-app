@@ -9,7 +9,6 @@ import { ArchitectureDiagram } from '@/components/visuals/ArchitectureDiagram'
 import { PlatformDashboardPreview } from '@/components/visuals/PlatformDashboardPreview'
 import { ResultsPanel } from '@/components/visuals/ResultsPanel'
 import { SignalsPreview } from '@/components/visuals/SignalsPreview'
-import { TeamNetworkMap } from '@/components/visuals/TeamNetworkMap'
 import { caseStudies, layerData, measurePillars, testimonials } from '@/data/mockData'
 
 export default function HomePage() {
@@ -66,8 +65,8 @@ export default function HomePage() {
 
       <section className="section section-spacious">
         <SectionHeading eyebrow="Platform" title="How it Works" />
-        <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="grid gap-5 md:grid-cols-4">
+        <div className="grid items-start gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="grid gap-5 sm:grid-cols-2">
             {['Assess', 'Analyse', 'Interpret', 'Optimise'].map((step, i) => (
               <Card key={step}>
                 <p className="eyebrow">0{i + 1}</p>
@@ -75,10 +74,7 @@ export default function HomePage() {
               </Card>
             ))}
           </div>
-          <div className="space-y-6">
-            <PlatformDashboardPreview />
-            <TeamNetworkMap />
-          </div>
+          <PlatformDashboardPreview />
         </div>
       </section>
 
