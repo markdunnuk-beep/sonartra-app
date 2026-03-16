@@ -1,6 +1,6 @@
 import { clsx } from 'clsx'
 import Link from 'next/link'
-import { type ReactNode } from 'react'
+import { type MouseEventHandler, type ReactNode } from 'react'
 
 type ButtonProps = {
   children: ReactNode
@@ -8,7 +8,8 @@ type ButtonProps = {
   variant?: 'primary' | 'secondary' | 'ghost'
   className?: string
   type?: 'button' | 'submit'
-  onClick?: () => void
+  onClick?: MouseEventHandler<HTMLButtonElement>
+  disabled?: boolean
 }
 
 const classes = {
@@ -19,18 +20,18 @@ const classes = {
   ghost: 'border border-transparent bg-transparent text-textSecondary hover:border-border/70 hover:bg-panel/60 hover:text-textPrimary',
 }
 
-export function Button({ children, href, variant = 'primary', className, type = 'button', onClick }: ButtonProps) {
+export function Button({ children, href, variant = 'primary', className, type = 'button', onClick, disabled }: ButtonProps) {
   const style = clsx(classes.base, classes[variant], className)
   if (href) {
     return (
-      <Link href={href} className={style}>
+      <Link href={href} aria-disabled={disabled} className={clsx(style, disabled && 'pointer-events-none')}>
         {children}
       </Link>
     )
   }
 
   return (
-    <button type={type} onClick={onClick} className={style}>
+    <button type={type} onClick={onClick} className={style} disabled={disabled}>
       {children}
     </button>
   )
