@@ -1,15 +1,17 @@
 import { clsx } from 'clsx'
+import { type HTMLAttributes } from 'react'
 import { type ReactNode } from 'react'
 
 type CardProps = {
   children: ReactNode
   className?: string
   interactive?: boolean
-}
+} & HTMLAttributes<HTMLDivElement>
 
-export function Card({ children, className, interactive = false }: CardProps) {
+export function Card({ children, className, interactive = false, ...props }: CardProps) {
   return (
     <div
+      {...props}
       className={clsx(
         'surface relative overflow-hidden p-6 sm:p-7',
         interactive && 'interactive-surface',

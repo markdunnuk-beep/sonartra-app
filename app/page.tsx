@@ -49,9 +49,13 @@ export default function HomePage() {
           <RevealGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" staggerChildren={0.05}>
             {measurePillars.map((pillar) => (
               <RevealItem key={pillar.title}>
-                <Card interactive className="flex min-h-[132px] flex-col justify-start gap-3">
-                  <p className="text-base font-medium text-[#DEE7F6]">{pillar.title}</p>
-                  <p className="text-sm leading-relaxed text-[#B5C3DA]">{pillar.summary}</p>
+                <Card
+                  interactive
+                  tabIndex={0}
+                  className="measure-card flex min-h-[138px] flex-col justify-center gap-3.5"
+                >
+                  <p className="measure-card-title text-base font-medium text-[#DEE7F6]">{pillar.title}</p>
+                  <p className="measure-card-summary text-sm leading-relaxed text-[#B5C3DA]">{pillar.summary}</p>
                 </Card>
               </RevealItem>
             ))}
