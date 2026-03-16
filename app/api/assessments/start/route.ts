@@ -11,6 +11,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'userId is required.' }, { status: 400 });
     }
 
+    const userResult = await queryDb<{ id: string }>('SELECT id FROM users WHERE id = $1', [body.userId]);
+    if (!userResult.rows[0]) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    if (body.organisationId) {
+      const organisationResult = await queryDb<{ id: string }>(
+        'SELECT id FROM organisations WHERE id = $1',
+        [body.organisationId]
+      );
+
+      if (!organisationResult.rows[0]) {
+        return NextResponse.json({ error: 'Organisation not found' }, { status: 404 });
+      }
+    }
+
     const assessmentVersionKey = body.assessmentVersionKey ?? 'wplp80-v1';
 
     const versionResult = await queryDb<AssessmentVersionRow>(
