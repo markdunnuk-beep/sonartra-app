@@ -31,8 +31,8 @@ export default function DashboardPage() {
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {measurePillars.map((pillar, idx) => (
-                <div key={pillar} className="rounded-lg border border-border/80 bg-bg/60 p-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-textSecondary">{pillar}</p>
+                <div key={pillar.title} className="rounded-lg border border-border/80 bg-bg/60 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-textSecondary">{pillar.title}</p>
                   <p className="mt-2 text-2xl font-semibold text-textPrimary">{individualResults.radar[idx].score}</p>
                   <p className="mt-1 text-xs text-textSecondary">Signal score</p>
                 </div>
