@@ -37,7 +37,14 @@ The migration files are:
 The WPLP-80 v1 import pipeline is:
 
 - `scripts/seed-wplp80-question-bank.mjs`
+- `db/seeds/0002_wplp80_question_bank_seed.sql` (portable manual seed for Supabase SQL Editor)
 - seed target question set: `wplp80-v1-main` linked to `assessment_versions.key='wplp80-v1'`
+
+Why both seed paths exist:
+
+- The JS script remains the source-driven importer for environments with `DATABASE_URL`.
+- The SQL seed exists for manual execution in Supabase SQL Editor when local DB credentials are unavailable.
+- Execution order for manual setup is: `db/migrations/0002_wplp80_question_bank.sql` first, then `db/seeds/0002_wplp80_question_bank_seed.sql`.
 
 Import guarantees:
 
