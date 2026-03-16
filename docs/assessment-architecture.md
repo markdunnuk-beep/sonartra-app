@@ -1,6 +1,8 @@
-# Sonartra Block 1: Assessment Data Architecture
+# Sonartra Assessment Data Architecture
 
 ## Schema overview
+
+### Block 1 foundations
 
 Block 1 introduces a normalized persistence layer in Postgres for:
 
@@ -10,17 +12,42 @@ Block 1 introduces a normalized persistence layer in Postgres for:
 - Atomic answer storage (`assessment_responses`)
 - Future scoring snapshots (`assessment_score_snapshots`)
 
-The migration for this block is in `db/migrations/0001_assessment_foundation.sql` and includes:
+### Block 2A question bank model
 
-- UUID primary keys
-- FK relationships and delete behavior
-- Status check constraints
-- response/question validation constraints
-- supporting indexes for API query patterns
-- `updated_at` trigger management
-- seed data for `wplp80-v1`
+Block 2A extends the schema with a normalized question bank for WPLP-80 that avoids question duplication when source data is represented as question + option + signal mapping rows in CSV form.
 
-## Assessment lifecycle (Block 1)
+Relationship chain:
+
+1. `assessment_versions` → `assessment_question_sets`
+2. `assessment_question_sets` → `assessment_questions`
+3. `assessment_questions` → `assessment_question_options`
+4. `assessment_question_options` → `assessment_option_signal_mappings`
+
+Why this shape:
+
+- The source CSV (`data/wplp80_questions_v1.csv`) is normalized and contains repeated question metadata per option row.
+- Modeling questions/options/mappings as separate tables preserves source fidelity and prevents duplicate question records.
+- Option-level signal mappings remain queryable for scoring, while delivery routes can omit them for lightweight runtime payloads.
+
+The migration files are:
+
+- `db/migrations/0001_assessment_foundation.sql`
+- `db/migrations/0002_wplp80_question_bank.sql`
+
+The WPLP-80 v1 import pipeline is:
+
+- `scripts/seed-wplp80-question-bank.mjs`
+- seed target question set: `wplp80-v1-main` linked to `assessment_versions.key='wplp80-v1'`
+
+Import guarantees:
+
+- Upserts are used so reruns are idempotent in practical terms.
+- Seed validation enforces exactly 80 questions in the active set.
+- Seed validation enforces exactly 4 options per question.
+
+## Assessment lifecycle and APIs
+
+### Block 1 runtime endpoints
 
 1. `POST /api/assessments/start`
    - Resolves an active assessment version (default `wplp80-v1`)
@@ -36,28 +63,37 @@ The migration for this block is in `db/migrations/0001_assessment_foundation.sql
    - Verifies all required responses for the linked version exist
    - Sets `status=completed` and `scoring_status=pending` once complete
 
-## How Block 2 can plug in
+### Block 2A question delivery endpoints
 
-Block 2 (assessment delivery/workflow) can build directly on these endpoints by:
+1. `GET /api/assessment-versions/[versionKey]/questions`
+   - Resolves version + active question set
+   - Returns ordered active questions with ordered options
+   - Excludes option signal mappings from payload
+2. `GET /api/assessments/[id]/questions`
+   - Resolves assessment → linked version → active question set
+   - Returns ordered questions + options for that version
+   - Includes saved responses for resume behavior
 
-- Using `/start` to open an attempt
-- Calling `/response` on every answer interaction
-- Using `/[id]` for resume/recovery
-- Triggering `/complete` once client-side navigation reaches final question
+Block 2B UI consumption guidance:
 
-Because progress is computed from durable rows, Block 2 can remain stateless in the UI and rely on persistence as source of truth.
+- Start with `POST /api/assessments/start`.
+- Fetch question content from `GET /api/assessments/[id]/questions` (or version route when no attempt exists yet).
+- Persist each answer with `POST /api/assessments/response`.
+- Treat server payload order (`question_number`, `display_order`) as canonical ordering.
 
-## How Block 4 scoring writes to snapshots
+## Forward scoring integration (Block 3)
 
-Block 4 should:
+Block 3 scoring should use the normalized fields now stored in the question bank:
 
-1. Select completed assessments where `scoring_status='pending'`
-2. Execute scoring logic externally or via workers
-3. Insert immutable score artifacts into `assessment_score_snapshots` with:
-   - `scoring_version`
-   - style outputs
-   - raw + derived JSON payloads
-   - interpretation JSON for explainability
-4. Update `assessments.scoring_status` to `scored` (or `failed` on error)
+- `assessment_questions.reverse_scored`
+- `assessment_questions.question_weight_default`
+- `assessment_questions.scoring_family`
+- `assessment_option_signal_mappings.signal_code`
+- `assessment_option_signal_mappings.signal_weight`
 
-This preserves auditability and allows rescoring by adding additional snapshot rows per assessment.
+Expected scoring flow:
+
+1. Read responses from `assessment_responses`.
+2. Resolve selected option metadata via `question_number` + `response_value` mapping.
+3. Join option-to-signal mappings and aggregate weighted signal outputs.
+4. Persist scoring artifacts into `assessment_score_snapshots` and update assessment scoring status.
