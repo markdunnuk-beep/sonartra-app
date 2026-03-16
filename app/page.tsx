@@ -46,13 +46,13 @@ export default function HomePage() {
           description="Signals assesses the core performance factors behind leadership, teamwork, and decision-making."
         />
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <RevealGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" staggerChildren={0.05}>
+          <RevealGroup className="grid gap-4 sm:auto-rows-fr sm:grid-cols-2 lg:grid-cols-3" staggerChildren={0.05}>
             {measurePillars.map((pillar) => (
               <RevealItem key={pillar.title}>
                 <Card
                   interactive
                   tabIndex={0}
-                  className="measure-card flex min-h-[138px] flex-col justify-center gap-3.5"
+                  className="measure-card flex h-full min-h-[152px] flex-col justify-center gap-3.5"
                 >
                   <p className="measure-card-title text-base font-medium text-[#DEE7F6]">{pillar.title}</p>
                   <p className="measure-card-summary text-sm leading-relaxed text-[#B5C3DA]">{pillar.summary}</p>
