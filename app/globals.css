@@ -80,6 +80,68 @@
     opacity: 1;
   }
 
+  .measure-card {
+    transition-property: transform, border-color, box-shadow, background-color;
+    transition-duration: 190ms;
+    transition-timing-function: var(--motion-ease-standard);
+  }
+
+  .measure-card::before {
+    opacity: 0.18;
+    transition: opacity 190ms var(--motion-ease-standard), background 190ms var(--motion-ease-standard);
+    background: linear-gradient(160deg, rgba(125, 176, 248, 0.05), transparent 54%);
+  }
+
+  .measure-card::after {
+    background: radial-gradient(130% 110% at 14% 0%, rgba(107, 172, 255, 0.16), transparent 56%);
+    transition: opacity 190ms var(--motion-ease-standard);
+  }
+
+  .measure-card:hover,
+  .measure-card:focus-within,
+  .measure-card:focus-visible {
+    transform: translateY(-3px);
+    border-color: rgba(129, 182, 255, 0.5);
+    box-shadow: 0 28px 62px -38px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(133, 182, 255, 0.2),
+      0 10px 24px -20px rgba(90, 151, 231, 0.5);
+  }
+
+  .measure-card:hover::before,
+  .measure-card:focus-within::before,
+  .measure-card:focus-visible::before {
+    opacity: 0.3;
+    background: linear-gradient(165deg, rgba(133, 186, 255, 0.1), transparent 58%);
+  }
+
+  .measure-card:hover::after,
+  .measure-card:focus-within::after,
+  .measure-card:focus-visible::after {
+    opacity: 0.95;
+  }
+
+  .measure-card:focus-visible {
+    outline: none;
+    box-shadow: 0 28px 62px -38px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(133, 182, 255, 0.2),
+      0 0 0 3px rgba(74, 144, 235, 0.35);
+  }
+
+  .measure-card-title {
+    letter-spacing: 0.01em;
+  }
+
+  .measure-card-summary {
+    color: #adbbd1;
+    transition: color 180ms var(--motion-ease-standard), opacity 180ms var(--motion-ease-standard);
+    opacity: 0.9;
+  }
+
+  .measure-card:hover .measure-card-summary,
+  .measure-card:focus-within .measure-card-summary,
+  .measure-card:focus-visible .measure-card-summary {
+    color: #c3d2e7;
+    opacity: 1;
+  }
+
   .nav-link {
     @apply interaction-control rounded-lg px-3 py-2 text-textSecondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60;
   }
@@ -333,13 +395,20 @@
 
 @media (hover: none) {
   .interaction-control:hover,
-  .interactive-surface:hover {
+  .interactive-surface:hover,
+  .measure-card:hover {
     transform: none;
     box-shadow: inherit;
   }
 
-  .interactive-surface:hover::after {
+  .interactive-surface:hover::after,
+  .measure-card:hover::after,
+  .measure-card:hover::before {
     opacity: 0;
+  }
+
+  .measure-card-summary {
+    opacity: 1;
   }
 }
 
