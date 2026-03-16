@@ -27,8 +27,8 @@ export default function SignalsPage() {
         <SectionHeading title="What Signals measures" />
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {measurePillars.map((p) => (
-            <Card key={p}>
-              <p className="font-medium">{p}</p>
+            <Card key={p.title}>
+              <p className="font-medium">{p.title}</p>
             </Card>
           ))}
         </div>

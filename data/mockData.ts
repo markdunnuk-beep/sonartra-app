@@ -23,7 +23,14 @@ export const layerData = [
   },
 ]
 
-export const measurePillars = ['Behaviour Style', 'Motivators', 'Leadership', 'Conflict', 'Culture', 'Stress']
+export const measurePillars = [
+  { title: 'Behaviour Style', summary: 'How people naturally work and interact.' },
+  { title: 'Motivators', summary: 'What drives people to perform and stay engaged.' },
+  { title: 'Leadership', summary: 'How people guide, influence, and make decisions.' },
+  { title: 'Conflict', summary: 'How people handle disagreement and tension.' },
+  { title: 'Culture', summary: 'The environment where people perform best.' },
+  { title: 'Stress', summary: 'How behaviour changes under pressure.' },
+]
 
 export const testimonials = [
   { quote: 'Sonartra gave us a sharper view of leadership risk than any engagement survey.', name: 'COO, Fintech Scale-up' },
