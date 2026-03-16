@@ -43,7 +43,7 @@ export default function HomePage() {
         <SectionHeading
           eyebrow="Signals"
           title="What Sonartra Measures"
-          description="Signals analyses six performance domains critical to sustained execution and decision quality."
+          description="Signals assesses the core performance factors behind leadership, teamwork, and decision-making."
         />
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <RevealGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" staggerChildren={0.05}>
