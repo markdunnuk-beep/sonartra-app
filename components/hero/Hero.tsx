@@ -1,6 +1,7 @@
 'use client'
 
 import { Button } from '@/components/ui/Button'
+import { HeadlineReveal } from '@/components/ui/motion/HeadlineReveal'
 import { Reveal, RevealGroup, RevealItem } from '@/components/ui/motion/Reveal'
 import { HeroIntelligenceMap } from '@/components/visuals/HeroIntelligenceMap'
 
@@ -13,7 +14,9 @@ export function Hero() {
         </RevealItem>
         <RevealItem y={10}>
           <h1 className="headline-display">
-            Turn human behaviour into <span className="headline-emphasis">operational intelligence</span>.
+            <HeadlineReveal text="Turn human behaviour into operational intelligence.">
+              Turn human behaviour into <span className="headline-emphasis">operational intelligence</span>.
+            </HeadlineReveal>
           </h1>
         </RevealItem>
         <RevealItem>
