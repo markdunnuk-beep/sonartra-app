@@ -3,29 +3,36 @@
 import { clsx } from 'clsx'
 import { KeyboardEvent } from 'react'
 
-const defaultOptions = ['Strongly Agree', 'Agree', 'Neutral', 'Disagree', 'Strongly Disagree']
+const defaultOptions = [
+  { label: 'Strongly Agree', value: '1' },
+  { label: 'Agree', value: '2' },
+  { label: 'Disagree', value: '3' },
+  { label: 'Strongly Disagree', value: '4' },
+]
 
 export function AssessmentOptionGroup({
   selected,
   onSelect,
   options = defaultOptions,
+  disabled,
 }: {
   selected?: string
   onSelect: (value: string) => void
-  options?: string[]
+  options?: Array<{ label: string; value: string }>
+  disabled?: boolean
 }) {
-  const selectedIndex = selected ? options.indexOf(selected) : -1
+  const selectedIndex = selected ? options.findIndex((option) => option.value === selected) : -1
 
   const handleArrowNavigation = (event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
     const key = event.key
-    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) return
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key) || disabled) return
 
     event.preventDefault()
 
     const move = key === 'ArrowDown' || key === 'ArrowRight' ? 1 : -1
     const nextIndex = (currentIndex + move + options.length) % options.length
     const nextOption = options[nextIndex]
-    onSelect(nextOption)
+    onSelect(nextOption.value)
 
     requestAnimationFrame(() => {
       const nextButton = event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(`button[data-option-index='${nextIndex}']`)
@@ -34,24 +41,25 @@ export function AssessmentOptionGroup({
   }
 
   return (
-    <div className="grid gap-2.5" role="radiogroup" aria-label="Assessment response options">
+    <div className="grid gap-2.5" role="radiogroup" aria-label="Assessment response options" aria-disabled={disabled}>
       {options.map((option, index) => {
-        const isSelected = selected === option
+        const isSelected = selected === option.value
         return (
           <button
-            key={option}
+            key={option.value}
             type="button"
             role="radio"
             aria-checked={isSelected}
             data-option-index={index}
             tabIndex={selectedIndex === -1 ? (index === 0 ? 0 : -1) : isSelected ? 0 : -1}
-            onClick={() => onSelect(option)}
+            onClick={() => onSelect(option.value)}
             onKeyDown={(event) => handleArrowNavigation(event, index)}
+            disabled={disabled}
             className={clsx(
               'interaction-control group relative w-full rounded-xl border px-4 py-3.5 text-left sm:px-5',
               'motion-safe:transition-[transform,box-shadow,background-color,border-color,color] motion-safe:duration-200 motion-safe:ease-out',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/75 focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
-              'hover:-translate-y-[1px] active:translate-y-[1px] active:duration-75',
+              'hover:-translate-y-[1px] active:translate-y-[1px] active:duration-75 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0',
               isSelected
                 ? 'border-accent/80 bg-[#122641] text-textPrimary shadow-[inset_0_0_0_1px_rgba(146,199,255,0.5),0_10px_20px_-18px_rgba(130,190,255,0.85)]'
                 : 'border-border/80 bg-bg/45 text-textSecondary hover:border-accent/50 hover:bg-panel/95 hover:text-textPrimary',
@@ -66,7 +74,7 @@ export function AssessmentOptionGroup({
               aria-hidden
             />
             <span className="relative flex items-center justify-between gap-4">
-              <span className="text-sm font-medium">{option}</span>
+              <span className="text-sm font-medium">{option.label}</span>
               <span
                 className={clsx(
                   'h-2.5 w-2.5 rounded-full border transition-colors duration-200',
