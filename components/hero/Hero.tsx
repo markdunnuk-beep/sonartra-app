@@ -14,7 +14,9 @@ export function Hero() {
         </RevealItem>
         <RevealItem y={10}>
           <h1 className="headline-display">
-            <HeadlineReveal text="Turn human behaviour into operational intelligence." />
+            <HeadlineReveal text="Turn human behaviour into operational intelligence.">
+              Turn human behaviour into <span className="headline-emphasis">operational intelligence</span>.
+            </HeadlineReveal>
           </h1>
         </RevealItem>
         <RevealItem>
