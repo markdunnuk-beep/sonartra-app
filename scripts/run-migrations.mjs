@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Client } from 'pg';
 
-const migrationFiles = ['0001_assessment_foundation.sql'];
+const migrationFiles = ['0001_assessment_foundation.sql', '0002_wplp80_question_bank.sql'];
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
