@@ -9,17 +9,17 @@ export const layerData = [
   {
     title: 'Individual Intelligence',
     description:
-      'Maps behavioural architecture, motivators, and pressure patterns to predict role fit and execution quality.',
+      'Understand how individuals think, operate, and respond under pressure — helping leaders place people and teams in roles where they perform at their best.',
   },
   {
     title: 'Team Intelligence',
     description:
-      'Quantifies leadership balance, conflict vectors, and cognitive spread across operating teams.',
+      'Reveals how teams actually function — highlighting leadership balance, collaboration dynamics, and potential conflict risks.',
   },
   {
     title: 'Organisational Intelligence',
     description:
-      'Surfaces macro performance risks, cultural tension points, and alignment gaps across business units.',
+      'Identifies organisational strengths, cultural friction points, and structural risks across the business.',
   },
 ]
 

@@ -43,7 +43,7 @@ export default function HomePage() {
         <SectionHeading
           eyebrow="Signals"
           title="What Sonartra Measures"
-          description="Signals analyses six behavioural domains critical to sustained performance and decision quality."
+          description="Signals analyses six performance domains critical to sustained execution and decision quality."
         />
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <RevealGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" staggerChildren={0.05}>
@@ -126,7 +126,7 @@ export default function HomePage() {
               Deploy <span className="headline-emphasis">performance intelligence</span> at scale.
             </h3>
             <p className="prose-support mx-auto mt-4 max-w-2xl">
-              Run Sonartra Signals and generate actionable behavioural outputs for sharper strategic insight.
+              Run Sonartra Signals and generate actionable performance insight for sharper strategic decisions.
             </p>
             <div className="mt-8 flex justify-center">
               <Button href="/signup">Start with Sonartra Signals</Button>

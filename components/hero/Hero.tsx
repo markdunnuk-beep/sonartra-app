@@ -13,13 +13,12 @@ export function Hero() {
         </RevealItem>
         <RevealItem y={10}>
           <h1 className="headline-display">
-            Improve execution quality with <span className="headline-emphasis">behavioural intelligence</span>.
+            Turn human behaviour into <span className="headline-emphasis">operational intelligence</span>.
           </h1>
         </RevealItem>
         <RevealItem>
           <p className="prose-support max-w-[38rem]">
-            Sonartra maps <span className="text-strategic">Individual Intelligence</span>, <span className="text-strategic">Team Intelligence</span>, and{' '}
-            <span className="text-strategic">Organisational Intelligence</span> into clear operating insight for better strategic decisions.
+            Sonartra transforms behavioural data into practical insight leaders can use to build stronger teams and make better decisions.
           </p>
         </RevealItem>
         <RevealItem>
