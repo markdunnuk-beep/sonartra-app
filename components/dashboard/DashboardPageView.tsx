@@ -17,6 +17,7 @@ export function DashboardPageView({ state }: { state: DashboardState }) {
       state.assessment.status === 'in_progress' ? 'In progress' : state.assessment.status === 'completed' ? 'Result processing' : 'Not started'
 
     const actionLabel = state.assessment.status === 'not_started' ? 'Start assessment' : 'Resume assessment'
+    const actionHref = state.assessment.assessmentId ? `/assessment?assessmentId=${encodeURIComponent(state.assessment.assessmentId)}` : '/assessment'
 
     return (
       <AppShell>
@@ -56,7 +57,7 @@ export function DashboardPageView({ state }: { state: DashboardState }) {
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                <Button href="/assessment">{actionLabel}</Button>
+                <Button href={actionHref}>{actionLabel}</Button>
                 <p className="text-sm text-textSecondary">Continue assessment to unlock behavioural, leadership, and operating insights.</p>
               </div>
             </Card>

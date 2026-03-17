@@ -8,6 +8,7 @@ type DashboardAssessmentStatus = 'not_started' | 'in_progress' | 'completed'
 
 export interface DashboardAssessmentState {
   status: DashboardAssessmentStatus
+  assessmentId: string | null
   progressPercent: number
   questionsCompleted: number
   questionsRemaining: number | null
@@ -23,12 +24,13 @@ export interface DashboardState {
 interface DashboardStateDependencies {
   resolveAuthenticatedUserId: () => Promise<string | null>
   hasCompletedResult: (dbUserId: string) => Promise<boolean>
-  getLatestAssessment: (dbUserId: string) => Promise<AssessmentRow | null>
+  getActiveAssessment: (dbUserId: string, activeAssessmentId?: string | null) => Promise<AssessmentRow | null>
   getResult: (dbUserId: string) => Promise<IndividualIntelligenceResultContract>
 }
 
 const fallbackAssessmentState: DashboardAssessmentState = {
   status: 'not_started',
+  assessmentId: null,
   progressPercent: 0,
   questionsCompleted: 0,
   questionsRemaining: null,
@@ -40,7 +42,25 @@ const defaultDependencies: DashboardStateDependencies = {
     return user?.dbUserId ?? null
   },
   hasCompletedResult: doesUserHaveCompletedResult,
-  async getLatestAssessment(dbUserId) {
+  async getActiveAssessment(dbUserId, activeAssessmentId) {
+    if (activeAssessmentId) {
+      const explicitResult = await queryDb<AssessmentRow>(
+        `SELECT id, user_id, organisation_id, assessment_version_id, status, started_at, completed_at,
+                last_activity_at, progress_count, progress_percent, current_question_index, scoring_status,
+                source, metadata_json, created_at, updated_at
+         FROM assessments
+         WHERE id = $1
+           AND user_id = $2
+           AND organisation_id IS NULL
+         LIMIT 1`,
+        [activeAssessmentId, dbUserId],
+      )
+
+      if (explicitResult.rows[0]) {
+        return explicitResult.rows[0]
+      }
+    }
+
     const result = await queryDb<AssessmentRow>(
       `SELECT id, user_id, organisation_id, assessment_version_id, status, started_at, completed_at,
               last_activity_at, progress_count, progress_percent, current_question_index, scoring_status,
@@ -48,7 +68,9 @@ const defaultDependencies: DashboardStateDependencies = {
        FROM assessments
        WHERE user_id = $1
          AND organisation_id IS NULL
-       ORDER BY updated_at DESC
+       ORDER BY
+         CASE WHEN status IN ('not_started', 'in_progress') THEN 0 ELSE 1 END,
+         COALESCE(last_activity_at, updated_at, created_at) DESC
        LIMIT 1`,
       [dbUserId],
     )
@@ -75,15 +97,20 @@ function mapAssessmentState(assessment: AssessmentRow | null): DashboardAssessme
 
   return {
     status,
+    assessmentId: assessment.id,
     progressPercent: completed,
     questionsCompleted,
     questionsRemaining: totalEstimate !== null ? Math.max(0, totalEstimate - questionsCompleted) : null,
   }
 }
 
-export async function getAuthenticatedDashboardState(dependencies: Partial<DashboardStateDependencies> = {}): Promise<DashboardState> {
+export async function getAuthenticatedDashboardState(
+  dependencies: Partial<DashboardStateDependencies> = {},
+  options: { activeAssessmentId?: string | null } = {},
+): Promise<DashboardState> {
   const deps = { ...defaultDependencies, ...dependencies }
   const userId = await deps.resolveAuthenticatedUserId()
+  const activeAssessmentId = options.activeAssessmentId ?? null
 
   if (!userId) {
     return {
@@ -95,7 +122,17 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
   }
 
   try {
-    const [assessment, navHasCompletedResult] = await Promise.all([deps.getLatestAssessment(userId), deps.hasCompletedResult(userId)])
+    const [assessment, navHasCompletedResult] = await Promise.all([
+      deps.getActiveAssessment(userId, activeAssessmentId),
+      deps.hasCompletedResult(userId),
+    ])
+
+    console.info('[assessment-id-check] dashboard-state', {
+      userId,
+      activeAssessmentId,
+      resolvedAssessmentId: assessment?.id ?? null,
+      resolvedAssessmentStatus: assessment?.status ?? 'not_started',
+    })
 
     if (!navHasCompletedResult) {
       return {

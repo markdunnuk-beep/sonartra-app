@@ -21,6 +21,11 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as Partial<SaveResponseRequest>;
 
+    console.info('[assessment-id-check] save-endpoint', {
+      assessmentId: body.assessmentId ?? null,
+      questionId: body.questionId ?? null,
+    });
+
     if (!body.assessmentId) {
       return NextResponse.json({ error: 'assessmentId is required.' }, { status: 400 });
     }
