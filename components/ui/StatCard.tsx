@@ -1,3 +1,4 @@
+import React from 'react'
 import { Card } from './Card'
 
 export function StatCard({ label, value, detail }: { label: string; value: string; detail?: string }) {
