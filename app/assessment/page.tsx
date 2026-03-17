@@ -393,31 +393,6 @@ export default function AssessmentPage() {
                 />
               </div>
             }
-            footer={
-              <div className="flex flex-wrap items-center gap-2.5 border-t border-border/60 pt-5">
-                <Button variant="secondary" onClick={goBack} className="active:translate-y-[1px]" disabled={index === 0 || loading}>
-                  Back
-                </Button>
-                <Button onClick={goNext} className="min-w-[6rem] active:translate-y-[1px]" disabled={index >= totalQuestions - 1 || loading}>
-                  Next
-                </Button>
-                <Button
-                  onClick={completeAssessment}
-                  disabled={completing}
-                  className="min-w-[10rem] active:translate-y-[1px]"
-                >
-                  {completing ? 'Completing…' : 'Complete Assessment'}
-                </Button>
-                <div className="ml-auto flex min-w-[12.5rem] items-center justify-end gap-3">
-                  {showSaveStatus ? (
-                    <p className="min-w-[9.5rem] text-right text-xs text-textSecondary/75">{saveStatusLabel}</p>
-                  ) : null}
-                  <p className="rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs uppercase tracking-[0.14em] text-textSecondary">
-                    {progress}% complete
-                  </p>
-                </div>
-              </div>
-            }
           >
             {assessmentError ? <p className="text-sm text-rose-300">{assessmentError}</p> : null}
             {saveWarning ? <p className="text-sm text-amber-300">{saveWarning}</p> : null}
@@ -458,6 +433,27 @@ export default function AssessmentPage() {
                 </Card>
               )}
             </AssessmentFlowTransition>
+            <div className="flex flex-wrap items-center gap-2.5 border-t border-border/60 pt-5">
+              <Button variant="secondary" onClick={goBack} className="active:translate-y-[1px]" disabled={index === 0 || loading}>
+                Back
+              </Button>
+              <Button onClick={goNext} className="min-w-[6rem] active:translate-y-[1px]" disabled={index >= totalQuestions - 1 || loading}>
+                Next
+              </Button>
+              <Button
+                onClick={completeAssessment}
+                disabled={completing}
+                className="min-w-[10rem] active:translate-y-[1px]"
+              >
+                {completing ? 'Completing…' : 'Complete Assessment'}
+              </Button>
+              <div className="ml-auto flex min-w-[12.5rem] items-center justify-end gap-3">
+                {showSaveStatus ? <p className="min-w-[9.5rem] text-right text-xs text-textSecondary/75">{saveStatusLabel}</p> : null}
+                <p className="rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs uppercase tracking-[0.14em] text-textSecondary">
+                  {progress}% complete
+                </p>
+              </div>
+            </div>
           </AssessmentShell>
         )}
       </div>
