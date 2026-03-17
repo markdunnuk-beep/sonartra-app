@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { SaveResponseRequest } from '@/lib/assessment-types';
 import { withTransaction } from '@/lib/db';
+import { derivePersistedAssessmentProgress } from '@/lib/server/assessment-progress';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 
 interface AssessmentProgressRow {
@@ -80,35 +81,34 @@ export async function POST(request: Request) {
              is_changed = assessment_responses.is_changed
                OR assessment_responses.response_value IS DISTINCT FROM EXCLUDED.response_value,
              updated_at = NOW()
-           RETURNING xmax = 0 AS inserted
+           RETURNING 1
+         ),
+         persisted_responses AS (
+           SELECT COUNT(*)::int AS response_count
+           FROM assessment_responses
+           WHERE assessment_id = $1
          )
          UPDATE assessments a
          SET
-           progress_count = CASE
-             WHEN response_upsert.inserted THEN LEAST(a.progress_count + 1, $5)
-             ELSE a.progress_count
-           END,
+           progress_count = LEAST(persisted_responses.response_count, $5),
            progress_percent = ROUND(
-             (
-               CASE
-                 WHEN response_upsert.inserted THEN LEAST(a.progress_count + 1, $5)
-                 ELSE a.progress_count
-               END
-             )::numeric * 100 / $5,
+             LEAST(persisted_responses.response_count, $5)::numeric * 100 / $5,
              2
            ),
            current_question_index = GREATEST(a.current_question_index, $2),
            status = CASE WHEN a.status = 'not_started' THEN 'in_progress' ELSE a.status END,
            last_activity_at = NOW(),
            updated_at = NOW()
-         FROM response_upsert
+         FROM response_upsert, persisted_responses
          WHERE a.id = $1
          RETURNING a.progress_count, a.progress_percent`,
         [body.assessmentId, body.questionId, body.responseValue, body.responseTimeMs ?? null, assessment.total_questions]
       );
 
-      const progressCount = progressUpdate.rows[0]?.progress_count ?? assessment.total_questions;
-      const progressPercent = Number(progressUpdate.rows[0]?.progress_percent ?? 100);
+      const persistedProgress = derivePersistedAssessmentProgress(
+        progressUpdate.rows[0]?.progress_count ?? assessment.total_questions,
+        assessment.total_questions,
+      );
 
       return {
         status: 200 as const,
@@ -116,8 +116,8 @@ export async function POST(request: Request) {
           assessmentId: body.assessmentId,
           questionId: body.questionId,
           responseValue: body.responseValue,
-          progressCount,
-          progressPercent,
+          progressCount: persistedProgress.progressCount,
+          progressPercent: persistedProgress.progressPercent,
         },
       };
     });
