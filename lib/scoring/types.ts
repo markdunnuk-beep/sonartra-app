@@ -132,3 +132,67 @@ export interface PersistFailedAssessmentResultInput {
   scoredAt: string | null;
   failure: ResultFailureMetadata;
 }
+
+export interface PersistedAssessmentResultSignal {
+  layerKey: string;
+  signalKey: string;
+  rawTotal: number;
+  maxPossible: number;
+  normalisedScore: number;
+  relativeShare: number;
+  rankInLayer: number | null;
+  isPrimary: boolean;
+  isSecondary: boolean;
+}
+
+export interface PersistedSuccessfulAssessmentResult {
+  availability: 'available';
+  status: 'complete';
+  id: string;
+  assessmentVersionId: string;
+  versionKey: string;
+  scoringModelKey: string;
+  snapshotVersion: number;
+  completedAt: string | null;
+  scoredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  snapshot: AssessmentResultSnapshotPayload | null;
+  responseQuality: ResponseQualityMetadata | null;
+  signals: PersistedAssessmentResultSignal[];
+}
+
+export interface PersistedFailedAssessmentResult {
+  availability: 'available';
+  status: 'failed';
+  id: string;
+  assessmentVersionId: string;
+  versionKey: string;
+  scoringModelKey: string;
+  snapshotVersion: number;
+  completedAt: string | null;
+  scoredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  failure: ResultFailureMetadata | null;
+  signals: [];
+}
+
+export interface UnavailableAssessmentResult {
+  availability: 'unavailable';
+  reason: 'assessment_incomplete' | 'result_missing';
+  message: string;
+}
+
+export type AssessmentResultReadModel =
+  | PersistedSuccessfulAssessmentResult
+  | PersistedFailedAssessmentResult
+  | UnavailableAssessmentResult;
+
+export interface AssessmentResultReadResponse {
+  ok: true;
+  assessmentId: string;
+  assessmentStatus: 'not_started' | 'in_progress' | 'completed' | 'abandoned';
+  scoringStatus: 'not_scored' | 'pending' | 'scored' | 'failed';
+  result: AssessmentResultReadModel;
+}
