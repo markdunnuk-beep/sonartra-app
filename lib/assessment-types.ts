@@ -42,3 +42,37 @@ export interface AssessmentRow {
   created_at: string;
   updated_at: string;
 }
+
+
+export interface AssessmentResultRow {
+  id: string;
+  assessment_id: string;
+  assessment_version_id: string;
+  version_key: string;
+  scoring_model_key: string;
+  snapshot_version: number;
+  status: 'pending' | 'complete' | 'failed';
+  result_payload: Record<string, unknown> | null;
+  response_quality_payload: Record<string, unknown> | null;
+  completed_at: string | null;
+  scored_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssessmentResultSignalRow {
+  id: string;
+  assessment_result_id: string;
+  layer_key: string;
+  signal_key: string;
+  raw_total: string;
+  max_possible: string;
+  normalised_score: string;
+  relative_share: string;
+  rank_in_layer: number | null;
+  is_primary: boolean;
+  is_secondary: boolean;
+  percentile_placeholder: string | null;
+  confidence_flag: string | null;
+  created_at: string;
+}
