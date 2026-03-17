@@ -11,6 +11,8 @@ import { useEffect, useMemo, useState } from 'react'
 
 interface NavigationStateResponse {
   hasCompletedAssessment: boolean;
+  lifecycleState: 'not_started' | 'in_progress' | 'completed_processing' | 'ready' | 'error';
+  message: string;
 }
 
 export function Sidebar() {

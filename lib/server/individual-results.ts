@@ -1,6 +1,7 @@
 import { AssessmentResultRow, AssessmentResultSignalRow, AssessmentRow } from '@/lib/assessment-types';
 import { queryDb } from '@/lib/db';
 import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants';
+import { resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 
 export type IndividualResultsState = 'unauthenticated' | 'empty' | 'incomplete' | 'ready' | 'error';
@@ -59,12 +60,21 @@ export type IndividualResultApiResponse =
 
 interface AssessmentContextRow extends AssessmentRow {
   version_key: string | null;
+  total_questions: number | null;
+}
+
+interface ReadyResultContextRow extends AssessmentResultRow {
+  assessment_started_at: string | null;
+  assessment_completed_at: string | null;
+  assessment_version_key: string | null;
 }
 
 interface IndividualResultsDependencies {
   resolveAuthenticatedUserId: () => Promise<string | null>;
   getLatestAssessmentForUser: (userId: string) => Promise<AssessmentContextRow | null>;
+  getLatestResultForAssessment: (assessmentId: string) => Promise<AssessmentResultRow | null>;
   getLatestSuccessfulResultForAssessment: (assessmentId: string) => Promise<AssessmentResultRow | null>;
+  getLatestReadyResultForUser: (userId: string) => Promise<ReadyResultContextRow | null>;
   getSignalsByResultId: (resultId: string) => Promise<AssessmentResultSignalRow[]>;
 }
 
@@ -80,13 +90,26 @@ const defaultDependencies: IndividualResultsDependencies = {
       `SELECT a.id, a.user_id, a.organisation_id, a.assessment_version_id, a.status, a.started_at,
               a.completed_at, a.last_activity_at, a.progress_count, a.progress_percent,
               a.current_question_index, a.scoring_status, a.source, a.metadata_json,
-              a.created_at, a.updated_at, av.key AS version_key
+              a.created_at, a.updated_at, av.key AS version_key, av.total_questions
        FROM assessments a
        LEFT JOIN assessment_versions av ON av.id = a.assessment_version_id
        WHERE a.user_id = $1
        ORDER BY a.created_at DESC
        LIMIT 1`,
       [userId],
+    );
+
+    return result.rows[0] ?? null;
+  },
+  async getLatestResultForAssessment(assessmentId) {
+    const result = await queryDb<AssessmentResultRow>(
+      `SELECT id, assessment_id, assessment_version_id, version_key, scoring_model_key, snapshot_version, status,
+              result_payload, response_quality_payload, completed_at, scored_at, created_at, updated_at
+       FROM assessment_results
+       WHERE assessment_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [assessmentId],
     );
 
     return result.rows[0] ?? null;
@@ -101,6 +124,27 @@ const defaultDependencies: IndividualResultsDependencies = {
        ORDER BY created_at DESC
        LIMIT 1`,
       [assessmentId],
+    );
+
+    return result.rows[0] ?? null;
+  },
+  async getLatestReadyResultForUser(userId) {
+    const result = await queryDb<ReadyResultContextRow>(
+      `SELECT ar.id, ar.assessment_id, ar.assessment_version_id, ar.version_key, ar.scoring_model_key, ar.snapshot_version,
+              ar.status, ar.result_payload, ar.response_quality_payload, ar.completed_at, ar.scored_at, ar.created_at, ar.updated_at,
+              a.started_at AS assessment_started_at, a.completed_at AS assessment_completed_at, av.key AS assessment_version_key
+       FROM assessment_results ar
+       INNER JOIN assessments a ON a.id = ar.assessment_id
+       LEFT JOIN assessment_versions av ON av.id = a.assessment_version_id
+       WHERE a.user_id = $1
+         AND a.organisation_id IS NULL
+         AND ar.status = 'complete'
+         AND EXISTS (
+           SELECT 1 FROM assessment_result_signals ars WHERE ars.assessment_result_id = ar.id
+         )
+       ORDER BY a.completed_at DESC NULLS LAST, ar.created_at DESC
+       LIMIT 1`,
+      [userId],
     );
 
     return result.rows[0] ?? null;
@@ -178,51 +222,49 @@ export async function getLatestIndividualResultForUser(
   const resolvedDependencies = { ...defaultDependencies, ...dependencies };
 
   try {
-    const userId = await resolvedDependencies.resolveAuthenticatedUserId();
+    const lifecycle = await resolveIndividualLifecycleState({
+      resolveAuthenticatedUserId: resolvedDependencies.resolveAuthenticatedUserId,
+      getLatestAssessmentForUser: resolvedDependencies.getLatestAssessmentForUser,
+      getLatestResultForAssessment: resolvedDependencies.getLatestResultForAssessment,
+      getSignalCountByResultId: async (resultId) => (await resolvedDependencies.getSignalsByResultId(resultId)).length,
+      getLatestReadyResultForUser: resolvedDependencies.getLatestReadyResultForUser,
+    });
 
-    if (!userId) {
+    if (lifecycle.authState === 'unauthenticated') {
       return { ok: false, state: 'unauthenticated', message: 'Authentication required.' };
     }
 
-    const assessment = await resolvedDependencies.getLatestAssessmentForUser(userId);
+    const assessment = lifecycle.lifecycle.latestAssessment;
+    const readySnapshot = lifecycle.lifecycle.latestReadyResult;
 
-    if (!assessment) {
+    if (!assessment && !readySnapshot) {
       return { ok: true, state: 'empty', message: 'No assessment found for this user.' };
     }
 
-    if (assessment.status !== 'completed') {
+    if (!readySnapshot) {
+      if (lifecycle.lifecycle.state === 'error') {
+        return { ok: false, state: 'error', message: lifecycle.lifecycle.message };
+      }
+
       return {
         ok: true,
         state: 'incomplete',
-        message: 'Latest assessment is not completed yet.',
+        message: lifecycle.lifecycle.message,
         data: {
-          assessment: {
-            assessmentId: assessment.id,
-            versionKey: assessment.version_key,
-            startedAt: assessment.started_at,
-            completedAt: assessment.completed_at,
-          },
+          assessment: assessment
+            ? {
+                assessmentId: assessment.assessmentId,
+                versionKey: assessment.versionKey,
+                startedAt: assessment.startedAt,
+                completedAt: assessment.completedAt,
+              }
+            : undefined,
         },
       };
     }
 
-    const snapshot = await resolvedDependencies.getLatestSuccessfulResultForAssessment(assessment.id);
-
-    if (!snapshot) {
-      return {
-        ok: true,
-        state: 'incomplete',
-        message: 'Completed assessment has no successful result snapshot yet.',
-        data: {
-          assessment: {
-            assessmentId: assessment.id,
-            versionKey: assessment.version_key,
-            startedAt: assessment.started_at,
-            completedAt: assessment.completed_at,
-          },
-        },
-      };
-    }
+    const snapshot = await resolvedDependencies.getLatestSuccessfulResultForAssessment(readySnapshot.assessmentId);
+    if (!snapshot) return { ok: false, state: 'error', message: 'Ready result metadata could not be loaded.' };
 
     const orderedSignals = sortSignals(await resolvedDependencies.getSignalsByResultId(snapshot.id));
     if (orderedSignals.length === 0) {
@@ -232,10 +274,10 @@ export async function getLatestIndividualResultForUser(
         message: 'Result snapshot exists but no signal rows are available yet.',
         data: {
           assessment: {
-            assessmentId: assessment.id,
-            versionKey: assessment.version_key ?? snapshot.version_key,
-            startedAt: assessment.started_at,
-            completedAt: assessment.completed_at,
+            assessmentId: snapshot.assessment_id,
+            versionKey: assessment?.versionKey ?? snapshot.version_key,
+            startedAt: assessment?.startedAt ?? null,
+            completedAt: assessment?.completedAt ?? snapshot.completed_at,
           },
           snapshot: {
             resultId: snapshot.id,
@@ -268,10 +310,10 @@ export async function getLatestIndividualResultForUser(
       state: 'ready',
       data: {
         assessment: {
-          assessmentId: assessment.id,
-          versionKey: assessment.version_key ?? snapshot.version_key,
-          startedAt: assessment.started_at,
-          completedAt: assessment.completed_at,
+          assessmentId: snapshot.assessment_id,
+          versionKey: assessment?.versionKey ?? snapshot.version_key,
+          startedAt: assessment?.startedAt ?? null,
+          completedAt: assessment?.completedAt ?? snapshot.completed_at,
         },
         snapshot: {
           resultId: snapshot.id,

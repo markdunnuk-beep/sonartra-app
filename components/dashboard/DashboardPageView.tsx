@@ -14,7 +14,15 @@ function formatPercent(value: number): string {
 export function DashboardPageView({ state }: { state: DashboardState }) {
   if (!state.hasCompletedResult || !state.result) {
     const assessmentStatusLabel =
-      state.assessment.status === 'in_progress' ? 'In progress' : state.assessment.status === 'completed' ? 'Result processing' : 'Not started'
+      state.assessment.status === 'ready'
+        ? 'Results available'
+        : state.assessment.status === 'completed_processing'
+          ? 'Completed — results pending'
+          : state.assessment.status === 'error'
+            ? 'Results unavailable'
+            : state.assessment.status === 'in_progress'
+              ? 'In progress'
+              : 'Not started'
 
     const actionLabel = state.assessment.status === 'not_started' ? 'Start assessment' : 'Resume assessment'
 
@@ -64,7 +72,7 @@ export function DashboardPageView({ state }: { state: DashboardState }) {
             <Card className="space-y-3">
               <h3 className="text-lg font-semibold tracking-tight text-textPrimary">Individual Intelligence availability</h3>
               <p className="text-sm leading-6 text-textSecondary">
-                Individual Intelligence will become available once the assessment is completed.
+                Individual Intelligence availability follows assessment completion and persisted result readiness.
               </p>
               <div className="rounded-lg border border-border/70 bg-bg/45 p-3.5 text-sm text-textSecondary">
                 Result cards, layer scores, profile summary, and leadership architecture will appear after a completed persisted result is available.

@@ -1,10 +1,10 @@
 import { AssessmentRow } from '@/lib/assessment-types'
 import { queryDb } from '@/lib/db'
+import { resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
 import { getAuthenticatedIndividualIntelligenceResult, IndividualIntelligenceResultContract } from '@/lib/server/individual-intelligence-result'
-import { doesUserHaveCompletedResult } from '@/lib/server/navigation-state'
 
-type DashboardAssessmentStatus = 'not_started' | 'in_progress' | 'completed'
+type DashboardAssessmentStatus = 'not_started' | 'in_progress' | 'completed_processing' | 'ready' | 'error'
 
 export interface DashboardAssessmentState {
   status: DashboardAssessmentStatus
@@ -22,9 +22,9 @@ export interface DashboardState {
 
 interface DashboardStateDependencies {
   resolveAuthenticatedUserId: () => Promise<string | null>
-  hasCompletedResult: (dbUserId: string) => Promise<boolean>
   getLatestAssessment: (dbUserId: string) => Promise<AssessmentRow | null>
   getResult: (dbUserId: string) => Promise<IndividualIntelligenceResultContract>
+  resolveLifecycle: typeof resolveIndividualLifecycleState
 }
 
 const fallbackAssessmentState: DashboardAssessmentState = {
@@ -39,7 +39,6 @@ const defaultDependencies: DashboardStateDependencies = {
     const user = await resolveAuthenticatedAppUser()
     return user?.dbUserId ?? null
   },
-  hasCompletedResult: doesUserHaveCompletedResult,
   async getLatestAssessment(dbUserId) {
     const result = await queryDb<AssessmentRow>(
       `SELECT id, user_id, organisation_id, assessment_version_id, status, started_at, completed_at,
@@ -55,6 +54,7 @@ const defaultDependencies: DashboardStateDependencies = {
 
     return result.rows[0] ?? null
   },
+  resolveLifecycle: resolveIndividualLifecycleState,
   async getResult(dbUserId) {
     return getAuthenticatedIndividualIntelligenceResult({
       resolveAuthenticatedUserId: async () => dbUserId,
@@ -62,19 +62,18 @@ const defaultDependencies: DashboardStateDependencies = {
   },
 }
 
-function mapAssessmentState(assessment: AssessmentRow | null): DashboardAssessmentState {
+function mapAssessmentState(assessment: AssessmentRow | null, lifecycleStatus: DashboardAssessmentStatus): DashboardAssessmentState {
   if (!assessment) {
-    return fallbackAssessmentState
+    return { ...fallbackAssessmentState, status: lifecycleStatus }
   }
 
   const progressPercent = Number(assessment.progress_percent)
   const completed = Number.isFinite(progressPercent) ? Math.max(0, Math.min(100, Math.round(progressPercent))) : 0
-  const status: DashboardAssessmentStatus = assessment.status === 'completed' ? 'completed' : 'in_progress'
   const questionsCompleted = Math.max(0, assessment.progress_count)
   const totalEstimate = completed > 0 ? Math.max(questionsCompleted, Math.round(questionsCompleted / (completed / 100))) : null
 
   return {
-    status,
+    status: lifecycleStatus,
     progressPercent: completed,
     questionsCompleted,
     questionsRemaining: totalEstimate !== null ? Math.max(0, totalEstimate - questionsCompleted) : null,
@@ -95,13 +94,18 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
   }
 
   try {
-    const [assessment, navHasCompletedResult] = await Promise.all([deps.getLatestAssessment(userId), deps.hasCompletedResult(userId)])
+    const [assessment, lifecycle] = await Promise.all([
+      deps.getLatestAssessment(userId),
+      deps.resolveLifecycle({ resolveAuthenticatedUserId: async () => userId }),
+    ])
 
-    if (!navHasCompletedResult) {
+    const lifecycleStatus: DashboardAssessmentStatus = lifecycle.authState === 'authenticated' ? lifecycle.lifecycle.state : 'not_started'
+
+    if (lifecycleStatus !== 'ready') {
       return {
         authStatus: 'authenticated',
         hasCompletedResult: false,
-        assessment: mapAssessmentState(assessment),
+        assessment: mapAssessmentState(assessment, lifecycleStatus),
         result: null,
       }
     }
@@ -112,7 +116,7 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
     return {
       authStatus: 'authenticated',
       hasCompletedResult: canShowResult,
-      assessment: mapAssessmentState(assessment),
+      assessment: mapAssessmentState(assessment, canShowResult ? 'ready' : lifecycleStatus),
       result: canShowResult ? result : null,
     }
   } catch (error) {
