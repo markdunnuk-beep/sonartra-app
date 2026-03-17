@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
-import { ReactNode } from 'react'
+import React, { ReactNode } from 'react'
 
 type ResultsShellProps = {
   title: string
@@ -519,6 +519,95 @@ export function SignalChip({ children, tone = 'neutral' }: { children: ReactNode
     >
       {children}
     </span>
+  )
+}
+
+export function ResultStatusBadge({ status }: { status: 'complete' | 'failed' | 'empty' | 'unauthenticated' }) {
+  const tone = status === 'complete' ? 'accent' : 'neutral'
+  return <SignalChip tone={tone}>Status: {status}</SignalChip>
+}
+
+export function ResultMetadataGrid({ items }: { items: Array<{ label: string; value: string }> }) {
+  return (
+    <Card className="space-y-3 border-border/80 bg-panel/70">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Result metadata</p>
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div key={item.label} className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-bg/35 px-3 py-2">
+            <p className="text-xs uppercase tracking-[0.14em] text-textSecondary">{item.label}</p>
+            <p className="text-xs font-medium text-textPrimary/95">{item.value}</p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+export function SignalScoreRow({
+  label,
+  normalisedScore,
+  relativeShare,
+  rank,
+  isPrimary,
+  isSecondary,
+}: {
+  label: string
+  normalisedScore: number
+  relativeShare: number
+  rank: number | null
+  isPrimary: boolean
+  isSecondary: boolean
+}) {
+  return (
+    <div className="rounded-xl border border-border/70 bg-bg/35 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-textPrimary">{label}</p>
+        <div className="flex items-center gap-2">
+          {isPrimary ? <SignalChip tone="accent">Primary</SignalChip> : null}
+          {isSecondary ? <SignalChip tone="neutral">Secondary</SignalChip> : null}
+          {rank ? <SignalChip tone="neutral">Rank {rank}</SignalChip> : null}
+        </div>
+      </div>
+      <div className="mt-3">
+        <ScoreMeter value={normalisedScore * 100} />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-xs text-textSecondary">
+        <span>Normalised: {Math.round(normalisedScore * 100)}%</span>
+        <span>Share: {Math.round(relativeShare * 100)}%</span>
+      </div>
+    </div>
+  )
+}
+
+export function ResultEmptyStatePanel({
+  title,
+  description,
+  ctaLabel,
+  ctaHref,
+}: {
+  title: string
+  description: string
+  ctaLabel: string
+  ctaHref: string
+}) {
+  return (
+    <Card className="space-y-4 border-border/80 bg-panel/70">
+      <h2 className="text-xl font-semibold tracking-tight text-textPrimary">{title}</h2>
+      <p className="text-sm leading-6 text-textSecondary">{description}</p>
+      <Button href={ctaHref} variant="secondary">
+        {ctaLabel}
+      </Button>
+    </Card>
+  )
+}
+
+export function ResultFailedStatePanel({ title, description, detail }: { title: string; description: string; detail?: string }) {
+  return (
+    <Card className="space-y-4 border-border/80 bg-panel/70">
+      <h2 className="text-xl font-semibold tracking-tight text-textPrimary">{title}</h2>
+      <p className="text-sm leading-6 text-textSecondary">{description}</p>
+      {detail ? <p className="text-xs uppercase tracking-[0.14em] text-textSecondary">{detail}</p> : null}
+    </Card>
   )
 }
 
