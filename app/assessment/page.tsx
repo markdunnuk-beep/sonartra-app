@@ -9,6 +9,7 @@ import { TopHeader } from '@/components/layout/TopHeader'
 import { AssessmentQuestionCard, type AssessmentQuestionOption } from '@/components/sections/AssessmentQuestionCard'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { isFinalQuestionIndex, shouldClearReviewModeOnAnswer } from '@/lib/assessment-player'
 import { deriveAssessmentSessionState, getResumeQuestionIndex } from '@/lib/assessment-session'
 import { deriveAssessmentEntryPhase } from '@/lib/assessment-entry-state'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -93,6 +94,7 @@ export default function AssessmentPage() {
   const showSaveStatus = isAssessmentHydrated && !saveWarning
   const saveStatusLabel = savingCount > 0 ? 'Saving…' : 'All changes saved'
   const entryPhase = deriveAssessmentEntryPhase(viewState, startError)
+  const isFinalQuestion = isFinalQuestionIndex(index, totalQuestions)
 
   useEffect(() => {
     if (allAnswered) {
@@ -297,7 +299,12 @@ export default function AssessmentPage() {
       return
     }
 
+    const hadAnswer = answers[currentQuestion.questionNumber] !== undefined
+
     setAssessmentError(null)
+    if (shouldClearReviewModeOnAnswer({ reviewMode, hadAnswer })) {
+      setReviewMode(false)
+    }
     setAnswers((prev) => ({ ...prev, [currentQuestion.questionNumber]: responseValue }))
   }
 
@@ -437,16 +444,19 @@ export default function AssessmentPage() {
               <Button variant="secondary" onClick={goBack} className="active:translate-y-[1px]" disabled={index === 0 || loading}>
                 Back
               </Button>
-              <Button onClick={goNext} className="min-w-[6rem] active:translate-y-[1px]" disabled={index >= totalQuestions - 1 || loading}>
-                Next
-              </Button>
-              <Button
-                onClick={completeAssessment}
-                disabled={completing}
-                className="min-w-[10rem] active:translate-y-[1px]"
-              >
-                {completing ? 'Completing…' : 'Complete Assessment'}
-              </Button>
+              {isFinalQuestion ? (
+                <Button
+                  onClick={completeAssessment}
+                  disabled={completing}
+                  className="min-w-[10rem] active:translate-y-[1px]"
+                >
+                  {completing ? 'Completing…' : 'Complete Assessment'}
+                </Button>
+              ) : (
+                <Button onClick={goNext} className="min-w-[6rem] active:translate-y-[1px]" disabled={loading}>
+                  Next
+                </Button>
+              )}
               <div className="ml-auto flex min-w-[12.5rem] items-center justify-end gap-3">
                 {showSaveStatus ? <p className="min-w-[9.5rem] text-right text-xs text-textSecondary/75">{saveStatusLabel}</p> : null}
                 <p className="rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs uppercase tracking-[0.14em] text-textSecondary">
