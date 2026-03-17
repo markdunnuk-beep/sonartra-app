@@ -1,3 +1,4 @@
+import React from 'react'
 export function ProgressBar({ value }: { value: number }) {
   return (
     <div className="relative h-2.5 w-full overflow-hidden rounded-full border border-border/80 bg-bg/80">

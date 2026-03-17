@@ -1,3 +1,4 @@
+import React from 'react'
 import { SonartraLogo } from '@/components/branding/SonartraLogo'
 import { Bell, Search } from 'lucide-react'
 

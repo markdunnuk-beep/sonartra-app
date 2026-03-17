@@ -12,64 +12,72 @@ function formatPercent(value: number): string {
   return `${Math.max(0, Math.min(100, Math.round(value)))}%`
 }
 
+export function DashboardPreResultContent({ state }: { state: DashboardState }) {
+  const presentation = mapLifecyclePresentation(state.assessment.status)
+
+  return (
+    <div className="space-y-7 lg:space-y-9">
+      <TopHeader title="Dashboard" subtitle="High-level intelligence overview" />
+
+      <section className="space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Assessment status</p>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="Status" value={presentation.dashboardStatusLabel} detail="Individual Intelligence unlocks after completion." />
+          <StatCard label="Completion" value={formatPercent(state.assessment.progressPercent)} detail="Assessment progress" />
+          <StatCard label="Questions completed" value={String(state.assessment.questionsCompleted)} detail="Responses recorded" />
+          <StatCard
+            label="Questions remaining"
+            value={state.assessment.questionsRemaining === null ? '—' : String(state.assessment.questionsRemaining)}
+            detail="Estimated from current progress"
+          />
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2 space-y-6">
+          <div className="flex items-start justify-between gap-3 border-b border-border/70 pb-4">
+            <div>
+              <h3 className="text-lg font-semibold">{presentation.dashboardDetailTitle}</h3>
+              <p className="mt-1 text-sm text-textSecondary">{presentation.dashboardDetailBody}</p>
+            </div>
+            <p className="text-xs uppercase tracking-[0.16em] text-textSecondary">{presentation.dashboardDetailMetaLabel}</p>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm text-textSecondary">
+              <span>Completion</span>
+              <span className="font-semibold text-textPrimary">{formatPercent(state.assessment.progressPercent)}</span>
+            </div>
+            <ProgressBar value={state.assessment.progressPercent} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {presentation.dashboardActionLabel && presentation.dashboardActionHref ? (
+              <Button href={presentation.dashboardActionHref}>{presentation.dashboardActionLabel}</Button>
+            ) : null}
+            <p className="text-sm text-textSecondary">{presentation.dashboardDetailFootnote}</p>
+          </div>
+        </Card>
+
+        <Card className="space-y-3">
+          <h3 className="text-lg font-semibold tracking-tight text-textPrimary">Individual Intelligence availability</h3>
+          <p className="text-sm leading-6 text-textSecondary">
+            Individual Intelligence availability follows assessment completion and persisted result readiness.
+          </p>
+          <div className="rounded-lg border border-border/70 bg-bg/45 p-3.5 text-sm text-textSecondary">
+            Result cards, layer scores, profile summary, and leadership architecture will appear after a completed persisted result is available.
+          </div>
+        </Card>
+      </section>
+    </div>
+  )
+}
+
 export function DashboardPageView({ state }: { state: DashboardState }) {
   if (!state.hasCompletedResult || !state.result) {
-    const presentation = mapLifecyclePresentation(state.assessment.status)
-
     return (
       <AppShell>
-        <div className="space-y-7 lg:space-y-9">
-          <TopHeader title="Dashboard" subtitle="High-level intelligence overview" />
-
-          <section className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Assessment status</p>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard label="Status" value={presentation.dashboardStatusLabel} detail="Individual Intelligence unlocks after completion." />
-              <StatCard label="Completion" value={formatPercent(state.assessment.progressPercent)} detail="Assessment progress" />
-              <StatCard label="Questions completed" value={String(state.assessment.questionsCompleted)} detail="Responses recorded" />
-              <StatCard
-                label="Questions remaining"
-                value={state.assessment.questionsRemaining === null ? '—' : String(state.assessment.questionsRemaining)}
-                detail="Estimated from current progress"
-              />
-            </div>
-          </section>
-
-          <section className="grid gap-4 xl:grid-cols-3">
-            <Card className="xl:col-span-2 space-y-6">
-              <div className="flex items-start justify-between gap-3 border-b border-border/70 pb-4">
-                <div>
-                  <h3 className="text-lg font-semibold">Assessment in progress</h3>
-                  <p className="mt-1 text-sm text-textSecondary">Track completion status and continue to unlock Individual Intelligence.</p>
-                </div>
-                <p className="text-xs uppercase tracking-[0.16em] text-textSecondary">Live status</p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm text-textSecondary">
-                  <span>Completion</span>
-                  <span className="font-semibold text-textPrimary">{formatPercent(state.assessment.progressPercent)}</span>
-                </div>
-                <ProgressBar value={state.assessment.progressPercent} />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <Button href="/assessment">{presentation.dashboardActionLabel}</Button>
-                <p className="text-sm text-textSecondary">Continue assessment to unlock behavioural, leadership, and operating insights.</p>
-              </div>
-            </Card>
-
-            <Card className="space-y-3">
-              <h3 className="text-lg font-semibold tracking-tight text-textPrimary">Individual Intelligence availability</h3>
-              <p className="text-sm leading-6 text-textSecondary">
-                Individual Intelligence availability follows assessment completion and persisted result readiness.
-              </p>
-              <div className="rounded-lg border border-border/70 bg-bg/45 p-3.5 text-sm text-textSecondary">
-                Result cards, layer scores, profile summary, and leadership architecture will appear after a completed persisted result is available.
-              </div>
-            </Card>
-          </section>
-        </div>
+        <DashboardPreResultContent state={state} />
       </AppShell>
     )
   }
