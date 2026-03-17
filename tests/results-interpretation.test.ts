@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { buildIndividualResultInterpretation } from '../lib/results-interpretation'
+import { buildIndividualResultInterpretation, containsBannedScaffoldingLanguage } from '../lib/results-interpretation'
 import { IndividualResultReadyData } from '../lib/server/individual-results'
 
 function makeReadyData(overrides: Partial<IndividualResultReadyData> = {}): IndividualResultReadyData {
@@ -61,7 +61,7 @@ function makeReadyData(overrides: Partial<IndividualResultReadyData> = {}): Indi
 test('creates deterministic interpretation blocks from ready-result layers and ranked signals', () => {
   const interpretation = buildIndividualResultInterpretation(makeReadyData())
 
-  assert.equal(interpretation.onboarding.title, 'How to read this profile')
+  assert.equal(interpretation.onboarding.title, 'How to use this report')
   assert.equal(interpretation.layerInterpretations.length, 1)
   assert.match(interpretation.layerInterpretations[0].summary, /Core Driver/)
   assert.match(interpretation.layerInterpretations[0].summary, /Core Analyst/)
@@ -144,8 +144,8 @@ test('uses first name when provided and neutral fallback when unavailable', () =
   const named = buildIndividualResultInterpretation(makeReadyData(), { firstName: 'Mark' })
   const fallback = buildIndividualResultInterpretation(makeReadyData(), { firstName: null, fullName: null })
 
-  assert.match(named.performanceProfile.summary, /Mark tends to operate/)
-  assert.match(fallback.performanceProfile.summary, /This individual tends to operate/)
+  assert.match(named.performanceProfile.summary, /Mark is likely to establish clarity before committing/)
+  assert.match(fallback.performanceProfile.summary, /This individual is likely to establish clarity before committing/)
 })
 
 test('does not emit banned placeholder or demo language', () => {
@@ -157,4 +157,51 @@ test('does not emit banned placeholder or demo language', () => {
   assert.doesNotMatch(flattened, /unlock your true potential/i)
   assert.doesNotMatch(flattened, /born leader/i)
   assert.doesNotMatch(flattened, /thrive in any environment/i)
+})
+
+
+test('why-this-may-feel-familiar is shown only for mapped deterministic patterns', () => {
+  const withMappedSignals = buildIndividualResultInterpretation(makeReadyData())
+  assert.equal(withMappedSignals.whyThisMayFeelFamiliar?.title, 'Why this may feel familiar')
+  assert.ok((withMappedSignals.whyThisMayFeelFamiliar?.items.length ?? 0) > 0)
+
+  const withoutMappedSignals = buildIndividualResultInterpretation(
+    makeReadyData({
+      signals: [
+        {
+          layerKey: 'behaviour_style',
+          signalKey: 'Decisive_Lead',
+          signalTotal: 12,
+          normalisedScore: 0.6,
+          relativeShare: 0.6,
+          rank: 1,
+          isPrimary: true,
+          isSecondary: false,
+        },
+      ],
+      layers: [
+        {
+          layerKey: 'behaviour_style',
+          totalRawValue: 12,
+          signalCount: 1,
+          primarySignalKey: 'Decisive_Lead',
+          secondarySignalKey: null,
+          rankedSignalKeys: ['Decisive_Lead'],
+        },
+      ],
+    }),
+  )
+
+  assert.equal(withoutMappedSignals.whyThisMayFeelFamiliar, undefined)
+})
+
+test('refined interpretation avoids banned scaffolding phrasing', () => {
+  const interpretation = buildIndividualResultInterpretation(makeReadyData())
+  assert.equal(containsBannedScaffoldingLanguage(interpretation), false)
+
+  const flattened = JSON.stringify(interpretation)
+  assert.doesNotMatch(flattened, /distributed with no single dominant signal/i)
+  assert.doesNotMatch(flattened, /supported by/i)
+  assert.doesNotMatch(flattened, /counterbalance available/i)
+  assert.doesNotMatch(flattened, /requires deliberate context-setting/i)
 })

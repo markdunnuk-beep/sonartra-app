@@ -87,9 +87,10 @@ test('ready state renders core sections and signal blocks from persisted model',
   assert.match(html, /Signal ranking/)
   assert.match(html, /Core Driver/)
   assert.match(html, /Decisive Lead/)
-  assert.match(html, /How to read this profile/)
+  assert.match(html, /How to use this report/)
   assert.match(html, /Interpretation by layer/)
   assert.match(html, /Manager notes/)
+  assert.match(html, /Why this may feel familiar/)
 
   assert.match(html, /Performance profile/)
   assert.match(html, /Where this person is likely to be most effective/)
@@ -99,7 +100,7 @@ test('ready state renders core sections and signal blocks from persisted model',
   assert.match(html, /Manager playbook/)
   assert.match(html, /What to do/)
   assert.match(html, /What to avoid/)
-  assert.match(html, /Mark tends to operate/)
+  assert.match(html, /Mark is likely to establish clarity before committing/)
 
 })
 
@@ -107,8 +108,48 @@ test('ready state renders core sections and signal blocks from persisted model',
 
 test('ready state uses neutral personalisation fallback when first name is unavailable', () => {
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName={null} />)
-  assert.match(html, /This individual tends to operate/)
-  assert.doesNotMatch(html, /Mark tends to operate/)
+  assert.match(html, /This individual is likely to establish clarity before committing/)
+  assert.doesNotMatch(html, /Mark is likely to establish clarity before committing/)
+})
+
+
+
+test('ready state omits why-this-may-feel-familiar section when no deterministic familiar patterns are present', () => {
+  const html = renderToStaticMarkup(
+    <IndividualIntelligenceResultView
+      model={{
+        ...readyModel,
+        data: {
+          ...readyModel.data,
+          layers: [
+            {
+              layerKey: 'leadership',
+              totalRawValue: 12,
+              signalCount: 1,
+              primarySignalKey: 'Decisive_Lead',
+              secondarySignalKey: null,
+              rankedSignalKeys: ['Decisive_Lead'],
+            },
+          ],
+          signals: [
+            {
+              layerKey: 'leadership',
+              signalKey: 'Decisive_Lead',
+              signalTotal: 12,
+              normalisedScore: 0.6,
+              relativeShare: 1,
+              rank: 1,
+              isPrimary: true,
+              isSecondary: false,
+            },
+          ],
+        },
+      }}
+      firstName="Mark"
+    />,
+  )
+
+  assert.doesNotMatch(html, /Why this may feel familiar/)
 })
 
 test('empty state renders explanation and assessment CTA', () => {
@@ -125,7 +166,7 @@ test('empty state renders explanation and assessment CTA', () => {
   assert.match(html, /No completed Individual Intelligence result is available yet/)
   assert.match(html, /No assessment found for this user/)
   assert.match(html, /Start or resume assessment/)
-  assert.doesNotMatch(html, /How to read this profile/)
+  assert.doesNotMatch(html, /How to use this report/)
   assert.doesNotMatch(html, /Performance profile/)
   assert.doesNotMatch(html, /Manager playbook/)
   assert.doesNotMatch(html, /Manager notes/)
@@ -147,7 +188,7 @@ test('incomplete state renders visible progress copy and resume CTA', () => {
   assert.match(html, /Assessment is in progress/)
   assert.match(html, /not completed yet/)
   assert.match(html, /Resume assessment/)
-  assert.doesNotMatch(html, /How to read this profile/)
+  assert.doesNotMatch(html, /How to use this report/)
   assert.doesNotMatch(html, /Performance profile/)
   assert.doesNotMatch(html, /Manager playbook/)
 })

@@ -16,12 +16,17 @@ function BulletedList({ items }: { items: string[] }) {
 export function ResultInterpretationSections({ interpretation }: { interpretation: IndividualResultInterpretation }) {
   return (
     <>
-      <ResultsSectionBlock title={interpretation.onboarding.title} description="Use this output as structured performance intelligence.">
+      <ResultsSectionBlock title={interpretation.onboarding.title} description="A quick guide to getting practical value from this profile.">
         <BulletedList items={interpretation.onboarding.points} />
       </ResultsSectionBlock>
 
+      {interpretation.whyThisMayFeelFamiliar ? (
+        <ResultsSectionBlock title={interpretation.whyThisMayFeelFamiliar.title} description="Short patterns people often recognise immediately in themselves.">
+          <BulletedList items={interpretation.whyThisMayFeelFamiliar.items} />
+        </ResultsSectionBlock>
+      ) : null}
 
-      <ResultsSectionBlock title={interpretation.performanceProfile.title} description="Deterministic operating summary from the canonical ready-result signal profile.">
+      <ResultsSectionBlock title={interpretation.performanceProfile.title} description="Overall operating style and decision posture.">
         <p className="text-sm leading-6 text-textSecondary">{interpretation.performanceProfile.summary}</p>
         <ul className="mt-3 space-y-1 text-sm text-textSecondary">
           {interpretation.performanceProfile.operatingTraits.map((item) => (
@@ -72,7 +77,7 @@ export function ResultInterpretationSections({ interpretation }: { interpretatio
       </ResultsSectionBlock>
 
       {interpretation.layerInterpretations.length > 0 ? (
-        <ResultsSectionBlock title="Interpretation by layer" description="Deterministic interpretation from ranked persisted signals.">
+        <ResultsSectionBlock title="Interpretation by layer" description="Evidence-linked interpretation of each domain, with practical meaning and trade-offs.">
           <div className="space-y-4">
             {interpretation.layerInterpretations.map((layer) => (
               <article key={layer.layerKey} className="rounded-2xl border border-border/70 bg-panel/50 p-4">
