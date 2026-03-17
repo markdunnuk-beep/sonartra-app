@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { StatCard } from '@/components/ui/StatCard'
 import { Button } from '@/components/ui/Button'
+import { mapLifecyclePresentation } from '@/lib/lifecycle-presentation'
 import { DashboardState } from '@/lib/server/dashboard-state'
 
 function formatPercent(value: number): string {
@@ -13,18 +14,7 @@ function formatPercent(value: number): string {
 
 export function DashboardPageView({ state }: { state: DashboardState }) {
   if (!state.hasCompletedResult || !state.result) {
-    const assessmentStatusLabel =
-      state.assessment.status === 'ready'
-        ? 'Results available'
-        : state.assessment.status === 'completed_processing'
-          ? 'Completed — results pending'
-          : state.assessment.status === 'error'
-            ? 'Results unavailable'
-            : state.assessment.status === 'in_progress'
-              ? 'In progress'
-              : 'Not started'
-
-    const actionLabel = state.assessment.status === 'not_started' ? 'Start assessment' : 'Resume assessment'
+    const presentation = mapLifecyclePresentation(state.assessment.status)
 
     return (
       <AppShell>
@@ -34,7 +24,7 @@ export function DashboardPageView({ state }: { state: DashboardState }) {
           <section className="space-y-3">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Assessment status</p>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard label="Status" value={assessmentStatusLabel} detail="Individual Intelligence unlocks after completion." />
+              <StatCard label="Status" value={presentation.dashboardStatusLabel} detail="Individual Intelligence unlocks after completion." />
               <StatCard label="Completion" value={formatPercent(state.assessment.progressPercent)} detail="Assessment progress" />
               <StatCard label="Questions completed" value={String(state.assessment.questionsCompleted)} detail="Responses recorded" />
               <StatCard
@@ -64,7 +54,7 @@ export function DashboardPageView({ state }: { state: DashboardState }) {
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                <Button href="/assessment">{actionLabel}</Button>
+                <Button href="/assessment">{presentation.dashboardActionLabel}</Button>
                 <p className="text-sm text-textSecondary">Continue assessment to unlock behavioural, leadership, and operating insights.</p>
               </div>
             </Card>
