@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { AssessmentVersionRow } from '@/lib/assessment-types';
 import { queryDb, withTransaction } from '@/lib/db';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
+import { traceAssessmentFlow } from '@/lib/assessment-flow-trace';
 
 interface ExistingAssessmentRow {
   id: string;
@@ -22,6 +23,12 @@ export async function POST(request: Request) {
     };
 
     const assessmentVersionKey = body.assessmentVersionKey ?? 'wplp80-v1';
+
+    traceAssessmentFlow('api.start.request', {
+      userId: appUser.dbUserId,
+      assessmentVersionKey,
+      source: body.source ?? 'direct',
+    });
 
     const versionResult = await queryDb<AssessmentVersionRow>(
       `SELECT id, key, name, total_questions, is_active
@@ -51,6 +58,10 @@ export async function POST(request: Request) {
     );
 
     if (existingAssessment.rows[0]) {
+      traceAssessmentFlow('api.start.resume-existing', {
+        userId: appUser.dbUserId,
+        assessmentId: existingAssessment.rows[0].id,
+      });
       return NextResponse.json(
         {
           assessmentId: existingAssessment.rows[0].id,
@@ -86,6 +97,11 @@ export async function POST(request: Request) {
       );
 
       return created.rows[0];
+    });
+
+    traceAssessmentFlow('api.start.created', {
+      userId: appUser.dbUserId,
+      assessmentId: result.id,
     });
 
     return NextResponse.json(

@@ -55,6 +55,7 @@ test('no completed result keeps dashboard in progress mode and aligned with navi
 
   assert.equal(state.hasCompletedResult, false)
   assert.equal(state.result, null)
+  assert.equal(state.assessment.assessmentId, 'assessment-1')
   assert.equal(state.assessment.status, 'in_progress')
   assert.equal(state.assessment.progressPercent, 30)
   assert.equal(state.assessment.questionsCompleted, 24)
@@ -70,6 +71,7 @@ test('completed-result gate allows dashboard intelligence rendering only with pe
   })
 
   assert.equal(state.hasCompletedResult, true)
+  assert.equal(state.assessment.assessmentId, 'assessment-1')
   assert.equal(state.result?.resultStatus, 'complete')
 })
 
@@ -97,6 +99,7 @@ test('falls back to safe authenticated pre-results state when dashboard data res
   assert.equal(state.authStatus, 'authenticated')
   assert.equal(state.hasCompletedResult, false)
   assert.equal(state.result, null)
+  assert.equal(state.assessment.assessmentId, null)
   assert.equal(state.assessment.status, 'not_started')
   assert.equal(state.assessment.progressPercent, 0)
 })

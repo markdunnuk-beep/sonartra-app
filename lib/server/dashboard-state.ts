@@ -3,10 +3,12 @@ import { queryDb } from '@/lib/db'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
 import { getAuthenticatedIndividualIntelligenceResult, IndividualIntelligenceResultContract } from '@/lib/server/individual-intelligence-result'
 import { doesUserHaveCompletedResult } from '@/lib/server/navigation-state'
+import { traceAssessmentFlow } from '@/lib/assessment-flow-trace'
 
 type DashboardAssessmentStatus = 'not_started' | 'in_progress' | 'completed'
 
 export interface DashboardAssessmentState {
+  assessmentId: string | null
   status: DashboardAssessmentStatus
   progressPercent: number
   questionsCompleted: number
@@ -28,6 +30,7 @@ interface DashboardStateDependencies {
 }
 
 const fallbackAssessmentState: DashboardAssessmentState = {
+  assessmentId: null,
   status: 'not_started',
   progressPercent: 0,
   questionsCompleted: 0,
@@ -48,7 +51,10 @@ const defaultDependencies: DashboardStateDependencies = {
        FROM assessments
        WHERE user_id = $1
          AND organisation_id IS NULL
-       ORDER BY updated_at DESC
+       ORDER BY
+         CASE WHEN status IN ('not_started', 'in_progress') THEN 0 ELSE 1 END,
+         last_activity_at DESC NULLS LAST,
+         updated_at DESC
        LIMIT 1`,
       [dbUserId],
     )
@@ -74,6 +80,7 @@ function mapAssessmentState(assessment: AssessmentRow | null): DashboardAssessme
   const totalEstimate = completed > 0 ? Math.max(questionsCompleted, Math.round(questionsCompleted / (completed / 100))) : null
 
   return {
+    assessmentId: assessment.id,
     status,
     progressPercent: completed,
     questionsCompleted,
@@ -96,6 +103,13 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
 
   try {
     const [assessment, navHasCompletedResult] = await Promise.all([deps.getLatestAssessment(userId), deps.hasCompletedResult(userId)])
+
+    traceAssessmentFlow('dashboard.state.resolved', {
+      userId,
+      assessmentId: assessment?.id ?? null,
+      assessmentStatus: assessment?.status ?? null,
+      progressCount: assessment?.progress_count ?? null,
+    })
 
     if (!navHasCompletedResult) {
       return {

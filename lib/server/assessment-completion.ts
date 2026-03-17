@@ -13,6 +13,7 @@ import {
   SignalMappingInput,
 } from '@/lib/scoring/types';
 import { getLatestAssessmentResultSnapshot, persistFailedAssessmentResult, persistSuccessfulAssessmentResult } from '@/lib/server/assessment-results';
+import { traceAssessmentFlow } from '@/lib/assessment-flow-trace';
 
 interface CompletionCheckRow {
   id: string;
@@ -166,6 +167,12 @@ export async function completeAssessmentWithResults(
 
     const assessment = checkResult.rows[0];
 
+    traceAssessmentFlow('api.complete.validation.loaded', {
+      assessmentId,
+      assessmentStatus: assessment?.status ?? null,
+      totalQuestions: assessment?.total_questions ?? null,
+    });
+
     if (!assessment) {
       return { kind: 'error' as const, httpStatus: 404, error: 'Assessment not found.' };
     }
@@ -178,6 +185,12 @@ export async function completeAssessmentWithResults(
     );
 
     const responseCount = Number(responsesCountResult.rows[0]?.response_count ?? 0);
+
+    traceAssessmentFlow('api.complete.validation.count', {
+      assessmentId,
+      responseCount,
+      totalQuestions: assessment.total_questions,
+    });
 
     if (responseCount < assessment.total_questions) {
       return {

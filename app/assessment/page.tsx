@@ -12,6 +12,9 @@ import { Card } from '@/components/ui/Card'
 import { isFinalQuestionIndex, shouldClearReviewModeOnAnswer } from '@/lib/assessment-player'
 import { deriveAssessmentSessionState, getResumeQuestionIndex } from '@/lib/assessment-session'
 import { deriveAssessmentEntryPhase } from '@/lib/assessment-entry-state'
+import { resolvePreferredAssessmentId } from '@/lib/assessment-attempt'
+import { traceAssessmentFlow } from '@/lib/assessment-flow-trace'
+import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const ACTIVE_ASSESSMENT_STORAGE_KEY = 'sonartra_active_assessment_id'
@@ -71,6 +74,7 @@ export default function AssessmentPage() {
   const [assessmentError, setAssessmentError] = useState<string | null>(null)
   const [saveWarning, setSaveWarning] = useState<string | null>(null)
   const [reviewMode, setReviewMode] = useState(false)
+  const searchParams = useSearchParams()
 
   const questionShownAtRef = useRef<number>(Date.now())
   const saveSequenceRef = useRef<Record<number, number>>({})
@@ -116,6 +120,13 @@ export default function AssessmentPage() {
   const saveResponseInBackground = (questionNumber: number, responseValue: number, responseTimeMs: number) => {
     if (!assessmentId) return
 
+    traceAssessmentFlow('player.response-save.request', {
+      assessmentId,
+      questionId: questionNumber,
+      responseValue,
+      responseTimeMs,
+    })
+
     const sequence = (saveSequenceRef.current[questionNumber] ?? 0) + 1
     saveSequenceRef.current[questionNumber] = sequence
     setSavingCount((count) => count + 1)
@@ -135,10 +146,16 @@ export default function AssessmentPage() {
           }),
         })
 
-        const saveData = (await saveResponse.json()) as { error?: string }
+        const saveData = (await saveResponse.json()) as { error?: string; progressCount?: number }
         if (!saveResponse.ok) {
           throw new Error(saveData.error ?? 'Unable to save assessment response.')
         }
+
+        traceAssessmentFlow('player.response-save.success', {
+          assessmentId,
+          questionId: questionNumber,
+          progressCount: saveData.progressCount,
+        })
 
         if (saveSequenceRef.current[questionNumber] === sequence) {
           setSaveWarning(null)
@@ -166,6 +183,11 @@ export default function AssessmentPage() {
   }
 
   const hydrateAssessment = (data: AssessmentQuestionsResponse) => {
+    traceAssessmentFlow('player.initialization.hydrate', {
+      assessmentId: data.assessment.id,
+      progressCount: data.assessment.progressCount,
+      responseCount: data.responses.length,
+    })
     const mappedQuestions = normalizeQuestions(data)
     const restoredAnswers = data.responses.reduce<Record<number, number>>((acc, response) => {
       acc[response.question_id] = response.response_value
@@ -181,7 +203,11 @@ export default function AssessmentPage() {
     setCompleted(data.assessment.status === 'completed')
   }
 
-  const fetchAssessmentQuestions = async (id: string, reason: 'resume' | 'start') => {
+  const fetchAssessmentQuestions = async (id: string, reason: 'resume' | 'start' | 'query') => {
+    traceAssessmentFlow('player.questions-fetch.request', {
+      assessmentId: id,
+      source: reason,
+    })
     const startedAt = performance.now()
     logPerf('question-fetch-start', { reason })
     const response = await fetch(`/api/assessments/${id}/questions`)
@@ -204,21 +230,32 @@ export default function AssessmentPage() {
 
     try {
       const storedAssessmentId = window.localStorage.getItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
+      const queryAssessmentId = searchParams.get('assessmentId')
+      const preferredAssessmentId = resolvePreferredAssessmentId(queryAssessmentId, storedAssessmentId)
 
-      if (storedAssessmentId) {
+      traceAssessmentFlow('player.resume-decision', {
+        queryAssessmentId,
+        storedAssessmentId,
+        preferredAssessmentId,
+      })
+
+      if (preferredAssessmentId) {
         try {
-          setAssessmentId(storedAssessmentId)
-          await fetchAssessmentQuestions(storedAssessmentId, 'resume')
+          setAssessmentId(preferredAssessmentId)
+          window.localStorage.setItem(ACTIVE_ASSESSMENT_STORAGE_KEY, preferredAssessmentId)
+          await fetchAssessmentQuestions(preferredAssessmentId, queryAssessmentId ? 'query' : 'resume')
           return
         } catch (resumeError) {
           console.error('[assessment] resume failed, falling back to new start', {
-            storedAssessmentId,
+            preferredAssessmentId,
             error: resumeError,
           })
           window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
           setAssessmentId(null)
         }
       }
+
+      traceAssessmentFlow('player.start.request', { source: 'direct' })
 
       const startResponse = await fetch('/api/assessments/start', {
         method: 'POST',
@@ -240,6 +277,7 @@ export default function AssessmentPage() {
         throw new Error(startData?.error ?? 'Unable to start assessment.')
       }
 
+      traceAssessmentFlow('player.start.response', { assessmentId: startData.assessmentId })
       setAssessmentId(startData.assessmentId)
       window.localStorage.setItem(ACTIVE_ASSESSMENT_STORAGE_KEY, startData.assessmentId)
       await fetchAssessmentQuestions(startData.assessmentId, 'start')
@@ -326,6 +364,11 @@ export default function AssessmentPage() {
       if (pendingSavesRef.current.size > 0) {
         await Promise.allSettled([...pendingSavesRef.current.values()])
       }
+
+      traceAssessmentFlow('player.completion.request', {
+        assessmentId,
+        answeredCount,
+      })
 
       const response = await fetch('/api/assessments/complete', {
         method: 'POST',
