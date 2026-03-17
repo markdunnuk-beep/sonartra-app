@@ -62,11 +62,32 @@ interface CompletionDependencies {
   persistFailed: (input: PersistFailedAssessmentResultInput, client?: PoolClient) => Promise<{ assessmentResultId: string }>;
 }
 
+interface CompletionRuntimeDependencies {
+  runInTransaction: typeof withTransaction;
+  getLatestResultSnapshot: typeof getLatestAssessmentResultSnapshot;
+}
+
+interface DbErrorLike {
+  code?: string;
+  detail?: string;
+  hint?: string;
+  message?: string;
+}
+
+function isMissingRelationError(error: unknown): boolean {
+  return Boolean((error as DbErrorLike | null)?.code === '42P01');
+}
+
 const defaultDependencies: CompletionDependencies = {
   fetchScoringInput,
   score: scoreAssessment,
   persistSuccess: persistSuccessfulAssessmentResult,
   persistFailed: persistFailedAssessmentResult,
+};
+
+const defaultRuntimeDependencies: CompletionRuntimeDependencies = {
+  runInTransaction: withTransaction,
+  getLatestResultSnapshot: getLatestAssessmentResultSnapshot,
 };
 
 function toFailureMetadata(assessmentVersionKey: string, stage: ResultFailureStage, error: unknown): ResultFailureMetadata {
@@ -151,9 +172,26 @@ async function markScoringStatus(client: PoolClient, assessmentId: string, scori
 
 export async function completeAssessmentWithResults(
   assessmentId: string,
-  dependencies: CompletionDependencies = defaultDependencies
+  dependencies: CompletionDependencies = defaultDependencies,
+  runtimeDependencies: CompletionRuntimeDependencies = defaultRuntimeDependencies
 ): Promise<CompleteAssessmentResult> {
-  const lifecycle = await withTransaction(async (client) => {
+  const lifecycle = await runtimeDependencies.runInTransaction(async (client) => {
+    let stage = 'load_assessment';
+
+    const logFailure = (error: unknown) => {
+      const dbError = error as DbErrorLike;
+
+      console.error('[assessment.complete] lifecycle failed', {
+        assessmentId,
+        stage,
+        code: dbError?.code,
+        message: dbError?.message ?? (error instanceof Error ? error.message : 'Unknown error'),
+        detail: dbError?.detail,
+        hint: dbError?.hint,
+      });
+    };
+
+    try {
     const checkResult = await client.query<CompletionCheckRow>(
       `SELECT a.id, a.status, av.total_questions, a.assessment_version_id, av.key AS version_key,
               a.started_at, a.completed_at, a.scoring_status
@@ -170,6 +208,7 @@ export async function completeAssessmentWithResults(
       return { kind: 'error' as const, httpStatus: 404, error: 'Assessment not found.' };
     }
 
+    stage = 'validate_response_count';
     const responsesCountResult = await client.query<{ response_count: string }>(
       `SELECT COUNT(*)::int AS response_count
        FROM assessment_responses
@@ -188,6 +227,7 @@ export async function completeAssessmentWithResults(
     }
 
     if (assessment.status !== 'completed') {
+      stage = 'mark_completed';
       const updateResult = await client.query<{ completed_at: string }>(
         `UPDATE assessments
          SET
@@ -208,7 +248,25 @@ export async function completeAssessmentWithResults(
       assessment.scoring_status = 'pending';
     }
 
-    const latestResult = await getLatestAssessmentResultSnapshot(assessmentId, client);
+    stage = 'load_latest_result_snapshot';
+    let latestResult: { id: string; status: 'pending' | 'complete' | 'failed' } | null = null;
+
+    try {
+      latestResult = await runtimeDependencies.getLatestResultSnapshot(assessmentId, client);
+    } catch (error) {
+      if (!isMissingRelationError(error)) {
+        throw error;
+      }
+
+      const dbError = error as DbErrorLike;
+
+      console.error('[assessment.complete] assessment_results table unavailable; proceeding without existing result snapshot', {
+        assessmentId,
+        stage,
+        code: dbError?.code,
+        message: dbError?.message,
+      });
+    }
 
     return {
       kind: 'ok' as const,
@@ -216,6 +274,10 @@ export async function completeAssessmentWithResults(
       latestResult,
       shouldScore: !(latestResult?.status === 'complete' && assessment.scoring_status === 'scored'),
     };
+    } catch (error) {
+      logFailure(error);
+      throw error;
+    }
   });
 
   if (lifecycle.kind === 'error') {
@@ -252,7 +314,7 @@ export async function completeAssessmentWithResults(
       signalRows: scored.signals,
     };
 
-    const success = await withTransaction(async (client) => {
+    const success = await runtimeDependencies.runInTransaction(async (client) => {
       const persisted = await dependencies.persistSuccess(successInput, client);
       await markScoringStatus(client, assessmentId, 'scored');
 
@@ -292,7 +354,7 @@ export async function completeAssessmentWithResults(
     let failedResultId: string | null = null;
 
     try {
-      const failed = await withTransaction(async (client) => {
+      const failed = await runtimeDependencies.runInTransaction(async (client) => {
         const persisted = await dependencies.persistFailed(failedInput, client);
         await markScoringStatus(client, assessmentId, 'failed');
 
@@ -307,7 +369,7 @@ export async function completeAssessmentWithResults(
         message: persistError instanceof Error ? persistError.message : 'Unexpected error',
       });
 
-      await withTransaction(async (client) => markScoringStatus(client, assessmentId, 'failed'));
+      await runtimeDependencies.runInTransaction(async (client) => markScoringStatus(client, assessmentId, 'failed'));
     }
 
     return {
