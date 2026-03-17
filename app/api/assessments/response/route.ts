@@ -6,7 +6,6 @@ import { withTransaction } from '@/lib/db';
 interface AssessmentProgressRow {
   id: string;
   status: 'not_started' | 'in_progress' | 'completed' | 'abandoned';
-  assessment_version_id: string;
   total_questions: number;
 }
 
@@ -35,7 +34,7 @@ export async function POST(request: Request) {
 
     const response = await withTransaction(async (client) => {
       const assessmentResult = await client.query<AssessmentProgressRow>(
-        `SELECT a.id, a.status, a.assessment_version_id, av.total_questions
+        `SELECT a.id, a.status, av.total_questions
          FROM assessments a
          INNER JOIN assessment_versions av ON av.id = a.assessment_version_id
          WHERE a.id = $1
@@ -53,55 +52,51 @@ export async function POST(request: Request) {
         return { error: 'Assessment is already completed and cannot be modified.', status: 409 as const };
       }
 
-      const existingResponse = await client.query<{ response_value: number }>(
-        `SELECT response_value
-         FROM assessment_responses
-         WHERE assessment_id = $1 AND question_id = $2`,
-        [body.assessmentId, body.questionId]
-      );
-
-      const previousValue = existingResponse.rows[0]?.response_value;
-      const isChanged = previousValue !== undefined ? previousValue !== body.responseValue : false;
-
-      await client.query(
-        `INSERT INTO assessment_responses (
-           assessment_id,
-           question_id,
-           response_value,
-           response_time_ms,
-           is_changed
-         ) VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (assessment_id, question_id)
-         DO UPDATE SET
-           response_value = EXCLUDED.response_value,
-           response_time_ms = EXCLUDED.response_time_ms,
-           is_changed = assessment_responses.is_changed OR EXCLUDED.is_changed,
-           updated_at = NOW()`,
-        [body.assessmentId, body.questionId, body.responseValue, body.responseTimeMs ?? null, isChanged]
-      );
-
-      const progressResult = await client.query<{ progress_count: string }>(
-        `SELECT COUNT(*)::int AS progress_count
-         FROM assessment_responses
-         WHERE assessment_id = $1`,
-        [body.assessmentId]
-      );
-
-      const progressCount = Number(progressResult.rows[0]?.progress_count ?? 0);
-      const progressPercent = Number(((progressCount / assessment.total_questions) * 100).toFixed(2));
-
-      await client.query(
-        `UPDATE assessments
+      const progressUpdate = await client.query<{ progress_count: number; progress_percent: string }>(
+        `WITH response_upsert AS (
+           INSERT INTO assessment_responses (
+             assessment_id,
+             question_id,
+             response_value,
+             response_time_ms,
+             is_changed
+           ) VALUES ($1, $2, $3, $4, FALSE)
+           ON CONFLICT (assessment_id, question_id)
+           DO UPDATE SET
+             response_value = EXCLUDED.response_value,
+             response_time_ms = EXCLUDED.response_time_ms,
+             is_changed = assessment_responses.is_changed
+               OR assessment_responses.response_value IS DISTINCT FROM EXCLUDED.response_value,
+             updated_at = NOW()
+           RETURNING xmax = 0 AS inserted
+         )
+         UPDATE assessments a
          SET
-           progress_count = $2,
-           progress_percent = $3,
-           current_question_index = GREATEST(current_question_index, $4),
-           status = CASE WHEN status = 'not_started' THEN 'in_progress' ELSE status END,
+           progress_count = CASE
+             WHEN response_upsert.inserted THEN LEAST(a.progress_count + 1, $5)
+             ELSE a.progress_count
+           END,
+           progress_percent = ROUND(
+             (
+               CASE
+                 WHEN response_upsert.inserted THEN LEAST(a.progress_count + 1, $5)
+                 ELSE a.progress_count
+               END
+             )::numeric * 100 / $5,
+             2
+           ),
+           current_question_index = GREATEST(a.current_question_index, $2),
+           status = CASE WHEN a.status = 'not_started' THEN 'in_progress' ELSE a.status END,
            last_activity_at = NOW(),
            updated_at = NOW()
-         WHERE id = $1`,
-        [body.assessmentId, progressCount, progressPercent, body.questionId]
+         FROM response_upsert
+         WHERE a.id = $1
+         RETURNING a.progress_count, a.progress_percent`,
+        [body.assessmentId, body.questionId, body.responseValue, body.responseTimeMs ?? null, assessment.total_questions]
       );
+
+      const progressCount = progressUpdate.rows[0]?.progress_count ?? assessment.total_questions;
+      const progressPercent = Number(progressUpdate.rows[0]?.progress_percent ?? 100);
 
       return {
         status: 200 as const,
