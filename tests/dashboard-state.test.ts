@@ -110,6 +110,23 @@ test('lifecycle resolution failure preserves real assessment metrics instead of 
   assert.equal(state.assessment.questionsCompleted, 24)
 })
 
+test('lifecycle resolution failure with fully answered attempt falls back to completed_processing instead of in_progress', async () => {
+  const state = await getAuthenticatedDashboardState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessment: async () => ({ ...inProgressAssessment, status: 'in_progress', progress_count: 80, progress_percent: '100', completed_at: null }),
+    resolveLifecycle: async () => {
+      throw new Error('lifecycle unavailable')
+    },
+  })
+
+  assert.equal(state.authStatus, 'authenticated')
+  assert.equal(state.hasCompletedResult, false)
+  assert.equal(state.result, null)
+  assert.equal(state.assessment.status, 'completed_processing')
+  assert.equal(state.assessment.progressPercent, 100)
+  assert.equal(state.assessment.questionsCompleted, 80)
+})
+
 test('no assessment still resolves to true not_started defaults', async () => {
   const state = await getAuthenticatedDashboardState({
     resolveAuthenticatedUserId: async () => 'user-1',

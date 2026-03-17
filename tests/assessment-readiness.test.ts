@@ -62,6 +62,34 @@ test('partial assessment resolves in_progress', async () => {
   if (state.authState === 'authenticated') assert.equal(state.lifecycle.state, 'in_progress')
 })
 
+test('fully answered assessment with stale completion markers resolves completed_processing without ready result', async () => {
+  const state = await resolveIndividualLifecycleState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessmentForUser: async () => ({ ...completedAssessment, status: 'in_progress', completed_at: null, progress_percent: '100', progress_count: 80 }),
+    getLatestResultForAssessment: async () => null,
+    getLatestReadyResultForUser: async () => null,
+  })
+
+  if (state.authState === 'authenticated') assert.equal(state.lifecycle.state, 'completed_processing')
+})
+
+test('fully answered assessment with stale completion markers resolves ready when ready result exists', async () => {
+  const state = await resolveIndividualLifecycleState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessmentForUser: async () => ({ ...completedAssessment, status: 'in_progress', completed_at: null, progress_percent: '100', progress_count: 80 }),
+    getLatestResultForAssessment: async () => completeSnapshot,
+    getSignalCountByResultId: async () => 3,
+    getLatestReadyResultForUser: async () => ({
+      ...completeSnapshot,
+      assessment_started_at: completedAssessment.started_at,
+      assessment_completed_at: completedAssessment.completed_at,
+      assessment_version_key: completedAssessment.version_key,
+    }),
+  })
+
+  if (state.authState === 'authenticated') assert.equal(state.lifecycle.state, 'ready')
+})
+
 test('completed with no snapshot resolves completed_processing', async () => {
   const state = await resolveIndividualLifecycleState({
     resolveAuthenticatedUserId: async () => 'user-1',
