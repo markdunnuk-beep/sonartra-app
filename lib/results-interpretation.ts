@@ -13,6 +13,10 @@ export interface IndividualResultInterpretation {
     title: string
     points: string[]
   }
+  whyThisMayFeelFamiliar?: {
+    title: string
+    items: string[]
+  }
   layerInterpretations: LayerInterpretationBlock[]
   managerNotes: {
     title: string
@@ -51,6 +55,13 @@ interface InterpretationContext {
   firstName?: string | null
   fullName?: string | null
 }
+
+const BANNED_SCAFFOLDING_PHRASES = [
+  /distributed with no single dominant signal/i,
+  /supported by/i,
+  /counterbalance available/i,
+  /requires deliberate context-setting/i,
+]
 
 const LAYER_META: Record<string, { title: string; operationalContext: string }> = {
   behaviour_style: {
@@ -264,23 +275,23 @@ function buildLayerInterpretation(layer: IndividualResultLayerSummary, signals: 
   const layerMeta = LAYER_META[layer.layerKey]
   const layerTitle = layerMeta?.title ?? titleCase(layer.layerKey)
   const context = layerMeta?.operationalContext ?? 'day-to-day operating context'
-  const dominance = primary.relativeShare >= 0.6 ? 'clear' : primary.relativeShare >= 0.45 ? 'moderate' : 'distributed'
+  const dominance = primary.relativeShare >= 0.6 ? 'clear' : primary.relativeShare >= 0.45 ? 'moderate' : 'mixed'
 
   const summary =
-    dominance === 'distributed'
-      ? `${layerTitle} is distributed with no single dominant signal. ${primaryNarrative.signalLabel} leads, with secondary influence from ${secondaryNarrative?.signalLabel ?? 'adjacent signals'}.`
-      : `${layerTitle} shows ${dominance} concentration in ${primaryNarrative.signalLabel}${secondaryNarrative ? `, supported by ${secondaryNarrative.signalLabel}` : ''}.`
+    dominance === 'mixed'
+      ? `${layerTitle} shows a mixed pattern. ${primaryNarrative.signalLabel} is currently most visible${secondaryNarrative ? `, with ${secondaryNarrative.signalLabel} close behind` : ''}.`
+      : `${layerTitle} is currently led by ${primaryNarrative.signalLabel}${secondaryNarrative ? `, with ${secondaryNarrative.signalLabel} shaping range when demands change` : ''}.`
 
   const implications = [
-    `Within ${context}, this profile ${primaryNarrative.tendency}.`,
+    `In ${context}, this is most likely to show up as someone who ${primaryNarrative.tendency}.`,
     secondaryNarrative
-      ? `Secondary weighting in ${secondaryNarrative.signalLabel} suggests additional range when requirements shift.`
-      : 'Secondary weighting is limited, so behaviour may appear more concentrated in one operating mode.',
+      ? `${secondaryNarrative.signalLabel} adds a second mode that can appear when the situation calls for it.`
+      : 'There is less evidence of a second operating mode in this layer, so behaviour may look more consistent than flexible.',
   ]
 
   const watchouts = [
-    `Trade-off: ${primaryNarrative.tradeoff}.`,
-    secondaryNarrative ? `Counterbalance available through ${secondaryNarrative.signalLabel}, but requires deliberate context-setting.` : 'Use complementary team coverage where this layer requires broader range.',
+    `Likely trade-off: ${primaryNarrative.tradeoff}.`,
+    secondaryNarrative ? `If ${secondaryNarrative.signalLabel} is not consciously used, this layer can default too heavily to one response pattern.` : 'Pair with complementary teammates when this layer needs broader response range.',
   ]
 
   return {
@@ -290,6 +301,27 @@ function buildLayerInterpretation(layer: IndividualResultLayerSummary, signals: 
     implications,
     watchouts,
   }
+}
+
+function buildWhyThisMayFeelFamiliarItems(signals: IndividualResultSignalSummary[]) {
+  const ranked = [...signals].sort((a, b) => b.normalisedScore - a.normalisedScore)
+  const topSignals = ranked.slice(0, 2)
+  const items: string[] = []
+
+  for (const signal of topSignals) {
+    const patternKey = extractSignalPattern(signal.signalKey)
+    if (!patternKey) continue
+
+    if (patternKey === 'Analyst') items.push('You are unlikely to rush decisions before the logic is clear enough to trust.')
+    if (patternKey === 'Driver') items.push('You are likely to move quickly once the direction is clear, and others may notice your bias toward action.')
+    if (patternKey === 'Control') items.push('You may feel most settled when plans, roles, and standards are explicit.')
+    if (patternKey === 'Avoid' || patternKey === 'Avoidance') items.push('You may absorb tension quietly rather than escalate it early, even when an issue still needs a direct call.')
+    if (patternKey === 'Evidence') items.push('You may replay decisions mentally to check that they still stand up to the facts.')
+    if (patternKey === 'Collaborate') items.push('You may naturally look for common ground before pushing a hard win-lose outcome.')
+    if (patternKey === 'Compete' || patternKey === 'Results') items.push('Others may experience you as direct and outcome-focused when decisions are time-sensitive.')
+  }
+
+  return [...new Set(items)].slice(0, 3)
 }
 
 export function buildIndividualResultInterpretation(data: IndividualResultReadyData, context: InterpretationContext = {}): IndividualResultInterpretation {
@@ -317,24 +349,25 @@ export function buildIndividualResultInterpretation(data: IndividualResultReadyD
   const paceSignal = data.signals.find((signal) => /Driver|Compete|Results|Opportunity/.test(signal.signalKey))
 
   const pressureRisk = riskLayer && riskLayer.totalRawValue > 0 && (riskLayer.primarySignalKey ?? '').toLowerCase().includes('avoid')
+  const familiarItems = buildWhyThisMayFeelFamiliarItems(data.signals)
 
   return {
     onboarding: {
-      title: 'How to read this profile',
+      title: 'How to use this report',
       points: [
-        'These results indicate behavioural tendencies and operating patterns observed in the scored assessment output.',
-        'Use them as decision support, not as absolute judgments about capability or potential.',
-        'Interpret each signal in role, team, and delivery context rather than in isolation.',
-        'Higher concentration often improves consistency in some contexts while reducing range in others.',
+        'This report describes likely work patterns visible in your scored assessment signals.',
+        'Use it to sharpen judgement about role fit, working style, and practical performance conditions.',
+        'Read the insights with context: role scope, team setup, and delivery demands still matter.',
       ],
     },
+    whyThisMayFeelFamiliar: familiarItems.length > 0 ? { title: 'Why this may feel familiar', items: familiarItems } : undefined,
     layerInterpretations,
     performanceProfile: {
       title: 'Performance profile',
-      summary: `${subject} tends to operate with ${topNarrative?.signalLabel ?? 'the leading'} patterns front-of-mind${secondNarrative ? `, supported by ${secondNarrative.signalLabel}` : ''}. This pattern is most visible in ${topLayers.join(' and ') || 'the scored layers'}.`,
+      summary: `${subject} is likely to establish clarity before committing, then execute in the style suggested by ${topNarrative?.signalLabel ?? 'the leading signal'}. This operating posture is most visible in ${topLayers.join(' and ') || 'the scored layers'}.`,
       operatingTraits: [
-        behaviourPrimary ? `Execution posture: ${behaviourPrimary.tendency}.` : 'Execution posture: shaped by the top ranked behaviour-style signal.',
-        topNarrative ? `Decision tendency: ${topNarrative.tendency}.` : 'Decision tendency: inferred from ranked signal concentration.',
+        behaviourPrimary ? `How work usually gets done: ${behaviourPrimary.tendency}.` : 'How work usually gets done is shaped by the top-ranked behaviour-style signal.',
+        topNarrative ? `Decision posture: ${topNarrative.tendency}.` : 'Decision posture is inferred from ranked signal concentration.',
         controlSignal ? 'Work quality is likely to improve when expectations, standards, and review points are explicit.' : 'Work quality is likely to improve when priorities and delivery standards are explicit.',
       ],
     },
@@ -365,7 +398,7 @@ export function buildIndividualResultInterpretation(data: IndividualResultReadyD
       items: [
         topNarrative ? `Under sustained pressure, this profile may over-index on ${topNarrative.signalLabel} behaviour and narrow optionality.` : 'Under sustained pressure, behaviour can become more concentrated and less adaptive.',
         pressureRisk ? 'Risk handling may tilt toward caution or decision deferral when uncertainty remains high.' : 'Risk handling can tilt toward speed or control at the expense of balance if guardrails are weak.',
-        riskPrimary ? `Potential friction point: ${riskPrimary.tradeoff}.` : 'Potential friction point: monitor decision speed versus execution quality trade-offs.',
+        riskPrimary ? `Common friction point: ${riskPrimary.tradeoff}.` : 'Common friction point: monitor decision speed versus execution quality trade-offs.',
       ],
     },
     teamDynamics: {
@@ -373,7 +406,7 @@ export function buildIndividualResultInterpretation(data: IndividualResultReadyD
       items: [
         topNarrative ? `Likely contribution in group decisions: ${topNarrative.tendency}.` : 'Likely contribution in group decisions follows the leading ranked signal pattern.',
         secondNarrative
-          ? `Secondary contribution pattern: ${secondNarrative.signalLabel} can broaden coverage when explicitly requested.`
+          ? `Secondary contribution pattern: ${secondNarrative.signalLabel} can broaden team coverage when intentionally brought in.`
           : 'Secondary contribution pattern is less pronounced, so complementary peers may be needed in volatile contexts.',
         'Most effective partnerships usually pair this profile with colleagues who balance pace, challenge, and execution detail.',
       ],
@@ -383,7 +416,7 @@ export function buildIndividualResultInterpretation(data: IndividualResultReadyD
       doItems: [
         'Define the operating objective, decision boundaries, and quality thresholds up front.',
         'Use regular but lightweight check-ins focused on trade-offs, blockers, and next execution decisions.',
-        'Assign work where dominant signal strengths are useful, then add explicit counterbalance support for weaker ranges.',
+        'Assign work that uses the strongest signal patterns, and add explicit support where broader range is required.',
       ],
       avoidItems: [
         'Do not rely on implied priorities when timelines or dependencies are tight.',
@@ -406,4 +439,9 @@ export function buildIndividualResultInterpretation(data: IndividualResultReadyD
       'This profile is one input among performance history, role scope, and team composition.',
     ],
   }
+}
+
+export function containsBannedScaffoldingLanguage(interpretation: IndividualResultInterpretation) {
+  const flattened = JSON.stringify(interpretation)
+  return BANNED_SCAFFOLDING_PHRASES.some((pattern) => pattern.test(flattened))
 }
