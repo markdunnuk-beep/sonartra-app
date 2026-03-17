@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-const AUTO_ADVANCE_DELAY_MS = 400
 const ACTIVE_ASSESSMENT_STORAGE_KEY = 'sonartra_active_assessment_id'
 // Temporary development-only user id until authentication is implemented.
 const TEMP_DEVELOPMENT_USER_ID = '4a947577-7766-46b4-a9ef-163f39ede7ca'
@@ -63,13 +62,16 @@ export default function AssessmentPage() {
   const [answers, setAnswers] = useState<Record<number, number>>({})
   const [index, setIndex] = useState(0)
   const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [savingCount, setSavingCount] = useState(0)
   const [completing, setCompleting] = useState(false)
   const [completed, setCompleted] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [saveWarning, setSaveWarning] = useState<string | null>(null)
 
-  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const questionShownAtRef = useRef<number>(Date.now())
+  const saveSequenceRef = useRef<Record<number, number>>({})
+  const pendingSavesRef = useRef<Map<number, Promise<void>>>(new Map())
+  const answersRef = useRef<Record<number, number>>({})
 
   const totalQuestions = questions.length
   const answeredCount = Object.keys(answers).length
@@ -82,21 +84,68 @@ export default function AssessmentPage() {
   }, [answeredCount, totalQuestions])
 
   useEffect(() => {
-    return () => {
-      if (advanceTimerRef.current) {
-        clearTimeout(advanceTimerRef.current)
-      }
-    }
-  }, [])
+    answersRef.current = answers
+  }, [answers])
 
   useEffect(() => {
     questionShownAtRef.current = Date.now()
   }, [index, currentQuestion?.questionNumber])
 
-  const clearAdvanceTimer = () => {
-    if (!advanceTimerRef.current) return
-    clearTimeout(advanceTimerRef.current)
-    advanceTimerRef.current = null
+  const logPerf = (label: string, meta?: Record<string, number | string>) => {
+    if (process.env.NODE_ENV === 'production') return
+    console.info(`[assessment-perf] ${label}`, meta ?? {})
+  }
+
+  const saveResponseInBackground = (questionNumber: number, responseValue: number, responseTimeMs: number) => {
+    if (!assessmentId) return
+
+    const sequence = (saveSequenceRef.current[questionNumber] ?? 0) + 1
+    saveSequenceRef.current[questionNumber] = sequence
+    setSavingCount((count) => count + 1)
+
+    const startedAt = performance.now()
+
+    const savePromise = (async () => {
+      try {
+        const saveResponse = await fetch('/api/assessments/response', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assessmentId,
+            questionId: questionNumber,
+            responseValue,
+            responseTimeMs,
+          }),
+        })
+
+        const saveData = (await saveResponse.json()) as { error?: string }
+        if (!saveResponse.ok) {
+          throw new Error(saveData.error ?? 'Unable to save assessment response.')
+        }
+
+        if (saveSequenceRef.current[questionNumber] === sequence) {
+          setSaveWarning(null)
+        }
+      } catch (saveError) {
+        console.error(saveError)
+        if (saveSequenceRef.current[questionNumber] === sequence && answersRef.current[questionNumber] === responseValue) {
+          setSaveWarning('Your latest answer is queued locally. We will retry on your next navigation.')
+        }
+      } finally {
+        logPerf('response-save-duration', {
+          questionNumber,
+          durationMs: Math.round(performance.now() - startedAt),
+        })
+        setSavingCount((count) => Math.max(0, count - 1))
+      }
+    })()
+
+    pendingSavesRef.current.set(questionNumber, savePromise)
+    void savePromise.finally(() => {
+      if (pendingSavesRef.current.get(questionNumber) === savePromise) {
+        pendingSavesRef.current.delete(questionNumber)
+      }
+    })
   }
 
   const hydrateAssessment = (data: AssessmentQuestionsResponse) => {
@@ -116,7 +165,9 @@ export default function AssessmentPage() {
     setCompleted(data.assessment.status === 'completed')
   }
 
-  const fetchAssessmentQuestions = async (id: string) => {
+  const fetchAssessmentQuestions = async (id: string, reason: 'resume' | 'start') => {
+    const startedAt = performance.now()
+    logPerf('question-fetch-start', { reason })
     const response = await fetch(`/api/assessments/${id}/questions`)
     const data = (await response.json()) as AssessmentQuestionsResponse | { error: string }
 
@@ -125,6 +176,7 @@ export default function AssessmentPage() {
     }
 
     hydrateAssessment(data)
+    logPerf('initial-question-load', { durationMs: Math.round(performance.now() - startedAt), questionCount: data.questions.length })
   }
 
   useEffect(() => {
@@ -137,7 +189,7 @@ export default function AssessmentPage() {
 
       try {
         setAssessmentId(storedAssessmentId)
-        await fetchAssessmentQuestions(storedAssessmentId)
+        await fetchAssessmentQuestions(storedAssessmentId, 'resume')
       } catch (resumeError) {
         console.error(resumeError)
         window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
@@ -174,7 +226,7 @@ export default function AssessmentPage() {
 
       setAssessmentId(startData.assessmentId)
       window.localStorage.setItem(ACTIVE_ASSESSMENT_STORAGE_KEY, startData.assessmentId)
-      await fetchAssessmentQuestions(startData.assessmentId)
+      await fetchAssessmentQuestions(startData.assessmentId, 'start')
     } catch (startError) {
       console.error(startError)
       setError(startError instanceof Error ? startError.message : 'Unable to start assessment.')
@@ -183,18 +235,38 @@ export default function AssessmentPage() {
     }
   }
 
+  const persistCurrentQuestion = () => {
+    const activeQuestion = questions[index]
+    if (!activeQuestion) return
+
+    const currentAnswer = answers[activeQuestion.questionNumber]
+    if (currentAnswer === undefined) return
+
+    const responseTimeMs = Math.max(0, Date.now() - questionShownAtRef.current)
+    saveResponseInBackground(activeQuestion.questionNumber, currentAnswer, responseTimeMs)
+  }
+
   const goNext = () => {
-    clearAdvanceTimer()
+    persistCurrentQuestion()
+
+    const transitionStartedAt = performance.now()
     setIndex((i) => Math.min(totalQuestions - 1, i + 1))
+    requestAnimationFrame(() => {
+      logPerf('question-transition', {
+        fromIndex: index,
+        toIndex: Math.min(totalQuestions - 1, index + 1),
+        durationMs: Math.round(performance.now() - transitionStartedAt),
+      })
+    })
   }
 
   const goBack = () => {
-    clearAdvanceTimer()
+    persistCurrentQuestion()
     setIndex((i) => Math.max(0, i - 1))
   }
 
-  const onAnswer = async (value: string) => {
-    if (!assessmentId || !currentQuestion) return
+  const onAnswer = (value: string) => {
+    if (!currentQuestion) return
 
     const responseValue = Number(value)
     if (!Number.isInteger(responseValue)) {
@@ -202,40 +274,8 @@ export default function AssessmentPage() {
       return
     }
 
-    setSaving(true)
     setError(null)
-    clearAdvanceTimer()
-
-    try {
-      const responseTimeMs = Math.max(0, Date.now() - questionShownAtRef.current)
-      const saveResponse = await fetch('/api/assessments/response', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assessmentId,
-          questionId: currentQuestion.questionNumber,
-          responseValue,
-          responseTimeMs,
-        }),
-      })
-
-      const saveData = (await saveResponse.json()) as { error?: string }
-      if (!saveResponse.ok) {
-        throw new Error(saveData.error ?? 'Unable to save assessment response.')
-      }
-
-      setAnswers((prev) => ({ ...prev, [currentQuestion.questionNumber]: responseValue }))
-
-      advanceTimerRef.current = setTimeout(() => {
-        setIndex((i) => Math.min(totalQuestions - 1, i + 1))
-        advanceTimerRef.current = null
-      }, AUTO_ADVANCE_DELAY_MS)
-    } catch (saveError) {
-      console.error(saveError)
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save assessment response.')
-    } finally {
-      setSaving(false)
-    }
+    setAnswers((prev) => ({ ...prev, [currentQuestion.questionNumber]: responseValue }))
   }
 
   const completeAssessment = async () => {
@@ -245,6 +285,10 @@ export default function AssessmentPage() {
     setError(null)
 
     try {
+      if (pendingSavesRef.current.size > 0) {
+        await Promise.allSettled([...pendingSavesRef.current.values()])
+      }
+
       const response = await fetch('/api/assessments/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -327,6 +371,8 @@ export default function AssessmentPage() {
             }
           >
             {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+            {saveWarning ? <p className="text-sm text-amber-300">{saveWarning}</p> : null}
+            {savingCount > 0 ? <p className="text-xs text-textSecondary/80">Saving in background…</p> : null}
             <AssessmentFlowTransition transitionKey={index}>
               {currentQuestion ? (
                 <AssessmentQuestionCard
@@ -334,7 +380,7 @@ export default function AssessmentPage() {
                   options={currentQuestion.options}
                   onSelect={onAnswer}
                   selected={selectedValue}
-                  disabled={saving || loading}
+                  disabled={loading}
                 />
               ) : (
                 <Card className="space-y-3 border-border/70 bg-panel/92">
