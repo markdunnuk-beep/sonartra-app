@@ -1,5 +1,6 @@
 'use client'
 
+import { SignOutButton, SignedIn, UserButton } from '@clerk/nextjs'
 import { SonartraLogo } from '@/components/branding/SonartraLogo'
 import { clsx } from 'clsx'
 import { ClipboardCheck, LayoutDashboard, Settings, UserSquare2, Building2, FileBarChart2 } from 'lucide-react'
@@ -50,13 +51,17 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="mt-6 rounded-2xl border border-border/80 bg-bg/60 p-3.5 text-sm text-textSecondary lg:mt-auto">
-        <p className="font-medium text-textPrimary">Nadia Karim</p>
-        <p>Chief of Staff</p>
-        <a href="/" className="mt-2 inline-block text-accent transition-colors hover:text-[#86beff]">
-          Log out
-        </a>
-      </div>
+      <SignedIn>
+        <div className="mt-6 rounded-2xl border border-border/80 bg-bg/60 p-3.5 text-sm text-textSecondary lg:mt-auto">
+          <div className="flex items-center gap-2">
+            <UserButton afterSignOutUrl="/" />
+            <p className="font-medium text-textPrimary">Authenticated user</p>
+          </div>
+          <SignOutButton>
+            <button className="mt-2 inline-block text-accent transition-colors hover:text-[#86beff]">Log out</button>
+          </SignOutButton>
+        </div>
+      </SignedIn>
     </aside>
   )
 }

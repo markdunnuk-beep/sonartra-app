@@ -96,7 +96,7 @@ function buildSignals(): AssessmentResultSignalRow[] {
 }
 
 test('returns successful persisted snapshot with deterministically ordered signals', async () => {
-  const result = await getAssessmentResultReadModel('assessment-1', {
+  const result = await getAssessmentResultReadModel('assessment-1', undefined, {
     getAssessmentById: async () => baseAssessment,
     getResultByAssessmentId: async () => baseResult,
     getSignalsByResultId: async () => buildSignals(),
@@ -129,7 +129,7 @@ test('returns failed persisted snapshot with failure metadata and no signal leak
     response_quality_payload: null,
   };
 
-  const result = await getAssessmentResultReadModel('assessment-1', {
+  const result = await getAssessmentResultReadModel('assessment-1', undefined, {
     getAssessmentById: async () => ({ ...baseAssessment, scoring_status: 'failed' }),
     getResultByAssessmentId: async () => failedResult,
     getSignalsByResultId: async () => buildSignals(),
@@ -146,7 +146,7 @@ test('returns failed persisted snapshot with failure metadata and no signal leak
 });
 
 test('returns explicit unavailable state when no result row exists', async () => {
-  const result = await getAssessmentResultReadModel('assessment-1', {
+  const result = await getAssessmentResultReadModel('assessment-1', undefined, {
     getAssessmentById: async () => baseAssessment,
     getResultByAssessmentId: async () => null,
     getSignalsByResultId: async () => [],
@@ -159,4 +159,15 @@ test('returns explicit unavailable state when no result row exists', async () =>
   if (result.body.result.availability !== 'unavailable') return;
 
   assert.equal(result.body.result.reason, 'result_missing');
+});
+
+
+test('returns not_found when owner user id does not match assessment owner', async () => {
+  const result = await getAssessmentResultReadModel('assessment-1', 'user-2', {
+    getAssessmentById: async (_assessmentId, ownerUserId) => (ownerUserId === 'user-1' ? baseAssessment : null),
+    getResultByAssessmentId: async () => baseResult,
+    getSignalsByResultId: async () => buildSignals(),
+  });
+
+  assert.equal(result.kind, 'not_found');
 });

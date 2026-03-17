@@ -10,7 +10,7 @@ import {
 import { getAssessmentResultByAssessmentId, getAssessmentResultSignalsByResultId } from '@/lib/server/assessment-results';
 
 interface AssessmentResultReadDependencies {
-  getAssessmentById: (assessmentId: string) => Promise<AssessmentRow | null>;
+  getAssessmentById: (assessmentId: string, ownerUserId?: string) => Promise<AssessmentRow | null>;
   getResultByAssessmentId: (assessmentId: string) => Promise<AssessmentResultRow | null>;
   getSignalsByResultId: (assessmentResultId: string) => Promise<AssessmentResultSignalRow[]>;
 }
@@ -20,14 +20,15 @@ export type AssessmentResultReadServiceResult =
   | { kind: 'ok'; body: AssessmentResultReadResponse };
 
 const defaultDependencies: AssessmentResultReadDependencies = {
-  async getAssessmentById(assessmentId: string) {
+  async getAssessmentById(assessmentId: string, ownerUserId?: string) {
     const result = await queryDb<AssessmentRow>(
       `SELECT id, user_id, organisation_id, assessment_version_id, status, started_at, completed_at,
               last_activity_at, progress_count, progress_percent, current_question_index, scoring_status,
               source, metadata_json, created_at, updated_at
        FROM assessments
-       WHERE id = $1`,
-      [assessmentId]
+       WHERE id = $1
+         AND ($2::uuid IS NULL OR user_id = $2::uuid)`,
+      [assessmentId, ownerUserId ?? null]
     );
 
     return result.rows[0] ?? null;
@@ -81,9 +82,10 @@ function sortSignals(signals: AssessmentResultSignalRow[]): PersistedAssessmentR
 
 export async function getAssessmentResultReadModel(
   assessmentId: string,
+  ownerUserId?: string,
   dependencies: AssessmentResultReadDependencies = defaultDependencies
 ): Promise<AssessmentResultReadServiceResult> {
-  const assessment = await dependencies.getAssessmentById(assessmentId);
+  const assessment = await dependencies.getAssessmentById(assessmentId, ownerUserId);
 
   if (!assessment) {
     return { kind: 'not_found' };
