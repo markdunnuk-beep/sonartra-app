@@ -82,6 +82,9 @@ export default function AssessmentPage() {
     if (!totalQuestions) return 0
     return Math.round((answeredCount / totalQuestions) * 100)
   }, [answeredCount, totalQuestions])
+  const isAssessmentHydrated = started && totalQuestions > 0
+  const showSaveStatus = isAssessmentHydrated && !saveWarning
+  const saveStatusLabel = savingCount > 0 ? 'Saving…' : 'All changes saved'
 
   useEffect(() => {
     answersRef.current = answers
@@ -364,15 +367,19 @@ export default function AssessmentPage() {
                 >
                   {completing ? 'Completing…' : 'Complete Assessment'}
                 </Button>
-                <p className="ml-auto rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs uppercase tracking-[0.14em] text-textSecondary">
-                  {progress}% complete
-                </p>
+                <div className="ml-auto flex min-w-[12.5rem] items-center justify-end gap-3">
+                  {showSaveStatus ? (
+                    <p className="min-w-[9.5rem] text-right text-xs text-textSecondary/75">{saveStatusLabel}</p>
+                  ) : null}
+                  <p className="rounded-md border border-accent/20 bg-accent/5 px-2.5 py-1 text-xs uppercase tracking-[0.14em] text-textSecondary">
+                    {progress}% complete
+                  </p>
+                </div>
               </div>
             }
           >
             {error ? <p className="text-sm text-rose-300">{error}</p> : null}
             {saveWarning ? <p className="text-sm text-amber-300">{saveWarning}</p> : null}
-            {savingCount > 0 ? <p className="text-xs text-textSecondary/80">Saving in background…</p> : null}
             <AssessmentFlowTransition transitionKey={index}>
               {currentQuestion ? (
                 <AssessmentQuestionCard
