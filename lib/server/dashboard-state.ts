@@ -83,6 +83,11 @@ function mapAssessmentState(assessment: AssessmentRow | null, lifecycleStatus: D
 function deriveStatusFromAssessment(assessment: AssessmentRow | null): DashboardAssessmentStatus {
   if (!assessment) return 'not_started'
   if (assessment.status === 'completed') return 'completed_processing'
+
+  const progressPercent = Number(assessment.progress_percent)
+  const normalisedPercent = Number.isFinite(progressPercent) ? Math.max(0, Math.min(100, Math.round(progressPercent))) : 0
+  if (normalisedPercent >= 100) return 'completed_processing'
+
   return 'in_progress'
 }
 

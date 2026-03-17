@@ -150,6 +150,20 @@ function toSnapshotSummary(snapshot: AssessmentResultRow, signalCount: number): 
   };
 }
 
+function isEffectivelyCompleted(assessment: AssessmentContextRow): boolean {
+  if (assessment.status === 'completed') return true;
+
+  const progressPercent = Number(assessment.progress_percent);
+  const normalisedPercent = Number.isFinite(progressPercent) ? Math.max(0, Math.min(100, Math.round(progressPercent))) : 0;
+  const hasCompletePercent = normalisedPercent >= 100;
+  const hasCompleteCount =
+    typeof assessment.total_questions === 'number' && assessment.total_questions > 0
+      ? assessment.progress_count >= assessment.total_questions
+      : false;
+
+  return hasCompletePercent || hasCompleteCount;
+}
+
 export async function resolveIndividualLifecycleState(
   dependencies: Partial<LifecycleDependencies> = {},
 ): Promise<{ authState: 'unauthenticated' } | { authState: 'authenticated'; userId: string; lifecycle: IndividualLifecycleResolution }> {
@@ -181,7 +195,7 @@ export async function resolveIndividualLifecycleState(
 
   const assessmentSummary = toAssessmentSummary(latestAssessment);
 
-  if (latestAssessment.status !== 'completed') {
+  if (!isEffectivelyCompleted(latestAssessment)) {
     return {
       authState: 'authenticated',
       userId,
