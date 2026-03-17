@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { AssessmentRow, AssessmentVersionRow } from '@/lib/assessment-types';
 import { queryDb } from '@/lib/db';
+import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 
 interface AssessmentResponseRow {
   question_id: number;
@@ -14,13 +15,20 @@ interface AssessmentResponseRow {
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {
+    const appUser = await resolveAuthenticatedAppUser();
+
+    if (!appUser) {
+      return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+    }
+
     const assessmentId = params.id;
 
     const assessmentResult = await queryDb<AssessmentRow>(
       `SELECT *
        FROM assessments
-       WHERE id = $1`,
-      [assessmentId]
+       WHERE id = $1
+         AND user_id = $2`,
+      [assessmentId, appUser.dbUserId]
     );
 
     const assessment = assessmentResult.rows[0];

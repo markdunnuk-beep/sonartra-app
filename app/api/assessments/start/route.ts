@@ -1,31 +1,25 @@
 import { NextResponse } from 'next/server';
 
+import { AssessmentVersionRow } from '@/lib/assessment-types';
 import { queryDb, withTransaction } from '@/lib/db';
-import { AssessmentVersionRow, StartAssessmentRequest } from '@/lib/assessment-types';
+import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
+
+interface ExistingAssessmentRow {
+  id: string;
+}
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Partial<StartAssessmentRequest>;
+    const appUser = await resolveAuthenticatedAppUser();
 
-    if (!body.userId) {
-      return NextResponse.json({ error: 'userId is required.' }, { status: 400 });
+    if (!appUser) {
+      return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
     }
 
-    const userResult = await queryDb<{ id: string }>('SELECT id FROM users WHERE id = $1', [body.userId]);
-    if (!userResult.rows[0]) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
-    if (body.organisationId) {
-      const organisationResult = await queryDb<{ id: string }>(
-        'SELECT id FROM organisations WHERE id = $1',
-        [body.organisationId]
-      );
-
-      if (!organisationResult.rows[0]) {
-        return NextResponse.json({ error: 'Organisation not found' }, { status: 404 });
-      }
-    }
+    const body = (await request.json()) as {
+      assessmentVersionKey?: string;
+      source?: string;
+    };
 
     const assessmentVersionKey = body.assessmentVersionKey ?? 'wplp80-v1';
 
@@ -45,6 +39,33 @@ export async function POST(request: Request) {
       );
     }
 
+    const existingAssessment = await queryDb<ExistingAssessmentRow>(
+      `SELECT id
+       FROM assessments
+       WHERE user_id = $1
+         AND assessment_version_id = $2
+         AND status IN ('not_started', 'in_progress')
+       ORDER BY last_activity_at DESC NULLS LAST, created_at DESC
+       LIMIT 1`,
+      [appUser.dbUserId, version.id]
+    );
+
+    if (existingAssessment.rows[0]) {
+      return NextResponse.json(
+        {
+          assessmentId: existingAssessment.rows[0].id,
+          resumed: true,
+          version: {
+            id: version.id,
+            key: version.key,
+            name: version.name,
+            totalQuestions: version.total_questions,
+          },
+        },
+        { status: 200 }
+      );
+    }
+
     const result = await withTransaction(async (client) => {
       const created = await client.query<{ id: string }>(
         `INSERT INTO assessments (
@@ -59,9 +80,9 @@ export async function POST(request: Request) {
           current_question_index,
           scoring_status,
           source
-        ) VALUES ($1, $2, $3, 'not_started', NOW(), NOW(), 0, 0, 0, 'not_scored', $4)
+        ) VALUES ($1, NULL, $2, 'not_started', NOW(), NOW(), 0, 0, 0, 'not_scored', $3)
         RETURNING id`,
-        [body.userId, body.organisationId ?? null, version.id, body.source ?? 'direct']
+        [appUser.dbUserId, version.id, body.source ?? 'direct']
       );
 
       return created.rows[0];
@@ -70,6 +91,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         assessmentId: result.id,
+        resumed: false,
         version: {
           id: version.id,
           key: version.key,

@@ -2,15 +2,23 @@ import { NextResponse } from 'next/server';
 
 import { SaveResponseRequest } from '@/lib/assessment-types';
 import { withTransaction } from '@/lib/db';
+import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 
 interface AssessmentProgressRow {
   id: string;
+  user_id: string;
   status: 'not_started' | 'in_progress' | 'completed' | 'abandoned';
   total_questions: number;
 }
 
 export async function POST(request: Request) {
   try {
+    const appUser = await resolveAuthenticatedAppUser();
+
+    if (!appUser) {
+      return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+    }
+
     const body = (await request.json()) as Partial<SaveResponseRequest>;
 
     if (!body.assessmentId) {
@@ -34,7 +42,7 @@ export async function POST(request: Request) {
 
     const response = await withTransaction(async (client) => {
       const assessmentResult = await client.query<AssessmentProgressRow>(
-        `SELECT a.id, a.status, av.total_questions
+        `SELECT a.id, a.user_id, a.status, av.total_questions
          FROM assessments a
          INNER JOIN assessment_versions av ON av.id = a.assessment_version_id
          WHERE a.id = $1
@@ -45,6 +53,10 @@ export async function POST(request: Request) {
       const assessment = assessmentResult.rows[0];
 
       if (!assessment) {
+        return { error: 'Assessment not found.', status: 404 as const };
+      }
+
+      if (assessment.user_id !== appUser.dbUserId) {
         return { error: 'Assessment not found.', status: 404 as const };
       }
 

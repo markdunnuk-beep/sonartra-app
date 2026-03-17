@@ -1,6 +1,4 @@
 export interface StartAssessmentRequest {
-  userId: string;
-  organisationId?: string;
   assessmentVersionKey?: string;
   source?: string;
 }

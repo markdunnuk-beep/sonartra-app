@@ -31,10 +31,10 @@ export function PublicNav() {
           </nav>
 
           <div className="ml-auto flex items-center gap-2 sm:gap-2.5 lg:gap-2.5">
-            <Button href="/login" variant="ghost" className="hidden sm:inline-flex">
+            <Button href="/sign-in" variant="ghost" className="hidden sm:inline-flex">
               Log in
             </Button>
-            <Button href="/signup" className="px-4 sm:px-5">
+            <Button href="/sign-up" className="px-4 sm:px-5">
               Get Started
             </Button>
           </div>

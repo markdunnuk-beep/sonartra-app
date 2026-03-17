@@ -15,8 +15,6 @@ import { deriveAssessmentEntryPhase } from '@/lib/assessment-entry-state'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const ACTIVE_ASSESSMENT_STORAGE_KEY = 'sonartra_active_assessment_id'
-// Temporary development-only user id until authentication is implemented.
-const TEMP_DEVELOPMENT_USER_ID = '4a947577-7766-46b4-a9ef-163f39ede7ca'
 const ASSESSMENT_VERSION_KEY = 'wplp80-v1'
 
 interface LiveQuestion {
@@ -226,7 +224,6 @@ export default function AssessmentPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: TEMP_DEVELOPMENT_USER_ID,
           assessmentVersionKey: ASSESSMENT_VERSION_KEY,
           source: 'direct',
         }),
