@@ -34,9 +34,9 @@ const lifecyclePresentationMap: Record<IndividualLifecycleState, LifecyclePresen
     dashboardActionLabel: null,
     dashboardActionHref: null,
     dashboardDetailTitle: 'Assessment completed',
-    dashboardDetailBody: 'Your responses have been recorded. Results are not available yet.',
+    dashboardDetailBody: 'Results are being processed and will be available shortly.',
     dashboardDetailMetaLabel: 'Processing',
-    dashboardDetailFootnote: 'Check back shortly while Individual Results are prepared from your completed responses.',
+    dashboardDetailFootnote: 'Results are being processed and will be available shortly.',
   },
   ready: {
     dashboardStatusLabel: 'Results available',

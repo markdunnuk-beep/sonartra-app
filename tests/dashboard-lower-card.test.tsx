@@ -36,11 +36,12 @@ test('lower card renders in_progress title, body, and CTA', () => {
   assert.match(html, />Resume assessment</)
 })
 
-test('lower card renders completed_processing title and body and does not render in-progress CTA', () => {
+test('lower card renders completed_processing title, body, and footnote copy and does not render in-progress CTA', () => {
   const html = renderToStaticMarkup(<DashboardPreResultContent state={makeState('completed_processing')} />)
 
   assert.match(html, /Assessment completed/)
-  assert.match(html, /Your responses have been recorded\. Results are not available yet\./)
+  assert.match(html, /Results are being processed and will be available shortly\./)
+  assert.doesNotMatch(html, /Check back shortly while Individual Results are prepared from your completed responses\./)
   assert.doesNotMatch(html, />Resume assessment</)
   assert.doesNotMatch(html, /Assessment in progress/)
 })
