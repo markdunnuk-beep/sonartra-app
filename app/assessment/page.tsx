@@ -1,6 +1,7 @@
 'use client'
 
 import { AssessmentFlowTransition } from '@/components/assessment/AssessmentFlowTransition'
+import { AssessmentQuestionNavigator } from '@/components/assessment/AssessmentQuestionNavigator'
 import { AssessmentProgress, AssessmentProgressRail } from '@/components/assessment/AssessmentProgress'
 import { AssessmentShell } from '@/components/assessment/AssessmentShell'
 import { AppShell } from '@/components/layout/AppShell'
@@ -8,6 +9,8 @@ import { TopHeader } from '@/components/layout/TopHeader'
 import { AssessmentQuestionCard, type AssessmentQuestionOption } from '@/components/sections/AssessmentQuestionCard'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { deriveAssessmentSessionState, getResumeQuestionIndex } from '@/lib/assessment-session'
+import { deriveAssessmentEntryPhase } from '@/lib/assessment-entry-state'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const ACTIVE_ASSESSMENT_STORAGE_KEY = 'sonartra_active_assessment_id'
@@ -65,8 +68,10 @@ export default function AssessmentPage() {
   const [savingCount, setSavingCount] = useState(0)
   const [completing, setCompleting] = useState(false)
   const [completed, setCompleted] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [startError, setStartError] = useState<string | null>(null)
+  const [assessmentError, setAssessmentError] = useState<string | null>(null)
   const [saveWarning, setSaveWarning] = useState<string | null>(null)
+  const [reviewMode, setReviewMode] = useState(false)
 
   const questionShownAtRef = useRef<number>(Date.now())
   const saveSequenceRef = useRef<Record<number, number>>({})
@@ -74,8 +79,10 @@ export default function AssessmentPage() {
   const answersRef = useRef<Record<number, number>>({})
 
   const totalQuestions = questions.length
-  const answeredCount = Object.keys(answers).length
-  const allAnswered = totalQuestions > 0 && answeredCount === totalQuestions
+  const sessionState = useMemo(() => deriveAssessmentSessionState(questions, answers, index), [questions, answers, index])
+  const answeredCount = sessionState.answeredCount
+  const unansweredCount = sessionState.unansweredCount
+  const allAnswered = sessionState.isAssessmentComplete
   const currentQuestion = questions[index]
   const selectedValue = currentQuestion ? String(answers[currentQuestion.questionNumber] ?? '') : undefined
   const progress = useMemo(() => {
@@ -85,6 +92,13 @@ export default function AssessmentPage() {
   const isAssessmentHydrated = viewState === 'active' && totalQuestions > 0
   const showSaveStatus = isAssessmentHydrated && !saveWarning
   const saveStatusLabel = savingCount > 0 ? 'Saving…' : 'All changes saved'
+  const entryPhase = deriveAssessmentEntryPhase(viewState, startError)
+
+  useEffect(() => {
+    if (allAnswered) {
+      setReviewMode(false)
+    }
+  }, [allAnswered])
 
   useEffect(() => {
     answersRef.current = answers
@@ -158,8 +172,7 @@ export default function AssessmentPage() {
       return acc
     }, {})
 
-    const nextIndex = mappedQuestions.findIndex((question) => restoredAnswers[question.questionNumber] === undefined)
-    const initialIndex = nextIndex === -1 ? Math.max(mappedQuestions.length - 1, 0) : nextIndex
+    const initialIndex = getResumeQuestionIndex(mappedQuestions, restoredAnswers)
 
     setQuestions(mappedQuestions)
     setAnswers(restoredAnswers)
@@ -175,6 +188,7 @@ export default function AssessmentPage() {
     const data = (await response.json()) as AssessmentQuestionsResponse | { error: string }
 
     if (!response.ok || 'error' in data) {
+      console.error('[assessment] question fetch failed', { reason, assessmentId: id, status: response.status, payload: data })
       throw new Error('error' in data ? data.error : 'Unable to load assessment questions.')
     }
 
@@ -185,7 +199,8 @@ export default function AssessmentPage() {
   const startAssessment = async () => {
     setViewState('starting')
     setLoading(true)
-    setError(null)
+    setStartError(null)
+    setAssessmentError(null)
 
     try {
       const storedAssessmentId = window.localStorage.getItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
@@ -196,7 +211,10 @@ export default function AssessmentPage() {
           await fetchAssessmentQuestions(storedAssessmentId, 'resume')
           return
         } catch (resumeError) {
-          console.error(resumeError)
+          console.error('[assessment] resume failed, falling back to new start', {
+            storedAssessmentId,
+            error: resumeError,
+          })
           window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
           setAssessmentId(null)
         }
@@ -212,18 +230,23 @@ export default function AssessmentPage() {
         }),
       })
 
-      const startData = (await startResponse.json()) as { assessmentId?: string; error?: string }
+      const startData = (await startResponse.json().catch(() => null)) as { assessmentId?: string; error?: string } | null
 
-      if (!startResponse.ok || !startData.assessmentId) {
-        throw new Error(startData.error ?? 'Unable to start assessment.')
+      if (!startResponse.ok || !startData?.assessmentId) {
+        console.error('[assessment] start request failed', {
+          status: startResponse.status,
+          statusText: startResponse.statusText,
+          payload: startData,
+        })
+        throw new Error(startData?.error ?? 'Unable to start assessment.')
       }
 
       setAssessmentId(startData.assessmentId)
       window.localStorage.setItem(ACTIVE_ASSESSMENT_STORAGE_KEY, startData.assessmentId)
       await fetchAssessmentQuestions(startData.assessmentId, 'start')
-    } catch (startError) {
-      console.error(startError)
-      setError(startError instanceof Error ? startError.message : 'Unable to start assessment.')
+    } catch (startFailure) {
+      console.error('[assessment] entry flow failed', startFailure)
+      setStartError(startFailure instanceof Error ? startFailure.message : 'Unable to start assessment.')
       setViewState('intro')
     } finally {
       setLoading(false)
@@ -260,24 +283,40 @@ export default function AssessmentPage() {
     setIndex((i) => Math.max(0, i - 1))
   }
 
+  const goToQuestion = (nextIndex: number) => {
+    persistCurrentQuestion()
+    setIndex(Math.max(0, Math.min(totalQuestions - 1, nextIndex)))
+  }
+
   const onAnswer = (value: string) => {
     if (!currentQuestion) return
 
     const responseValue = Number(value)
     if (!Number.isInteger(responseValue)) {
-      setError('Invalid response value selected.')
+      setAssessmentError('Invalid response value selected.')
       return
     }
 
-    setError(null)
+    setAssessmentError(null)
     setAnswers((prev) => ({ ...prev, [currentQuestion.questionNumber]: responseValue }))
   }
 
   const completeAssessment = async () => {
-    if (!assessmentId || !allAnswered) return
+    if (!assessmentId) return
+
+    if (!allAnswered) {
+      setReviewMode(true)
+      setAssessmentError(`You still have ${unansweredCount} unanswered question${unansweredCount === 1 ? '' : 's'}. Complete all questions before submission.`)
+
+      if (sessionState.firstUnansweredIndex !== null) {
+        goToQuestion(sessionState.firstUnansweredIndex)
+      }
+
+      return
+    }
 
     setCompleting(true)
-    setError(null)
+    setAssessmentError(null)
 
     try {
       if (pendingSavesRef.current.size > 0) {
@@ -299,7 +338,7 @@ export default function AssessmentPage() {
       window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
     } catch (completeError) {
       console.error(completeError)
-      setError(completeError instanceof Error ? completeError.message : 'Unable to complete assessment.')
+      setAssessmentError(completeError instanceof Error ? completeError.message : 'Unable to complete assessment.')
     } finally {
       setCompleting(false)
     }
@@ -310,7 +349,7 @@ export default function AssessmentPage() {
       <div className="space-y-7 lg:space-y-9">
         <TopHeader title="Sonartra Signals Assessment" subtitle="Behavioural signal capture" />
 
-        {viewState !== 'active' ? (
+        {entryPhase !== 'active' ? (
           <AssessmentShell className="max-w-[70rem] p-5 sm:p-8 lg:p-10">
             <Card className="mx-auto w-full max-w-3xl space-y-8 border-border/75 bg-bg/40 px-6 py-8 sm:px-9 sm:py-10 lg:px-12 lg:py-12">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-textSecondary/90">Readiness</p>
@@ -318,12 +357,12 @@ export default function AssessmentPage() {
               <p className="max-w-2xl text-base leading-7 text-textSecondary">
                 80 questions • approximately 10–12 minutes • structured behavioural output.
               </p>
-              {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+              {startError ? <p className="text-sm text-rose-300">{startError}</p> : null}
               <div className="flex flex-wrap items-center gap-3.5 pt-1 sm:gap-4">
-                <Button onClick={startAssessment} className="min-w-[11rem] px-6" disabled={loading}>
-                  {loading ? 'Starting…' : 'Begin Assessment'}
+                <Button onClick={startAssessment} className="min-w-[11rem] px-6" disabled={entryPhase === 'starting'}>
+                  {entryPhase === 'starting' ? 'Starting…' : 'Begin Assessment'}
                 </Button>
-                <Button variant="secondary" href="/dashboard" className="min-w-[11rem] px-6" disabled={loading}>
+                <Button variant="secondary" href="/dashboard" className="min-w-[11rem] px-6" disabled={entryPhase === 'starting'}>
                   Return to Dashboard
                 </Button>
               </div>
@@ -343,7 +382,17 @@ export default function AssessmentPage() {
             header={
               <AssessmentProgress current={index} total={totalQuestions} answered={answeredCount} sectionLabel="Signals Session" />
             }
-            aside={<AssessmentProgressRail current={index} total={totalQuestions} />}
+            aside={
+              <div className="space-y-3">
+                <AssessmentProgressRail current={index} total={totalQuestions} />
+                <AssessmentQuestionNavigator
+                  items={sessionState.navigatorItems}
+                  answeredCount={answeredCount}
+                  unansweredCount={unansweredCount}
+                  onNavigate={goToQuestion}
+                />
+              </div>
+            }
             footer={
               <div className="flex flex-wrap items-center gap-2.5 border-t border-border/60 pt-5">
                 <Button variant="secondary" onClick={goBack} className="active:translate-y-[1px]" disabled={index === 0 || loading}>
@@ -354,7 +403,7 @@ export default function AssessmentPage() {
                 </Button>
                 <Button
                   onClick={completeAssessment}
-                  disabled={!allAnswered || completing}
+                  disabled={completing}
                   className="min-w-[10rem] active:translate-y-[1px]"
                 >
                   {completing ? 'Completing…' : 'Complete Assessment'}
@@ -370,8 +419,29 @@ export default function AssessmentPage() {
               </div>
             }
           >
-            {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+            {assessmentError ? <p className="text-sm text-rose-300">{assessmentError}</p> : null}
             {saveWarning ? <p className="text-sm text-amber-300">{saveWarning}</p> : null}
+            {reviewMode && unansweredCount > 0 ? (
+              <Card className="space-y-3 border-amber-400/30 bg-amber-500/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">Review mode</p>
+                <p className="text-sm text-amber-100">
+                  Review mode: {unansweredCount} unanswered question{unansweredCount === 1 ? '' : 's'} remaining.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    onClick={() => {
+                      if (sessionState.firstUnansweredIndex !== null) {
+                        goToQuestion(sessionState.firstUnansweredIndex)
+                      }
+                    }}
+                    className="min-w-[12rem]"
+                  >
+                    Go to first unanswered
+                  </Button>
+                  <p className="text-xs text-amber-100/90">Use the navigator to jump directly to any incomplete question.</p>
+                </div>
+              </Card>
+            ) : null}
             <AssessmentFlowTransition transitionKey={index}>
               {currentQuestion ? (
                 <AssessmentQuestionCard
