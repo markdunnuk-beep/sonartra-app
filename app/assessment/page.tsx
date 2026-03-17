@@ -56,7 +56,7 @@ function normalizeQuestions(response: AssessmentQuestionsResponse): LiveQuestion
 }
 
 export default function AssessmentPage() {
-  const [started, setStarted] = useState(false)
+  const [viewState, setViewState] = useState<'intro' | 'starting' | 'active'>('intro')
   const [assessmentId, setAssessmentId] = useState<string | null>(null)
   const [questions, setQuestions] = useState<LiveQuestion[]>([])
   const [answers, setAnswers] = useState<Record<number, number>>({})
@@ -82,7 +82,7 @@ export default function AssessmentPage() {
     if (!totalQuestions) return 0
     return Math.round((answeredCount / totalQuestions) * 100)
   }, [answeredCount, totalQuestions])
-  const isAssessmentHydrated = started && totalQuestions > 0
+  const isAssessmentHydrated = viewState === 'active' && totalQuestions > 0
   const showSaveStatus = isAssessmentHydrated && !saveWarning
   const saveStatusLabel = savingCount > 0 ? 'Saving…' : 'All changes saved'
 
@@ -164,7 +164,7 @@ export default function AssessmentPage() {
     setQuestions(mappedQuestions)
     setAnswers(restoredAnswers)
     setIndex(initialIndex)
-    setStarted(true)
+    setViewState('active')
     setCompleted(data.assessment.status === 'completed')
   }
 
@@ -182,35 +182,26 @@ export default function AssessmentPage() {
     logPerf('initial-question-load', { durationMs: Math.round(performance.now() - startedAt), questionCount: data.questions.length })
   }
 
-  useEffect(() => {
-    const resume = async () => {
-      const storedAssessmentId = window.localStorage.getItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
-      if (!storedAssessmentId) return
-
-      setLoading(true)
-      setError(null)
-
-      try {
-        setAssessmentId(storedAssessmentId)
-        await fetchAssessmentQuestions(storedAssessmentId, 'resume')
-      } catch (resumeError) {
-        console.error(resumeError)
-        window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
-        setAssessmentId(null)
-        setError('Unable to resume your saved assessment. Please start a new attempt.')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    void resume()
-  }, [])
-
   const startAssessment = async () => {
+    setViewState('starting')
     setLoading(true)
     setError(null)
 
     try {
+      const storedAssessmentId = window.localStorage.getItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
+
+      if (storedAssessmentId) {
+        try {
+          setAssessmentId(storedAssessmentId)
+          await fetchAssessmentQuestions(storedAssessmentId, 'resume')
+          return
+        } catch (resumeError) {
+          console.error(resumeError)
+          window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
+          setAssessmentId(null)
+        }
+      }
+
       const startResponse = await fetch('/api/assessments/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -233,6 +224,7 @@ export default function AssessmentPage() {
     } catch (startError) {
       console.error(startError)
       setError(startError instanceof Error ? startError.message : 'Unable to start assessment.')
+      setViewState('intro')
     } finally {
       setLoading(false)
     }
@@ -318,7 +310,7 @@ export default function AssessmentPage() {
       <div className="space-y-7 lg:space-y-9">
         <TopHeader title="Sonartra Signals Assessment" subtitle="Behavioural signal capture" />
 
-        {!started ? (
+        {viewState !== 'active' ? (
           <AssessmentShell className="max-w-[70rem] p-5 sm:p-8 lg:p-10">
             <Card className="mx-auto w-full max-w-3xl space-y-8 border-border/75 bg-bg/40 px-6 py-8 sm:px-9 sm:py-10 lg:px-12 lg:py-12">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-textSecondary/90">Readiness</p>
