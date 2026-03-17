@@ -1,20 +1,18 @@
 import React from 'react'
+
+import { IndividualResultApiResponse, IndividualResultLayerSummary, IndividualResultReadyData, IndividualResultSignalSummary } from '@/lib/server/individual-results'
 import {
-  IndividualIntelligenceResultContract,
-  IndividualIntelligenceSignalSummary,
-} from '@/lib/server/individual-intelligence-result'
-import {
-  InsightCard,
   ResultEmptyStatePanel,
   ResultFailedStatePanel,
   ResultsSectionBlock,
   ResultsWorkspaceShell,
   ResultMetadataGrid,
-  ResultStatusBadge,
   SignalChip,
-  SignalScoreRow,
   SignalRankList,
+  SignalScoreRow,
 } from '@/components/results/ResultsPrimitives'
+
+type ViewModel = IndividualResultApiResponse | { state: string; message?: string }
 
 const LAYER_COPY: Record<string, { title: string; description: string }> = {
   behaviour_style: {
@@ -33,7 +31,7 @@ const LAYER_COPY: Record<string, { title: string; description: string }> = {
     title: 'Conflict',
     description: 'Typical response posture when priorities clash or delivery tension rises.',
   },
-  risk_pressure: {
+  risk: {
     title: 'Risk and Pressure Response',
     description: 'Likely decision and execution tendencies under uncertainty, urgency, or stress.',
   },
@@ -56,35 +54,14 @@ const formatDateTime = (value: string | null) => {
 
 const formatPercent = (value: number) => `${Math.round(value * 100)}%`
 
-const titleCase = (value: string) =>
-  value
-    .replaceAll('_', ' ')
-    .replaceAll('-', ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase())
+const titleCase = (value: string) => value.replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 
-function groupSignalsByLayer(signals: IndividualIntelligenceSignalSummary[]) {
-  const grouped = new Map<string, IndividualIntelligenceSignalSummary[]>()
-
-  signals.forEach((signal) => {
-    const current = grouped.get(signal.layerKey) ?? []
-    current.push(signal)
-    grouped.set(signal.layerKey, current)
-  })
-
-  return [...grouped.entries()].map(([layerKey, items]) => ({
-    layerKey,
-    items: [...items].sort((a, b) => (a.rankInLayer ?? 99) - (b.rankInLayer ?? 99)),
-  }))
-}
-
-function buildSummary(signals: IndividualIntelligenceSignalSummary[]) {
-  const ranked = [...signals].sort((a, b) => b.normalisedScore - a.normalisedScore)
+function buildSummary(data: IndividualResultReadyData) {
+  const ranked = [...data.signals].sort((a, b) => b.normalisedScore - a.normalisedScore)
   const primary = ranked.find((signal) => signal.isPrimary) ?? ranked[0]
   const secondary = ranked.find((signal) => signal.isSecondary) ?? ranked[1]
 
-  if (!primary) {
-    return 'No scored signal data is currently available for this assessment completion.'
-  }
+  if (!primary) return 'No scored signal data is currently available for this assessment completion.'
 
   return `Primary concentration sits in ${titleCase(primary.signalKey)} (${formatPercent(primary.normalisedScore)}). ${
     secondary
@@ -93,162 +70,154 @@ function buildSummary(signals: IndividualIntelligenceSignalSummary[]) {
   }`
 }
 
-export function IndividualIntelligenceResultView({ model }: { model: IndividualIntelligenceResultContract }) {
-  if (model.resultStatus === 'empty') {
+const withDevelopmentDiagnostic = (state: string, children: React.ReactNode) => (
+  <>
+    {process.env.NODE_ENV !== 'production' ? <p className="text-xs uppercase tracking-[0.14em] text-textSecondary">Rendering state: {state}</p> : null}
+    {children}
+  </>
+)
+
+const renderReady = (data: IndividualResultReadyData, state: string) => (
+  <ResultsWorkspaceShell
+    title="Individual Intelligence"
+    subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure."
+    statusLabel="Persisted Result"
+  >
+    {withDevelopmentDiagnostic(
+      state,
+      <>
+        <section className="surface space-y-4 p-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <SignalChip tone="accent">Status: ready</SignalChip>
+            <SignalChip tone="neutral">Assessment version: {data.assessment.versionKey ?? '—'}</SignalChip>
+            <SignalChip tone="neutral">Completed: {formatDateTime(data.assessment.completedAt)}</SignalChip>
+          </div>
+          <p className="text-sm leading-6 text-textSecondary">{buildSummary(data)}</p>
+        </section>
+
+        <ResultsSectionBlock title="Layer breakdown" description="Per-layer signal ranking and relative contribution.">
+          <div className="space-y-5">
+            {data.layers.map((layer: IndividualResultLayerSummary) => {
+              const meta = LAYER_COPY[layer.layerKey]
+              const layerSignals = data.signals.filter((signal: IndividualResultSignalSummary) => signal.layerKey === layer.layerKey)
+
+              return (
+                <div key={layer.layerKey} className="rounded-2xl border border-border/70 bg-panel/60 p-4">
+                  <h3 className="text-base font-semibold text-textPrimary">{meta?.title ?? titleCase(layer.layerKey)}</h3>
+                  <p className="mt-1 text-sm text-textSecondary">{meta?.description ?? 'Layer-level behavioural signal summary.'}</p>
+                  <div className="mt-4 space-y-3">
+                    {layerSignals.map((signal: IndividualResultSignalSummary) => (
+                      <SignalScoreRow
+                        key={signal.signalKey}
+                        label={titleCase(signal.signalKey)}
+                        normalisedScore={signal.normalisedScore}
+                        relativeShare={signal.relativeShare}
+                        rank={signal.rank}
+                        isPrimary={signal.isPrimary}
+                        isSecondary={signal.isSecondary}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </ResultsSectionBlock>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <ResultsSectionBlock title="Signal ranking" description="Highest-to-lowest signal order across all measured layers.">
+            <SignalRankList
+              title="Ranked signals"
+              items={data.signals.map((signal: IndividualResultSignalSummary) => ({
+                label: titleCase(signal.signalKey),
+                score: Math.round(signal.normalisedScore * 100),
+                note: `${titleCase(signal.layerKey)} • Share ${formatPercent(signal.relativeShare)}`,
+              }))}
+            />
+          </ResultsSectionBlock>
+
+          <ResultsSectionBlock title="Metadata" description="Persisted completion and scoring metadata.">
+            <ResultMetadataGrid
+              items={[
+                { label: 'Assessment ID', value: data.assessment.assessmentId },
+                { label: 'Completion date', value: formatDateTime(data.assessment.completedAt) },
+                { label: 'Scored at', value: formatDateTime(data.snapshot.scoredAt) },
+                { label: 'Version key', value: data.assessment.versionKey ?? '—' },
+                { label: 'Scoring model', value: data.snapshot.scoringModelKey ?? '—' },
+                { label: 'Snapshot version', value: data.snapshot.snapshotVersion.toString() },
+              ]}
+            />
+          </ResultsSectionBlock>
+        </div>
+      </>,
+    )}
+  </ResultsWorkspaceShell>
+)
+
+export function IndividualIntelligenceResultView({ model }: { model: ViewModel }) {
+  if (model.state === 'ready' && 'data' in model) {
+    return renderReady(model.data, model.state)
+  }
+
+  if (model.state === 'empty') {
     return (
-      <ResultsWorkspaceShell
-        title="Individual Intelligence"
-        subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure."
-      >
-        <ResultEmptyStatePanel
-          title="No completed Individual Intelligence result is available yet"
-          description={model.emptyState?.message ?? 'Complete the assessment flow to generate your persisted Individual Intelligence result.'}
-          ctaLabel="Start or resume assessment"
-          ctaHref="/assessment"
-        />
+      <ResultsWorkspaceShell title="Individual Intelligence" subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure." statusLabel="No Result Yet">
+        {withDevelopmentDiagnostic(
+          model.state,
+          <ResultEmptyStatePanel
+            title="No completed Individual Intelligence result is available yet"
+            description={model.message ?? 'Complete the assessment flow to generate your persisted Individual Intelligence result.'}
+            ctaLabel="Start or resume assessment"
+            ctaHref="/assessment"
+          />,
+        )}
       </ResultsWorkspaceShell>
     )
   }
 
-  if (model.resultStatus === 'failed') {
+  if (model.state === 'incomplete') {
     return (
-      <ResultsWorkspaceShell
-        title="Individual Intelligence"
-        subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure."
-      >
-        <ResultFailedStatePanel
-          title="Your latest report is not currently available"
-          description={model.failedState?.message ?? 'Assessment completion exists, but report generation did not complete successfully.'}
-          detail={model.failedState?.failure?.code ? `Reference code: ${model.failedState.failure.code}` : undefined}
-        />
+      <ResultsWorkspaceShell title="Individual Intelligence" subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure." statusLabel="Assessment In Progress">
+        {withDevelopmentDiagnostic(
+          model.state,
+          <ResultEmptyStatePanel
+            title="Assessment is in progress"
+            description={model.message ?? 'Your latest assessment is still in progress, so results are not available yet.'}
+            ctaLabel="Resume assessment"
+            ctaHref="/assessment"
+          />,
+        )}
       </ResultsWorkspaceShell>
     )
   }
 
-  const groupedLayers = groupSignalsByLayer(model.signalSummaries)
+  if (model.state === 'error') {
+    return (
+      <ResultsWorkspaceShell title="Individual Intelligence" subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure." statusLabel="Temporarily Unavailable">
+        {withDevelopmentDiagnostic(
+          model.state,
+          <ResultFailedStatePanel
+            title="Your latest report is not currently available"
+            description="Results are unavailable right now. Please refresh or try again shortly."
+          />,
+        )}
+      </ResultsWorkspaceShell>
+    )
+  }
+
+  if (model.state === 'unauthenticated') {
+    return null
+  }
 
   return (
-    <ResultsWorkspaceShell
-      title="Individual Intelligence"
-      subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure."
-      statusLabel="Persisted Result"
-    >
-      <section className="surface space-y-4 p-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <ResultStatusBadge status={model.resultStatus} />
-          <SignalChip tone="neutral">Assessment version: {model.versionKey ?? '—'}</SignalChip>
-          <SignalChip tone="neutral">Completed: {formatDateTime(model.completedAt)}</SignalChip>
-        </div>
-        <p className="text-sm leading-6 text-textSecondary">{buildSummary(model.signalSummaries)}</p>
-      </section>
-
-      <ResultsSectionBlock
-        title="Core profile summary"
-        description="Dominant patterns and execution implications based on persisted scored signals."
-      >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <InsightCard
-            title="How work is approached"
-            detail="The strongest ranked signals indicate where this individual is most likely to structure priorities, sequencing, and day-to-day execution behaviour."
-            compact
-          />
-          <InsightCard
-            title="Performance drivers"
-            detail="Relative share and normalised score reveal where motivation and focus are likely to stay strongest across sustained delivery cycles."
-            compact
-          />
-          <InsightCard
-            title="Pressure watchouts"
-            detail="Lower-ranked signals indicate where decision quality may flatten under ambiguity unless expectations and escalation paths are explicit."
-            compact
-          />
-        </div>
-      </ResultsSectionBlock>
-
-      <ResultsSectionBlock title="Layer breakdown" description="Per-layer signal ranking and relative contribution.">
-        <div className="space-y-5">
-          {groupedLayers.map((layer) => {
-            const meta = LAYER_COPY[layer.layerKey]
-            return (
-              <div key={layer.layerKey} className="rounded-2xl border border-border/70 bg-panel/60 p-4">
-                <h3 className="text-base font-semibold text-textPrimary">{meta?.title ?? titleCase(layer.layerKey)}</h3>
-                <p className="mt-1 text-sm text-textSecondary">{meta?.description ?? 'Layer-level behavioural signal summary.'}</p>
-                <div className="mt-4 space-y-3">
-                  {layer.items.map((signal) => (
-                    <SignalScoreRow
-                      key={signal.signalKey}
-                      label={titleCase(signal.signalKey)}
-                      normalisedScore={signal.normalisedScore}
-                      relativeShare={signal.relativeShare}
-                      rank={signal.rankInLayer}
-                      isPrimary={signal.isPrimary}
-                      isSecondary={signal.isSecondary}
-                    />
-                  ))}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </ResultsSectionBlock>
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <ResultsSectionBlock title="Signal ranking" description="Highest-to-lowest signal order across all measured layers.">
-          <SignalRankList
-            title="Ranked signals"
-            items={model.signalSummaries.map((signal) => ({
-              label: titleCase(signal.signalKey),
-              score: Math.round(signal.normalisedScore * 100),
-              note: `${titleCase(signal.layerKey)} • Share ${formatPercent(signal.relativeShare)}`,
-            }))}
-          />
-        </ResultsSectionBlock>
-
-        <ResultsSectionBlock title="Metadata" description="Persisted completion and scoring metadata.">
-          <ResultMetadataGrid
-            items={[
-              { label: 'Completion date', value: formatDateTime(model.completedAt) },
-              { label: 'Scored at', value: formatDateTime(model.summary?.scoredAt ?? null) },
-              { label: 'Version key', value: model.versionKey ?? '—' },
-              { label: 'Scoring model', value: model.summary?.scoringModelKey ?? '—' },
-              { label: 'Snapshot version', value: model.summary?.snapshotVersion.toString() ?? '—' },
-              { label: 'Result status', value: model.resultStatus },
-              {
-                label: 'Completion duration',
-                value:
-                  model.responseQuality?.completionDurationSeconds === null || model.responseQuality?.completionDurationSeconds === undefined
-                    ? '—'
-                    : `${model.responseQuality.completionDurationSeconds}s`,
-              },
-              { label: 'Response quality', value: model.responseQuality?.responseQualityStatus ?? '—' },
-            ]}
-          />
-        </ResultsSectionBlock>
-      </div>
-
-      <ResultsSectionBlock
-        title="Strategic interpretation"
-        description="Operational guidance to apply this profile effectively in team and delivery contexts."
-      >
-        <div className="grid gap-4 md:grid-cols-2">
-          <InsightCard
-            title="Communication"
-            detail="Use direct briefings with explicit trade-offs and deadlines. This profile usually responds best when expectations are concrete and observable."
-          />
-          <InsightCard
-            title="Decision-making"
-            detail="Assign clear decision rights and escalation thresholds. Signal concentration suggests higher consistency when authority boundaries are explicit."
-          />
-          <InsightCard
-            title="Team strengths"
-            detail="Deploy in roles where structured execution and measured judgement need to stabilise programmes with high coordination demand."
-          />
-          <InsightCard
-            title="Environment fit"
-            detail="Best fit is typically environments with transparent accountability, cadence-based reviews, and low ambiguity on ownership."
-          />
-        </div>
-      </ResultsSectionBlock>
+    <ResultsWorkspaceShell title="Individual Intelligence" subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure." statusLabel="Unexpected State">
+      {withDevelopmentDiagnostic(
+        model.state,
+        <ResultFailedStatePanel
+          title="Results are temporarily unavailable"
+          description="We could not interpret the latest results state. Please refresh and try again."
+        />,
+      )}
     </ResultsWorkspaceShell>
   )
 }
