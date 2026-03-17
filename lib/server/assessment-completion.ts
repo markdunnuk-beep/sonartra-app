@@ -13,6 +13,7 @@ import {
   SignalMappingInput,
 } from '@/lib/scoring/types';
 import { getLatestAssessmentResultSnapshot, persistFailedAssessmentResult, persistSuccessfulAssessmentResult } from '@/lib/server/assessment-results';
+import { logAssessmentDiagnostic } from '@/lib/server/assessment-diagnostics';
 
 interface CompletionCheckRow {
   id: string;
@@ -178,6 +179,13 @@ export async function completeAssessmentWithResults(
     );
 
     const responseCount = Number(responsesCountResult.rows[0]?.response_count ?? 0);
+
+    logAssessmentDiagnostic('assessment.complete.validation', {
+      assessmentId,
+      assessmentStatus: assessment.status,
+      expectedResponses: assessment.total_questions,
+      persistedResponseCount: responseCount,
+    });
 
     if (responseCount < assessment.total_questions) {
       return {

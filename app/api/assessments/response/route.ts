@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { SaveResponseRequest } from '@/lib/assessment-types';
 import { withTransaction } from '@/lib/db';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
+import { logAssessmentDiagnostic } from '@/lib/server/assessment-diagnostics';
 
 interface AssessmentProgressRow {
   id: string;
@@ -109,6 +110,26 @@ export async function POST(request: Request) {
 
       const progressCount = progressUpdate.rows[0]?.progress_count ?? assessment.total_questions;
       const progressPercent = Number(progressUpdate.rows[0]?.progress_percent ?? 100);
+
+
+      const persistedCountResult = await client.query<{ response_count: string }>(
+        `SELECT COUNT(*)::int AS response_count
+         FROM assessment_responses
+         WHERE assessment_id = $1`,
+        [body.assessmentId]
+      );
+
+      const persistedCount = Number(persistedCountResult.rows[0]?.response_count ?? 0);
+      logAssessmentDiagnostic('response.save', {
+        assessmentId: body.assessmentId,
+        appUserId: appUser.dbUserId,
+        questionId: body.questionId,
+        responseValue: body.responseValue,
+        wroteToDb: true,
+        persistedResponseCount: persistedCount,
+        progressCount,
+        progressPercent,
+      });
 
       return {
         status: 200 as const,

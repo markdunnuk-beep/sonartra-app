@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { AssessmentRow, AssessmentVersionRow } from '@/lib/assessment-types';
 import { queryDb } from '@/lib/db';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
+import { logAssessmentDiagnostic } from '@/lib/server/assessment-diagnostics';
 
 interface AssessmentResponseRow {
   question_id: number;
@@ -54,6 +55,14 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     ]);
 
     const version = versionResult.rows[0];
+
+    logAssessmentDiagnostic('assessment.read', {
+      assessmentId,
+      appUserId: appUser.dbUserId,
+      assessmentStatus: assessment.status,
+      assessmentProgressCount: assessment.progress_count,
+      persistedResponseCount: responsesResult.rowCount,
+    });
 
     return NextResponse.json({
       assessment,

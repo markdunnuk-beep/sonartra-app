@@ -1,5 +1,6 @@
 import { AssessmentRow, AssessmentVersionRow } from '@/lib/assessment-types';
 import { queryDb } from '@/lib/db';
+import { logAssessmentDiagnostic } from '@/lib/server/assessment-diagnostics';
 import {
   AssessmentQuestionSetRow,
   AssessmentQuestionsResponse,
@@ -215,6 +216,13 @@ export async function getQuestionsByAssessmentId(assessmentId: string): Promise<
       [assessmentId]
     ),
   ]);
+
+  logAssessmentDiagnostic('assessment.questions.hydration', {
+    assessmentId,
+    assessmentStatus: assessment.status,
+    assessmentProgressCount: assessment.progress_count,
+    persistedResponseCount: responsesResult.rowCount,
+  });
 
   return {
     assessment: {

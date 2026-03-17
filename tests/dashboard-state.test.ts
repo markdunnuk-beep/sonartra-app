@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { AssessmentRow } from '../lib/assessment-types'
-import { getAuthenticatedDashboardState } from '../lib/server/dashboard-state'
+import { getAuthenticatedDashboardState, selectDashboardAssessment } from '../lib/server/dashboard-state'
 import { IndividualIntelligenceResultContract } from '../lib/server/individual-intelligence-result'
 
 const inProgressAssessment: AssessmentRow = {
@@ -99,4 +99,14 @@ test('falls back to safe authenticated pre-results state when dashboard data res
   assert.equal(state.result, null)
   assert.equal(state.assessment.status, 'not_started')
   assert.equal(state.assessment.progressPercent, 0)
+})
+
+
+test('selectDashboardAssessment prioritises active in-progress attempt over newer completed attempts', () => {
+  const completed = { ...inProgressAssessment, id: 'assessment-complete', status: 'completed', progress_count: 80, progress_percent: '100' } as AssessmentRow
+  const active = { ...inProgressAssessment, id: 'assessment-active', status: 'in_progress', progress_count: 12, progress_percent: '15' } as AssessmentRow
+
+  const selected = selectDashboardAssessment([completed, active])
+
+  assert.equal(selected?.id, 'assessment-active')
 })
