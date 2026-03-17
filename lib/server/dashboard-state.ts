@@ -2,9 +2,15 @@ import { AssessmentRow } from '@/lib/assessment-types'
 import { queryDb } from '@/lib/db'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
 import { getAuthenticatedIndividualIntelligenceResult, IndividualIntelligenceResultContract } from '@/lib/server/individual-intelligence-result'
+import { derivePersistedAssessmentProgress } from '@/lib/server/assessment-progress'
 import { doesUserHaveCompletedResult } from '@/lib/server/navigation-state'
 
 type DashboardAssessmentStatus = 'not_started' | 'in_progress' | 'completed'
+
+interface DashboardAssessmentRow extends AssessmentRow {
+  total_questions: number
+  persisted_response_count: number
+}
 
 export interface DashboardAssessmentState {
   status: DashboardAssessmentStatus
@@ -23,7 +29,7 @@ export interface DashboardState {
 interface DashboardStateDependencies {
   resolveAuthenticatedUserId: () => Promise<string | null>
   hasCompletedResult: (dbUserId: string) => Promise<boolean>
-  getLatestAssessment: (dbUserId: string) => Promise<AssessmentRow | null>
+  getLatestAssessment: (dbUserId: string) => Promise<DashboardAssessmentRow | null>
   getResult: (dbUserId: string) => Promise<IndividualIntelligenceResultContract>
 }
 
@@ -41,14 +47,22 @@ const defaultDependencies: DashboardStateDependencies = {
   },
   hasCompletedResult: doesUserHaveCompletedResult,
   async getLatestAssessment(dbUserId) {
-    const result = await queryDb<AssessmentRow>(
-      `SELECT id, user_id, organisation_id, assessment_version_id, status, started_at, completed_at,
-              last_activity_at, progress_count, progress_percent, current_question_index, scoring_status,
-              source, metadata_json, created_at, updated_at
-       FROM assessments
-       WHERE user_id = $1
-         AND organisation_id IS NULL
-       ORDER BY updated_at DESC
+    const result = await queryDb<DashboardAssessmentRow>(
+      `SELECT a.id, a.user_id, a.organisation_id, a.assessment_version_id, a.status, a.started_at, a.completed_at,
+              a.last_activity_at, a.progress_count, a.progress_percent, a.current_question_index, a.scoring_status,
+              a.source, a.metadata_json, a.created_at, a.updated_at,
+              av.total_questions,
+              COALESCE(response_counts.response_count, 0) AS persisted_response_count
+       FROM assessments a
+       INNER JOIN assessment_versions av ON av.id = a.assessment_version_id
+       LEFT JOIN (
+         SELECT assessment_id, COUNT(*)::int AS response_count
+         FROM assessment_responses
+         GROUP BY assessment_id
+       ) response_counts ON response_counts.assessment_id = a.id
+       WHERE a.user_id = $1
+         AND a.organisation_id IS NULL
+       ORDER BY a.updated_at DESC
        LIMIT 1`,
       [dbUserId],
     )
@@ -62,22 +76,21 @@ const defaultDependencies: DashboardStateDependencies = {
   },
 }
 
-function mapAssessmentState(assessment: AssessmentRow | null): DashboardAssessmentState {
+function mapAssessmentState(assessment: DashboardAssessmentRow | null): DashboardAssessmentState {
   if (!assessment) {
     return fallbackAssessmentState
   }
 
-  const progressPercent = Number(assessment.progress_percent)
-  const completed = Number.isFinite(progressPercent) ? Math.max(0, Math.min(100, Math.round(progressPercent))) : 0
+  const persistedProgress = derivePersistedAssessmentProgress(assessment.persisted_response_count, assessment.total_questions)
+  const completed = Math.round(persistedProgress.progressPercent)
   const status: DashboardAssessmentStatus = assessment.status === 'completed' ? 'completed' : 'in_progress'
-  const questionsCompleted = Math.max(0, assessment.progress_count)
-  const totalEstimate = completed > 0 ? Math.max(questionsCompleted, Math.round(questionsCompleted / (completed / 100))) : null
+  const questionsCompleted = persistedProgress.progressCount
 
   return {
     status,
     progressPercent: completed,
     questionsCompleted,
-    questionsRemaining: totalEstimate !== null ? Math.max(0, totalEstimate - questionsCompleted) : null,
+    questionsRemaining: Math.max(0, assessment.total_questions - questionsCompleted),
   }
 }
 

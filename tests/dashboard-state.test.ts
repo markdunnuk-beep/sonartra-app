@@ -5,7 +5,7 @@ import { AssessmentRow } from '../lib/assessment-types'
 import { getAuthenticatedDashboardState } from '../lib/server/dashboard-state'
 import { IndividualIntelligenceResultContract } from '../lib/server/individual-intelligence-result'
 
-const inProgressAssessment: AssessmentRow = {
+const inProgressAssessment: AssessmentRow & { total_questions: number; persisted_response_count: number } = {
   id: 'assessment-1',
   user_id: 'user-1',
   organisation_id: null,
@@ -22,6 +22,8 @@ const inProgressAssessment: AssessmentRow = {
   metadata_json: null,
   created_at: '2026-01-01T10:00:00.000Z',
   updated_at: '2026-01-01T10:05:00.000Z',
+  total_questions: 80,
+  persisted_response_count: 24,
 }
 
 const completeResult: IndividualIntelligenceResultContract = {
@@ -99,4 +101,24 @@ test('falls back to safe authenticated pre-results state when dashboard data res
   assert.equal(state.result, null)
   assert.equal(state.assessment.status, 'not_started')
   assert.equal(state.assessment.progressPercent, 0)
+})
+
+
+test('dashboard progress is sourced from persisted responses over stale assessment progress columns', async () => {
+  const state = await getAuthenticatedDashboardState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    hasCompletedResult: async () => false,
+    getLatestAssessment: async () => ({
+      ...inProgressAssessment,
+      progress_count: 79,
+      progress_percent: '98.75',
+      persisted_response_count: 80,
+      total_questions: 80,
+    }),
+    getResult: async () => completeResult,
+  })
+
+  assert.equal(state.assessment.progressPercent, 100)
+  assert.equal(state.assessment.questionsCompleted, 80)
+  assert.equal(state.assessment.questionsRemaining, 0)
 })

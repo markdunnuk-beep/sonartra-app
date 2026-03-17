@@ -6,6 +6,7 @@ import {
   QuestionPayload,
   VersionQuestionsResponse,
 } from '@/lib/question-bank-types';
+import { derivePersistedAssessmentProgress } from '@/lib/server/assessment-progress';
 
 interface QuestionWithOptionRow {
   question_number: number;
@@ -216,12 +217,17 @@ export async function getQuestionsByAssessmentId(assessmentId: string): Promise<
     ),
   ]);
 
+  const persistedProgress = derivePersistedAssessmentProgress(
+    responsesResult.rows.length,
+    version.total_questions,
+  );
+
   return {
     assessment: {
       id: assessment.id,
       status: assessment.status,
-      progressCount: assessment.progress_count,
-      progressPercent: Number(assessment.progress_percent),
+      progressCount: persistedProgress.progressCount,
+      progressPercent: persistedProgress.progressPercent,
       currentQuestionIndex: assessment.current_question_index,
     },
     version: {

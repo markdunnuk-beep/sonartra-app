@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { AssessmentRow, AssessmentVersionRow } from '@/lib/assessment-types';
 import { queryDb } from '@/lib/db';
+import { derivePersistedAssessmentProgress } from '@/lib/server/assessment-progress';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 
 interface AssessmentResponseRow {
@@ -55,6 +56,11 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 
     const version = versionResult.rows[0];
 
+    const persistedProgress = derivePersistedAssessmentProgress(
+      responsesResult.rows.length,
+      version?.total_questions ?? assessment.progress_count,
+    );
+
     return NextResponse.json({
       assessment,
       version: version
@@ -68,8 +74,8 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
         : null,
       responses: responsesResult.rows,
       progress: {
-        count: assessment.progress_count,
-        percent: Number(assessment.progress_percent),
+        count: persistedProgress.progressCount,
+        percent: persistedProgress.progressPercent,
         currentQuestionIndex: assessment.current_question_index,
       },
     });
