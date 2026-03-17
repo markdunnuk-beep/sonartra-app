@@ -66,6 +66,12 @@ test('creates deterministic interpretation blocks from ready-result layers and r
   assert.match(interpretation.layerInterpretations[0].summary, /Core Driver/)
   assert.match(interpretation.layerInterpretations[0].summary, /Core Analyst/)
   assert.equal(interpretation.managerNotes.title, 'Manager notes')
+  assert.equal(interpretation.performanceProfile.title, 'Performance profile')
+  assert.equal(interpretation.bestFit.title, 'Where this person is likely to be most effective')
+  assert.equal(interpretation.leveragePoints.title, 'Leverage points')
+  assert.equal(interpretation.pressureWatchouts.title, 'Watchouts under pressure')
+  assert.equal(interpretation.teamDynamics.title, 'Team dynamics')
+  assert.equal(interpretation.managerPlaybook.title, 'Manager playbook')
 })
 
 test('different signal patterns produce different mapped interpretations', () => {
@@ -132,6 +138,16 @@ test('omits interpretation block when a layer has no usable signal data', () => 
   assert.equal(interpretation.layerInterpretations.length, 0)
 })
 
+
+
+test('uses first name when provided and neutral fallback when unavailable', () => {
+  const named = buildIndividualResultInterpretation(makeReadyData(), { firstName: 'Mark' })
+  const fallback = buildIndividualResultInterpretation(makeReadyData(), { firstName: null, fullName: null })
+
+  assert.match(named.performanceProfile.summary, /Mark tends to operate/)
+  assert.match(fallback.performanceProfile.summary, /This individual tends to operate/)
+})
+
 test('does not emit banned placeholder or demo language', () => {
   const interpretation = buildIndividualResultInterpretation(makeReadyData())
   const flattened = JSON.stringify(interpretation)
@@ -139,4 +155,6 @@ test('does not emit banned placeholder or demo language', () => {
   assert.doesNotMatch(flattened, /coming soon/i)
   assert.doesNotMatch(flattened, /demo/i)
   assert.doesNotMatch(flattened, /unlock your true potential/i)
+  assert.doesNotMatch(flattened, /born leader/i)
+  assert.doesNotMatch(flattened, /thrive in any environment/i)
 })

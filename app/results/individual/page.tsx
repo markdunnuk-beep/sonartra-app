@@ -2,6 +2,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { IndividualIntelligenceResultView } from '@/components/results/IndividualIntelligenceResultView'
 import { getLatestIndividualResultForUser, IndividualResultApiResponse } from '@/lib/server/individual-results'
 import { redirect } from 'next/navigation'
+import { currentUser } from '@clerk/nextjs/server'
 
 function normaliseStatePayload(model: IndividualResultApiResponse): IndividualResultApiResponse | { state: string; message?: string } {
   const knownStates = new Set(['unauthenticated', 'empty', 'incomplete', 'ready', 'error'])
@@ -19,10 +20,12 @@ export default async function IndividualResultsPage() {
     redirect('/sign-in')
   }
 
+  const user = await currentUser()
+
   return (
     <AppShell>
       <div className="pt-4 sm:pt-6">
-        <IndividualIntelligenceResultView model={model} />
+        <IndividualIntelligenceResultView model={model} firstName={user?.firstName ?? null} />
       </div>
     </AppShell>
   )
