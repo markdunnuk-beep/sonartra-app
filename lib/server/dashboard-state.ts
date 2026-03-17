@@ -1,8 +1,8 @@
 import { AssessmentRow } from '@/lib/assessment-types'
 import { queryDb } from '@/lib/db'
-import { doesUserHaveCompletedResult } from '@/lib/server/navigation-state'
-import { getAuthenticatedIndividualIntelligenceResult, IndividualIntelligenceResultContract } from '@/lib/server/individual-intelligence-result'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
+import { getAuthenticatedIndividualIntelligenceResult, IndividualIntelligenceResultContract } from '@/lib/server/individual-intelligence-result'
+import { doesUserHaveCompletedResult } from '@/lib/server/navigation-state'
 
 type DashboardAssessmentStatus = 'not_started' | 'in_progress' | 'completed'
 
@@ -25,6 +25,13 @@ interface DashboardStateDependencies {
   hasCompletedResult: (dbUserId: string) => Promise<boolean>
   getLatestAssessment: (dbUserId: string) => Promise<AssessmentRow | null>
   getResult: (dbUserId: string) => Promise<IndividualIntelligenceResultContract>
+}
+
+const fallbackAssessmentState: DashboardAssessmentState = {
+  status: 'not_started',
+  progressPercent: 0,
+  questionsCompleted: 0,
+  questionsRemaining: null,
 }
 
 const defaultDependencies: DashboardStateDependencies = {
@@ -57,12 +64,7 @@ const defaultDependencies: DashboardStateDependencies = {
 
 function mapAssessmentState(assessment: AssessmentRow | null): DashboardAssessmentState {
   if (!assessment) {
-    return {
-      status: 'not_started',
-      progressPercent: 0,
-      questionsCompleted: 0,
-      questionsRemaining: null,
-    }
+    return fallbackAssessmentState
   }
 
   const progressPercent = Number(assessment.progress_percent)
@@ -87,30 +89,40 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
     return {
       authStatus: 'unauthenticated',
       hasCompletedResult: false,
-      assessment: mapAssessmentState(null),
+      assessment: fallbackAssessmentState,
       result: null,
     }
   }
 
-  const [assessment, navHasCompletedResult] = await Promise.all([deps.getLatestAssessment(userId), deps.hasCompletedResult(userId)])
+  try {
+    const [assessment, navHasCompletedResult] = await Promise.all([deps.getLatestAssessment(userId), deps.hasCompletedResult(userId)])
 
-  if (!navHasCompletedResult) {
+    if (!navHasCompletedResult) {
+      return {
+        authStatus: 'authenticated',
+        hasCompletedResult: false,
+        assessment: mapAssessmentState(assessment),
+        result: null,
+      }
+    }
+
+    const result = await deps.getResult(userId)
+    const canShowResult = result.resultStatus === 'complete' && result.hasResult
+
+    return {
+      authStatus: 'authenticated',
+      hasCompletedResult: canShowResult,
+      assessment: mapAssessmentState(assessment),
+      result: canShowResult ? result : null,
+    }
+  } catch (error) {
+    console.error('getAuthenticatedDashboardState failed, returning safe fallback:', error)
+
     return {
       authStatus: 'authenticated',
       hasCompletedResult: false,
-      assessment: mapAssessmentState(assessment),
+      assessment: fallbackAssessmentState,
       result: null,
     }
   }
-
-  const result = await deps.getResult(userId)
-  const canShowResult = result.resultStatus === 'complete' && result.hasResult
-
-  return {
-    authStatus: 'authenticated',
-    hasCompletedResult: canShowResult,
-    assessment: mapAssessmentState(assessment),
-    result: canShowResult ? result : null,
-  }
 }
-

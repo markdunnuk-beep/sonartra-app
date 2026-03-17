@@ -84,3 +84,19 @@ test('failed or missing persisted result stays gated even when nav check reports
   assert.equal(state.hasCompletedResult, false)
   assert.equal(state.result, null)
 })
+
+
+test('falls back to safe authenticated pre-results state when dashboard data resolution throws', async () => {
+  const state = await getAuthenticatedDashboardState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessment: async () => {
+      throw new Error('db unavailable')
+    },
+  })
+
+  assert.equal(state.authStatus, 'authenticated')
+  assert.equal(state.hasCompletedResult, false)
+  assert.equal(state.result, null)
+  assert.equal(state.assessment.status, 'not_started')
+  assert.equal(state.assessment.progressPercent, 0)
+})
