@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { getAssessmentResultReadModel } from '@/lib/server/assessment-result-read';
 
-export async function getAssessmentResultRouteResponse(assessmentId: string) {
+async function resolveAssessmentResultRouteResponse(assessmentId: string) {
   const result = await getAssessmentResultReadModel(assessmentId);
 
   if (result.kind === 'not_found') {
@@ -24,7 +24,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
       return NextResponse.json({ error: 'assessmentId is required.' }, { status: 400 });
     }
 
-    const response = await getAssessmentResultRouteResponse(params.id);
+    const response = await resolveAssessmentResultRouteResponse(params.id);
     return NextResponse.json(response.body, { status: response.status });
   } catch (error) {
     console.error('GET /api/assessments/[id]/result failed:', error);

@@ -1,18 +1,26 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getAssessmentResultRouteResponse } from '../app/api/assessments/[id]/result/route';
+import { GET } from '../app/api/assessments/[id]/result/route';
 
-test('route helper returns 404 when assessment does not exist', async (t) => {
+async function callRoute(id: string) {
+  const response = await GET(new Request('http://localhost/api/assessments/result'), { params: { id } });
+  return {
+    status: response.status,
+    body: (await response.json()) as Record<string, unknown>,
+  };
+}
+
+test('route returns 404 when assessment does not exist', async (t) => {
   t.mock.method(await import('../lib/server/assessment-result-read'), 'getAssessmentResultReadModel', async () => ({ kind: 'not_found' as const }));
 
-  const response = await getAssessmentResultRouteResponse('missing-assessment');
+  const response = await callRoute('missing-assessment');
 
   assert.equal(response.status, 404);
-  assert.equal((response.body as { error: string }).error, 'Assessment not found.');
+  assert.equal(response.body.error, 'Assessment not found.');
 });
 
-test('route helper returns 200 with unavailable when assessment is incomplete', async (t) => {
+test('route returns 200 with unavailable when assessment is incomplete', async (t) => {
   t.mock.method(await import('../lib/server/assessment-result-read'), 'getAssessmentResultReadModel', async () => ({
     kind: 'ok' as const,
     body: {
@@ -28,12 +36,12 @@ test('route helper returns 200 with unavailable when assessment is incomplete', 
     },
   }));
 
-  const response = await getAssessmentResultRouteResponse('assessment-1');
+  const response = await callRoute('assessment-1');
   assert.equal(response.status, 200);
-  assert.equal((response.body as { result: { availability: string } }).result.availability, 'unavailable');
+  assert.equal((response.body.result as { availability: string }).availability, 'unavailable');
 });
 
-test('route helper returns 200 for persisted success result', async (t) => {
+test('route returns 200 for persisted success result', async (t) => {
   t.mock.method(await import('../lib/server/assessment-result-read'), 'getAssessmentResultReadModel', async () => ({
     kind: 'ok' as const,
     body: {
@@ -60,12 +68,12 @@ test('route helper returns 200 for persisted success result', async (t) => {
     },
   }));
 
-  const response = await getAssessmentResultRouteResponse('assessment-1');
+  const response = await callRoute('assessment-1');
   assert.equal(response.status, 200);
-  assert.equal((response.body as { result: { availability: string } }).result.availability, 'available');
+  assert.equal((response.body.result as { availability: string }).availability, 'available');
 });
 
-test('route helper returns 200 for persisted failed result', async (t) => {
+test('route returns 200 for persisted failed result', async (t) => {
   t.mock.method(await import('../lib/server/assessment-result-read'), 'getAssessmentResultReadModel', async () => ({
     kind: 'ok' as const,
     body: {
@@ -91,12 +99,12 @@ test('route helper returns 200 for persisted failed result', async (t) => {
     },
   }));
 
-  const response = await getAssessmentResultRouteResponse('assessment-1');
+  const response = await callRoute('assessment-1');
   assert.equal(response.status, 200);
-  assert.equal((response.body as { result: { availability: string; status: string } }).result.status, 'failed');
+  assert.equal((response.body.result as { availability: string; status: string }).status, 'failed');
 });
 
-test('route helper returns 200 when completed assessment has no result snapshot', async (t) => {
+test('route returns 200 when completed assessment has no result snapshot', async (t) => {
   t.mock.method(await import('../lib/server/assessment-result-read'), 'getAssessmentResultReadModel', async () => ({
     kind: 'ok' as const,
     body: {
@@ -112,7 +120,7 @@ test('route helper returns 200 when completed assessment has no result snapshot'
     },
   }));
 
-  const response = await getAssessmentResultRouteResponse('assessment-1');
+  const response = await callRoute('assessment-1');
   assert.equal(response.status, 200);
-  assert.equal((response.body as { result: { reason: string } }).result.reason, 'result_missing');
+  assert.equal((response.body.result as { reason: string }).reason, 'result_missing');
 });
