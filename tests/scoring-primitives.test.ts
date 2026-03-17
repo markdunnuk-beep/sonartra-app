@@ -6,7 +6,7 @@ import { scoreAssessment } from '../lib/scoring/engine';
 import { calculateNormalisedScore, calculateRelativeShare } from '../lib/scoring/normalisers';
 import { buildResultSnapshotPayload } from '../lib/scoring/snapshot';
 import { ScoringEngineInput } from '../lib/scoring/types';
-import { createAssessmentResultSnapshot } from '../lib/server/assessment-results';
+import { createAssessmentResultSnapshot, persistFailedAssessmentResult } from '../lib/server/assessment-results';
 
 const baseInput: ScoringEngineInput = {
   assessmentId: 'assessment-1',
@@ -112,5 +112,48 @@ test('persistence helper inserts parent and signal payload rows', async () => {
   );
 
   assert.equal(result.assessmentResultId, 'result-1');
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 4);
+});
+
+test('failed persistence helper upserts failed row and clears stale child signals', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const mockClient = {
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+
+      if (sql.includes('FROM assessment_results') && sql.includes('FOR UPDATE')) {
+        return { rows: [{ id: 'result-existing', status: 'complete' }] };
+      }
+
+      if (sql.includes('UPDATE assessment_results')) {
+        return { rows: [{ id: 'result-existing', status: 'failed' }] };
+      }
+
+      return { rows: [] };
+    },
+  };
+
+  const result = await persistFailedAssessmentResult(
+    {
+      assessmentId: baseInput.assessmentId,
+      assessmentVersionId: baseInput.assessmentVersionId,
+      versionKey: baseInput.versionKey,
+      scoringModelKey: baseInput.scoringModelKey,
+      snapshotVersion: 1,
+      completedAt: baseInput.completedAt,
+      scoredAt: null,
+      failure: {
+        stage: 'completion_orchestration',
+        category: 'runtime_error',
+        code: 'RESULT_GENERATION_FAILED',
+        message: 'Scoring failed.',
+        occurredAt: '2026-01-01T10:06:00.000Z',
+        assessmentVersionKey: baseInput.versionKey,
+      },
+    },
+    mockClient as never
+  );
+
+  assert.equal(result.assessmentResultId, 'result-existing');
+  assert.equal(calls.length, 3);
 });
