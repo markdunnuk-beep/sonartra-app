@@ -3,6 +3,7 @@ import { queryDb } from '@/lib/db'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
 import { getAuthenticatedIndividualIntelligenceResult, IndividualIntelligenceResultContract } from '@/lib/server/individual-intelligence-result'
 import { doesUserHaveCompletedResult } from '@/lib/server/navigation-state'
+import { logAssessmentDiagnostic } from '@/lib/server/assessment-diagnostics'
 
 type DashboardAssessmentStatus = 'not_started' | 'in_progress' | 'completed'
 
@@ -27,6 +28,13 @@ interface DashboardStateDependencies {
   getResult: (dbUserId: string) => Promise<IndividualIntelligenceResultContract>
 }
 
+export function selectDashboardAssessment(assessments: AssessmentRow[]): AssessmentRow | null {
+  if (assessments.length === 0) return null
+
+  const inProgress = assessments.find((assessment) => assessment.status === 'not_started' || assessment.status === 'in_progress')
+  return inProgress ?? assessments[0] ?? null
+}
+
 const fallbackAssessmentState: DashboardAssessmentState = {
   status: 'not_started',
   progressPercent: 0,
@@ -48,12 +56,12 @@ const defaultDependencies: DashboardStateDependencies = {
        FROM assessments
        WHERE user_id = $1
          AND organisation_id IS NULL
-       ORDER BY updated_at DESC
-       LIMIT 1`,
+       ORDER BY last_activity_at DESC NULLS LAST, updated_at DESC, created_at DESC
+       LIMIT 20`,
       [dbUserId],
     )
 
-    return result.rows[0] ?? null
+    return selectDashboardAssessment(result.rows)
   },
   async getResult(dbUserId) {
     return getAuthenticatedIndividualIntelligenceResult({
@@ -96,6 +104,31 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
 
   try {
     const [assessment, navHasCompletedResult] = await Promise.all([deps.getLatestAssessment(userId), deps.hasCompletedResult(userId)])
+
+    if (assessment) {
+      const persistedCountResult = await queryDb<{ response_count: string }>(
+        `SELECT COUNT(*)::int AS response_count
+         FROM assessment_responses
+         WHERE assessment_id = $1`,
+        [assessment.id],
+      )
+      const persistedResponseCount = Number(persistedCountResult.rows[0]?.response_count ?? 0)
+      logAssessmentDiagnostic('dashboard.load', {
+        assessmentId: assessment.id,
+        appUserId: userId,
+        assessmentStatus: assessment.status,
+        assessmentProgressCount: assessment.progress_count,
+        persistedResponseCount,
+      })
+    } else {
+      logAssessmentDiagnostic('dashboard.load', {
+        assessmentId: null,
+        appUserId: userId,
+        assessmentStatus: 'none',
+        assessmentProgressCount: 0,
+        persistedResponseCount: 0,
+      })
+    }
 
     if (!navHasCompletedResult) {
       return {

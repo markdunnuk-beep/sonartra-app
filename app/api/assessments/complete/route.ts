@@ -4,6 +4,7 @@ import { CompleteAssessmentRequest } from '@/lib/assessment-types';
 import { queryDb } from '@/lib/db';
 import { completeAssessmentWithResults } from '@/lib/server/assessment-completion';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
+import { logAssessmentDiagnostic } from '@/lib/server/assessment-diagnostics';
 
 export async function POST(request: Request) {
   try {
@@ -27,8 +28,11 @@ export async function POST(request: Request) {
     );
 
     if (!ownership.rows[0]) {
+      logAssessmentDiagnostic('assessment.complete.request', { assessmentId: body.assessmentId, appUserId: appUser.dbUserId, ownsAssessment: false });
       return NextResponse.json({ ok: false, error: 'Assessment not found.' }, { status: 404 });
     }
+
+    logAssessmentDiagnostic('assessment.complete.request', { assessmentId: body.assessmentId, appUserId: appUser.dbUserId, ownsAssessment: true });
 
     const result = await completeAssessmentWithResults(body.assessmentId);
 
