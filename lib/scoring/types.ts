@@ -2,6 +2,8 @@ import {
   ASSESSMENT_LAYER_KEYS,
   RESPONSE_QUALITY_FLAGS,
   RESPONSE_QUALITY_STATUSES,
+  RESULT_FAILURE_STAGES,
+  RESULT_STATUSES,
   WPLP80_SCORING_MODEL_KEY,
   WPLP80_SIGNAL_KEYS,
 } from '@/lib/scoring/constants';
@@ -12,6 +14,8 @@ export type Wplp80SignalKey = (typeof WPLP80_SIGNAL_KEYS)[number];
 
 export type ResponseQualityStatus = (typeof RESPONSE_QUALITY_STATUSES)[number];
 export type ResponseQualityFlag = (typeof RESPONSE_QUALITY_FLAGS)[number];
+export type ResultStatus = (typeof RESULT_STATUSES)[number];
+export type ResultFailureStage = (typeof RESULT_FAILURE_STAGES)[number];
 
 export interface AssessmentResponseInput {
   questionId: number;
@@ -95,10 +99,36 @@ export interface PersistAssessmentResultInput {
   versionKey: string;
   scoringModelKey: ScoringModelKey;
   snapshotVersion: number;
-  status: 'pending' | 'complete' | 'failed';
+  status: ResultStatus;
   resultPayload: AssessmentResultSnapshotPayload | null;
   responseQualityPayload: ResponseQualityMetadata | null;
   completedAt: string | null;
   scoredAt: string | null;
   signalRows: SignalScoreResult[];
+}
+
+export interface ResultFailureMetadata {
+  stage: ResultFailureStage;
+  category: 'runtime_error' | 'validation_error' | 'persistence_error';
+  code: string;
+  message: string;
+  occurredAt: string;
+  assessmentVersionKey: string;
+}
+
+export interface FailedAssessmentResultPayload {
+  failure: ResultFailureMetadata;
+}
+
+export type PersistSuccessfulAssessmentResultInput = Omit<PersistAssessmentResultInput, 'status'>;
+
+export interface PersistFailedAssessmentResultInput {
+  assessmentId: string;
+  assessmentVersionId: string;
+  versionKey: string;
+  scoringModelKey: ScoringModelKey;
+  snapshotVersion: number;
+  completedAt: string | null;
+  scoredAt: string | null;
+  failure: ResultFailureMetadata;
 }

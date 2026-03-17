@@ -18,6 +18,16 @@ export const RESPONSE_QUALITY_FLAGS = [
   'high_rapid_response_count',
 ] as const;
 
+export const RESULT_STATUSES = ['pending', 'complete', 'failed'] as const;
+
+export const RESULT_FAILURE_STAGES = [
+  'scoring_engine',
+  'snapshot_build',
+  'result_persist',
+  'signal_persist',
+  'completion_orchestration',
+] as const;
+
 export const WPLP80_SIGNAL_KEYS = [
   'Conflict_Accommodate',
   'Conflict_Avoid',
