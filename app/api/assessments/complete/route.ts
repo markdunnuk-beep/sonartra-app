@@ -4,6 +4,7 @@ import { CompleteAssessmentRequest } from '@/lib/assessment-types';
 import { queryDb } from '@/lib/db';
 import { completeAssessmentWithResults } from '@/lib/server/assessment-completion';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
+import { traceAssessmentFlow } from '@/lib/assessment-flow-trace';
 
 export async function POST(request: Request) {
   try {
@@ -14,6 +15,11 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as Partial<CompleteAssessmentRequest>;
+
+    traceAssessmentFlow('api.complete.request', {
+      userId: appUser.dbUserId,
+      assessmentId: body.assessmentId ?? null,
+    });
 
     if (!body.assessmentId) {
       return NextResponse.json({ error: 'assessmentId is required.' }, { status: 400 });

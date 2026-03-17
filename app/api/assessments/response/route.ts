@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { SaveResponseRequest } from '@/lib/assessment-types';
 import { withTransaction } from '@/lib/db';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
+import { traceAssessmentFlow } from '@/lib/assessment-flow-trace';
 
 interface AssessmentProgressRow {
   id: string;
@@ -20,6 +21,12 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as Partial<SaveResponseRequest>;
+
+    traceAssessmentFlow('api.response.request', {
+      userId: appUser.dbUserId,
+      assessmentId: body.assessmentId ?? null,
+      questionId: body.questionId ?? null,
+    });
 
     if (!body.assessmentId) {
       return NextResponse.json({ error: 'assessmentId is required.' }, { status: 400 });
@@ -108,6 +115,12 @@ export async function POST(request: Request) {
       );
 
       const progressCount = progressUpdate.rows[0]?.progress_count ?? assessment.total_questions;
+      traceAssessmentFlow('api.response.persisted', {
+        userId: appUser.dbUserId,
+        assessmentId: body.assessmentId!,
+        questionId: body.questionId!,
+        progressCount,
+      });
       const progressPercent = Number(progressUpdate.rows[0]?.progress_percent ?? 100);
 
       return {
