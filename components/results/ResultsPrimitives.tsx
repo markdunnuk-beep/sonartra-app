@@ -522,8 +522,8 @@ export function SignalChip({ children, tone = 'neutral' }: { children: ReactNode
   )
 }
 
-export function ResultStatusBadge({ status }: { status: 'complete' | 'failed' | 'empty' | 'unauthenticated' }) {
-  const tone = status === 'complete' ? 'accent' : 'neutral'
+export function ResultStatusBadge({ status }: { status: 'ready' | 'incomplete' | 'empty' | 'unauthenticated' | 'error' }) {
+  const tone = status === 'ready' ? 'accent' : 'neutral'
   return <SignalChip tone={tone}>Status: {status}</SignalChip>
 }
 
