@@ -1,6 +1,7 @@
 import { PoolClient } from 'pg';
 
 import { queryDb, withTransaction } from '@/lib/db';
+import { AssessmentResultRow as AssessmentResultSnapshotRow, AssessmentResultSignalRow } from '@/lib/assessment-types';
 import {
   FailedAssessmentResultPayload,
   PersistAssessmentResultInput,
@@ -9,7 +10,7 @@ import {
   ResultStatus,
 } from '@/lib/scoring/types';
 
-interface AssessmentResultRow {
+interface AssessmentResultIdRow {
   id: string;
   status: ResultStatus;
 }
@@ -29,7 +30,7 @@ async function upsertAssessmentResultParent(
   },
   dbClient: PoolClient
 ) {
-  const existing = await dbClient.query<AssessmentResultRow>(
+  const existing = await dbClient.query<AssessmentResultIdRow>(
     `SELECT id, status
      FROM assessment_results
      WHERE assessment_id = $1 AND snapshot_version = $2
@@ -42,7 +43,7 @@ async function upsertAssessmentResultParent(
   const existingRow = existing.rows[0];
 
   if (existingRow) {
-    const update = await dbClient.query<AssessmentResultRow>(
+    const update = await dbClient.query<AssessmentResultIdRow>(
       `UPDATE assessment_results
        SET
          assessment_version_id = $2,
@@ -72,7 +73,7 @@ async function upsertAssessmentResultParent(
     return update.rows[0];
   }
 
-  const inserted = await dbClient.query<AssessmentResultRow>(
+  const inserted = await dbClient.query<AssessmentResultIdRow>(
     `INSERT INTO assessment_results (
        assessment_id,
        assessment_version_id,
@@ -236,12 +237,51 @@ export async function getLatestAssessmentResultSnapshot(assessmentId: string, cl
                  LIMIT 1`;
 
   if (dbClient) {
-    const result = await dbClient.query<AssessmentResultRow>(query, [assessmentId]);
+    const result = await dbClient.query<AssessmentResultIdRow>(query, [assessmentId]);
     return result.rows[0] ?? null;
   }
 
-  const result = await queryDb<AssessmentResultRow>(query, [assessmentId]);
+  const result = await queryDb<AssessmentResultIdRow>(query, [assessmentId]);
   return result.rows[0] ?? null;
+}
+
+export async function getAssessmentResultByAssessmentId(
+  assessmentId: string,
+  client?: PoolClient
+): Promise<AssessmentResultSnapshotRow | null> {
+  const query = `SELECT id, assessment_id, assessment_version_id, version_key, scoring_model_key, snapshot_version, status,
+                        result_payload, response_quality_payload, completed_at, scored_at, created_at, updated_at
+                 FROM assessment_results
+                 WHERE assessment_id = $1
+                 ORDER BY created_at DESC
+                 LIMIT 1`;
+
+  if (client) {
+    const result = await client.query<AssessmentResultSnapshotRow>(query, [assessmentId]);
+    return result.rows[0] ?? null;
+  }
+
+  const result = await queryDb<AssessmentResultSnapshotRow>(query, [assessmentId]);
+  return result.rows[0] ?? null;
+}
+
+export async function getAssessmentResultSignalsByResultId(
+  assessmentResultId: string,
+  client?: PoolClient
+): Promise<AssessmentResultSignalRow[]> {
+  const query = `SELECT id, assessment_result_id, layer_key, signal_key, raw_total, max_possible,
+                        normalised_score, relative_share, rank_in_layer, is_primary, is_secondary,
+                        percentile_placeholder, confidence_flag, created_at
+                 FROM assessment_result_signals
+                 WHERE assessment_result_id = $1`;
+
+  if (client) {
+    const result = await client.query<AssessmentResultSignalRow>(query, [assessmentResultId]);
+    return result.rows;
+  }
+
+  const result = await queryDb<AssessmentResultSignalRow>(query, [assessmentResultId]);
+  return result.rows;
 }
 
 export async function getAssessmentResultSnapshotsByAssessmentId(assessmentId: string) {
