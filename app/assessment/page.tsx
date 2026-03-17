@@ -13,6 +13,7 @@ import { isFinalQuestionIndex, shouldClearReviewModeOnAnswer } from '@/lib/asses
 import { deriveAssessmentSessionState, getResumeQuestionIndex } from '@/lib/assessment-session'
 import { deriveAssessmentEntryPhase } from '@/lib/assessment-entry-state'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 
 const ACTIVE_ASSESSMENT_STORAGE_KEY = 'sonartra_active_assessment_id'
 const ASSESSMENT_VERSION_KEY = 'wplp80-v1'
@@ -71,6 +72,7 @@ export default function AssessmentPage() {
   const [assessmentError, setAssessmentError] = useState<string | null>(null)
   const [saveWarning, setSaveWarning] = useState<string | null>(null)
   const [reviewMode, setReviewMode] = useState(false)
+  const searchParams = useSearchParams()
 
   const questionShownAtRef = useRef<number>(Date.now())
   const saveSequenceRef = useRef<Record<number, number>>({})
@@ -113,6 +115,11 @@ export default function AssessmentPage() {
     console.info(`[assessment-perf] ${label}`, meta ?? {})
   }
 
+  const logAssessmentIdentity = (flow: string, id: string, meta?: Record<string, number | string | boolean>) => {
+    if (process.env.NODE_ENV === 'production') return
+    console.info('[assessment-id-check] player', { flow, assessmentId: id, ...(meta ?? {}) })
+  }
+
   const saveResponseInBackground = (questionNumber: number, responseValue: number, responseTimeMs: number) => {
     if (!assessmentId) return
 
@@ -124,6 +131,7 @@ export default function AssessmentPage() {
 
     const savePromise = (async () => {
       try {
+        logAssessmentIdentity('save-response', assessmentId, { questionNumber })
         const saveResponse = await fetch('/api/assessments/response', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -203,16 +211,20 @@ export default function AssessmentPage() {
     setAssessmentError(null)
 
     try {
+      const queryAssessmentId = searchParams.get('assessmentId')
       const storedAssessmentId = window.localStorage.getItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
+      const candidateAssessmentId = queryAssessmentId ?? storedAssessmentId
 
-      if (storedAssessmentId) {
+      if (candidateAssessmentId) {
         try {
-          setAssessmentId(storedAssessmentId)
-          await fetchAssessmentQuestions(storedAssessmentId, 'resume')
+          setAssessmentId(candidateAssessmentId)
+          window.localStorage.setItem(ACTIVE_ASSESSMENT_STORAGE_KEY, candidateAssessmentId)
+          logAssessmentIdentity(queryAssessmentId ? 'resume-from-query' : 'resume-from-storage', candidateAssessmentId)
+          await fetchAssessmentQuestions(candidateAssessmentId, 'resume')
           return
         } catch (resumeError) {
           console.error('[assessment] resume failed, falling back to new start', {
-            storedAssessmentId,
+            candidateAssessmentId,
             error: resumeError,
           })
           window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
@@ -241,6 +253,7 @@ export default function AssessmentPage() {
       }
 
       setAssessmentId(startData.assessmentId)
+      logAssessmentIdentity('start-success', startData.assessmentId, { resumed: false })
       window.localStorage.setItem(ACTIVE_ASSESSMENT_STORAGE_KEY, startData.assessmentId)
       await fetchAssessmentQuestions(startData.assessmentId, 'start')
     } catch (startFailure) {
@@ -327,6 +340,7 @@ export default function AssessmentPage() {
         await Promise.allSettled([...pendingSavesRef.current.values()])
       }
 
+      logAssessmentIdentity('complete-request', assessmentId, { answeredCount })
       const response = await fetch('/api/assessments/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

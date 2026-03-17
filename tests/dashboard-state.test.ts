@@ -49,13 +49,14 @@ test('no completed result keeps dashboard in progress mode and aligned with navi
   const state = await getAuthenticatedDashboardState({
     resolveAuthenticatedUserId: async () => 'user-1',
     hasCompletedResult: async () => false,
-    getLatestAssessment: async () => inProgressAssessment,
+    getActiveAssessment: async () => inProgressAssessment,
     getResult: async () => completeResult,
   })
 
   assert.equal(state.hasCompletedResult, false)
   assert.equal(state.result, null)
   assert.equal(state.assessment.status, 'in_progress')
+  assert.equal(state.assessment.assessmentId, 'assessment-1')
   assert.equal(state.assessment.progressPercent, 30)
   assert.equal(state.assessment.questionsCompleted, 24)
   assert.equal(state.assessment.questionsRemaining, 56)
@@ -65,7 +66,7 @@ test('completed-result gate allows dashboard intelligence rendering only with pe
   const state = await getAuthenticatedDashboardState({
     resolveAuthenticatedUserId: async () => 'user-1',
     hasCompletedResult: async () => true,
-    getLatestAssessment: async () => ({ ...inProgressAssessment, status: 'completed', progress_percent: '100', progress_count: 80 }),
+    getActiveAssessment: async () => ({ ...inProgressAssessment, status: 'completed', progress_percent: '100', progress_count: 80 }),
     getResult: async () => completeResult,
   })
 
@@ -77,7 +78,7 @@ test('failed or missing persisted result stays gated even when nav check reports
   const state = await getAuthenticatedDashboardState({
     resolveAuthenticatedUserId: async () => 'user-1',
     hasCompletedResult: async () => true,
-    getLatestAssessment: async () => ({ ...inProgressAssessment, status: 'completed', progress_percent: '100', progress_count: 80 }),
+    getActiveAssessment: async () => ({ ...inProgressAssessment, status: 'completed', progress_percent: '100', progress_count: 80 }),
     getResult: async () => ({ ...completeResult, hasResult: false, resultStatus: 'failed', failedState: { reason: 'result_generation_failed', message: 'Failed', failure: null } }),
   })
 
@@ -89,7 +90,7 @@ test('failed or missing persisted result stays gated even when nav check reports
 test('falls back to safe authenticated pre-results state when dashboard data resolution throws', async () => {
   const state = await getAuthenticatedDashboardState({
     resolveAuthenticatedUserId: async () => 'user-1',
-    getLatestAssessment: async () => {
+    getActiveAssessment: async () => {
       throw new Error('db unavailable')
     },
   })
@@ -98,5 +99,26 @@ test('falls back to safe authenticated pre-results state when dashboard data res
   assert.equal(state.hasCompletedResult, false)
   assert.equal(state.result, null)
   assert.equal(state.assessment.status, 'not_started')
+  assert.equal(state.assessment.assessmentId, null)
   assert.equal(state.assessment.progressPercent, 0)
+})
+
+test('uses explicit activeAssessmentId when provided to preserve active assessment identity', async () => {
+  let capturedActiveAssessmentId: string | null | undefined
+
+  const state = await getAuthenticatedDashboardState(
+    {
+      resolveAuthenticatedUserId: async () => 'user-1',
+      hasCompletedResult: async () => false,
+      getActiveAssessment: async (_dbUserId, activeAssessmentId) => {
+        capturedActiveAssessmentId = activeAssessmentId
+        return inProgressAssessment
+      },
+      getResult: async () => completeResult,
+    },
+    { activeAssessmentId: 'assessment-1' },
+  )
+
+  assert.equal(capturedActiveAssessmentId, 'assessment-1')
+  assert.equal(state.assessment.assessmentId, 'assessment-1')
 })

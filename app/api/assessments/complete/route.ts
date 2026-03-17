@@ -15,6 +15,11 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as Partial<CompleteAssessmentRequest>;
 
+    console.info('[assessment-id-check] completion-endpoint', {
+      assessmentId: body.assessmentId ?? null,
+      userId: appUser.dbUserId,
+    });
+
     if (!body.assessmentId) {
       return NextResponse.json({ error: 'assessmentId is required.' }, { status: 400 });
     }
