@@ -66,6 +66,8 @@ test('in-progress lifecycle keeps dashboard in progress mode', async () => {
   assert.equal(state.hasCompletedResult, false)
   assert.equal(state.result, null)
   assert.equal(state.assessment.status, 'in_progress')
+  assert.equal(state.assessment.progressPercent, 30)
+  assert.equal(state.assessment.questionsCompleted, 24)
 })
 
 test('ready lifecycle allows dashboard intelligence rendering only with persisted complete result', async () => {
@@ -91,20 +93,88 @@ test('ready lifecycle allows dashboard intelligence rendering only with persiste
   assert.equal(state.assessment.status, 'ready')
 })
 
-test('falls back to safe authenticated pre-results state when dashboard data resolution throws', async () => {
+test('lifecycle resolution failure preserves real assessment metrics instead of resetting to not_started defaults', async () => {
   const state = await getAuthenticatedDashboardState({
     resolveAuthenticatedUserId: async () => 'user-1',
-    getLatestAssessment: async () => {
-      throw new Error('db unavailable')
-    },
+    getLatestAssessment: async () => inProgressAssessment,
     resolveLifecycle: async () => {
-      throw new Error('db unavailable')
+      throw new Error('lifecycle unavailable')
     },
-
   })
 
   assert.equal(state.authStatus, 'authenticated')
   assert.equal(state.hasCompletedResult, false)
   assert.equal(state.result, null)
+  assert.equal(state.assessment.status, 'in_progress')
+  assert.equal(state.assessment.progressPercent, 30)
+  assert.equal(state.assessment.questionsCompleted, 24)
+})
+
+test('no assessment still resolves to true not_started defaults', async () => {
+  const state = await getAuthenticatedDashboardState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessment: async () => null,
+    resolveLifecycle: async () => ({
+      authState: 'authenticated',
+      userId: 'user-1',
+      lifecycle: {
+        state: 'not_started',
+        latestAssessment: null,
+        latestAssessmentResult: null,
+        latestReadyResult: null,
+        message: 'No assessment found for this user.',
+      },
+    }),
+  })
+
   assert.equal(state.assessment.status, 'not_started')
+  assert.equal(state.assessment.progressPercent, 0)
+  assert.equal(state.assessment.questionsCompleted, 0)
+})
+
+test('completed_processing lifecycle keeps real completion metrics while result remains unavailable', async () => {
+  const state = await getAuthenticatedDashboardState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessment: async () => ({ ...inProgressAssessment, status: 'completed', progress_percent: '100', progress_count: 80, completed_at: '2026-01-01T10:10:00.000Z' }),
+    resolveLifecycle: async () => ({
+      authState: 'authenticated',
+      userId: 'user-1',
+      lifecycle: {
+        state: 'completed_processing',
+        latestAssessment: null,
+        latestAssessmentResult: null,
+        latestReadyResult: null,
+        message: 'Assessment is completed but persisted result is not available yet.',
+      },
+    }),
+  })
+
+  assert.equal(state.assessment.status, 'completed_processing')
+  assert.equal(state.assessment.progressPercent, 100)
+  assert.equal(state.assessment.questionsCompleted, 80)
+})
+
+
+test('latest ready result with newer in-progress attempt keeps real progress metrics while preserving ready availability', async () => {
+  const state = await getAuthenticatedDashboardState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessment: async () => ({ ...inProgressAssessment, progress_count: 12, progress_percent: '15' }),
+    resolveLifecycle: async () => ({
+      authState: 'authenticated',
+      userId: 'user-1',
+      lifecycle: {
+        state: 'ready',
+        latestAssessment: null,
+        latestAssessmentResult: null,
+        latestReadyResult: null,
+        message: 'A newer attempt is in progress, but a prior ready result is available.',
+      },
+    }),
+    getResult: async () => completeResult,
+  })
+
+  assert.equal(state.hasCompletedResult, true)
+  assert.equal(state.assessment.status, 'ready')
+  assert.equal(state.assessment.progressPercent, 15)
+  assert.equal(state.assessment.questionsCompleted, 12)
 })

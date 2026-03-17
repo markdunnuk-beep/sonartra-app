@@ -80,6 +80,12 @@ function mapAssessmentState(assessment: AssessmentRow | null, lifecycleStatus: D
   }
 }
 
+function deriveStatusFromAssessment(assessment: AssessmentRow | null): DashboardAssessmentStatus {
+  if (!assessment) return 'not_started'
+  if (assessment.status === 'completed') return 'completed_processing'
+  return 'in_progress'
+}
+
 export async function getAuthenticatedDashboardState(dependencies: Partial<DashboardStateDependencies> = {}): Promise<DashboardState> {
   const deps = { ...defaultDependencies, ...dependencies }
   const userId = await deps.resolveAuthenticatedUserId()
@@ -93,23 +99,31 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
     }
   }
 
+  let assessment: AssessmentRow | null = null
   try {
-    const [assessment, lifecycle] = await Promise.all([
-      deps.getLatestAssessment(userId),
-      deps.resolveLifecycle({ resolveAuthenticatedUserId: async () => userId }),
-    ])
+    assessment = await deps.getLatestAssessment(userId)
+  } catch (error) {
+    console.error('getAuthenticatedDashboardState latest assessment lookup failed:', error)
+  }
 
-    const lifecycleStatus: DashboardAssessmentStatus = lifecycle.authState === 'authenticated' ? lifecycle.lifecycle.state : 'not_started'
+  let lifecycleStatus: DashboardAssessmentStatus = deriveStatusFromAssessment(assessment)
+  try {
+    const lifecycle = await deps.resolveLifecycle({ resolveAuthenticatedUserId: async () => userId })
+    lifecycleStatus = lifecycle.authState === 'authenticated' ? lifecycle.lifecycle.state : lifecycleStatus
+  } catch (error) {
+    console.error('getAuthenticatedDashboardState lifecycle resolution failed; preserving assessment metrics:', error)
+  }
 
-    if (lifecycleStatus !== 'ready') {
-      return {
-        authStatus: 'authenticated',
-        hasCompletedResult: false,
-        assessment: mapAssessmentState(assessment, lifecycleStatus),
-        result: null,
-      }
+  if (lifecycleStatus !== 'ready') {
+    return {
+      authStatus: 'authenticated',
+      hasCompletedResult: false,
+      assessment: mapAssessmentState(assessment, lifecycleStatus),
+      result: null,
     }
+  }
 
+  try {
     const result = await deps.getResult(userId)
     const canShowResult = result.resultStatus === 'complete' && result.hasResult
 
@@ -120,12 +134,12 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
       result: canShowResult ? result : null,
     }
   } catch (error) {
-    console.error('getAuthenticatedDashboardState failed, returning safe fallback:', error)
+    console.error('getAuthenticatedDashboardState result lookup failed; preserving ready-state metrics:', error)
 
     return {
       authStatus: 'authenticated',
       hasCompletedResult: false,
-      assessment: fallbackAssessmentState,
+      assessment: mapAssessmentState(assessment, lifecycleStatus),
       result: null,
     }
   }
