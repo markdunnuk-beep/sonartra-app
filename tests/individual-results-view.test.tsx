@@ -87,6 +87,9 @@ test('ready state renders core sections and signal blocks from persisted model',
   assert.match(html, /Signal ranking/)
   assert.match(html, /Core Driver/)
   assert.match(html, /Decisive Lead/)
+  assert.match(html, /How to read this profile/)
+  assert.match(html, /Interpretation by layer/)
+  assert.match(html, /Manager notes/)
 })
 
 test('empty state renders explanation and assessment CTA', () => {
@@ -103,6 +106,8 @@ test('empty state renders explanation and assessment CTA', () => {
   assert.match(html, /No completed Individual Intelligence result is available yet/)
   assert.match(html, /No assessment found for this user/)
   assert.match(html, /Start or resume assessment/)
+  assert.doesNotMatch(html, /How to read this profile/)
+  assert.doesNotMatch(html, /Manager notes/)
 })
 
 test('incomplete state renders visible progress copy and resume CTA', () => {
@@ -119,6 +124,7 @@ test('incomplete state renders visible progress copy and resume CTA', () => {
   assert.match(html, /Assessment is in progress/)
   assert.match(html, /not completed yet/)
   assert.match(html, /Resume assessment/)
+  assert.doesNotMatch(html, /How to read this profile/)
 })
 
 test('error state renders a controlled failure panel', () => {

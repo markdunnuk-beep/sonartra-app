@@ -181,6 +181,26 @@ test('returns ready state with deterministic signal ordering and derived layer s
   );
 });
 
+
+test('ready payload is derived from canonical ready-result selection instead of latest in-progress attempt context', async () => {
+  const response = await getLatestIndividualResultForUser({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext, id: 'assessment-new', status: 'in_progress', completed_at: null, version_key: 'wplp80-v2' }),
+    getLatestReadyResultForUser: async () => ({ ...readyResultForUser, assessment_id: 'assessment-ready' }),
+    getLatestSuccessfulResultForAssessment: async (assessmentId) => {
+      assert.equal(assessmentId, 'assessment-ready');
+      return { ...completeResult, assessment_id: 'assessment-ready', version_key: 'wplp80-v1' };
+    },
+    getSignalsByResultId: async () => unsortedSignals,
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(response.state, 'ready');
+  if (response.state === 'ready') {
+    assert.equal(response.data.assessment.assessmentId, 'assessment-ready');
+  }
+});
+
 test('latest ready result remains available when a newer attempt is in progress', async () => {
   const response = await getLatestIndividualResultForUser({
     resolveAuthenticatedUserId: async () => 'user-1',

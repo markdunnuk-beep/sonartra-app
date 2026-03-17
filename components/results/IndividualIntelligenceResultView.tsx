@@ -11,6 +11,8 @@ import {
   SignalRankList,
   SignalScoreRow,
 } from '@/components/results/ResultsPrimitives'
+import { buildIndividualResultInterpretation } from '@/lib/results-interpretation'
+import { ResultInterpretationSections } from '@/components/results/ResultInterpretationSections'
 
 type ViewModel = IndividualResultApiResponse | { state: string; message?: string }
 
@@ -86,6 +88,8 @@ const renderReady = (data: IndividualResultReadyData, state: string) => (
     {withDevelopmentDiagnostic(
       state,
       <>
+        <ResultInterpretationSections interpretation={buildIndividualResultInterpretation(data)} />
+
         <section className="surface space-y-4 p-6">
           <div className="flex flex-wrap items-center gap-2">
             <SignalChip tone="accent">Status: ready</SignalChip>
