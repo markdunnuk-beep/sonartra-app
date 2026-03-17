@@ -1,23 +1,62 @@
 'use client'
 
-import { SignOutButton, SignedIn, UserButton } from '@clerk/nextjs'
+import { SignOutButton, SignedIn, UserButton, useUser } from '@clerk/nextjs'
 import { SonartraLogo } from '@/components/branding/SonartraLogo'
+import { getSidebarLinks, LockedNavIcon } from '@/lib/navigation'
+import { deriveUserDisplayName } from '@/lib/user-display'
 import { clsx } from 'clsx'
-import { ClipboardCheck, LayoutDashboard, Settings, UserSquare2, Building2, FileBarChart2 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
 
-const links = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/assessment', label: 'Assessment', icon: ClipboardCheck },
-  { href: '/results/individual', label: 'Individual Results', icon: UserSquare2 },
-  { href: '/results/organisation', label: 'Organisation', icon: Building2 },
-  { href: '/dashboard', label: 'Reports', icon: FileBarChart2 },
-  { href: '/settings', label: 'Settings', icon: Settings },
-]
+interface NavigationStateResponse {
+  hasCompletedAssessment: boolean;
+}
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { user } = useUser()
+  const [hasCompletedAssessment, setHasCompletedAssessment] = useState(false)
+
+  useEffect(() => {
+    let active = true
+
+    const loadNavigationState = async () => {
+      try {
+        const response = await fetch('/api/navigation-state', { method: 'GET', cache: 'no-store' })
+
+        if (!response.ok) {
+          return
+        }
+
+        const payload = (await response.json()) as NavigationStateResponse
+
+        if (active) {
+          setHasCompletedAssessment(Boolean(payload.hasCompletedAssessment))
+        }
+      } catch {
+        // Keep baseline nav if state lookup fails.
+      }
+    }
+
+    void loadNavigationState()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const userDisplayName = useMemo(
+    () =>
+      deriveUserDisplayName({
+        firstName: user?.firstName,
+        lastName: user?.lastName,
+        emailAddress: user?.primaryEmailAddress?.emailAddress,
+      }),
+    [user?.firstName, user?.lastName, user?.primaryEmailAddress?.emailAddress]
+  )
+
+  const links = useMemo(() => getSidebarLinks(hasCompletedAssessment), [hasCompletedAssessment])
 
   return (
     <aside className="sticky top-0 z-20 w-full border-b border-border/80 bg-panel/95 px-4 py-5 backdrop-blur-md lg:flex lg:h-screen lg:flex-col lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
@@ -31,8 +70,9 @@ export function Sidebar() {
 
       <div className="eyebrow mt-7 hidden lg:block">Navigation</div>
       <nav className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:mt-4 lg:grid-cols-1 lg:gap-1.5">
-        {links.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname === href
+        {links.map(({ href, label, icon: Icon, startsWith, locked, badge }) => {
+          const isActive = startsWith ? pathname.startsWith(startsWith) : pathname === href
+
           return (
             <Link
               key={label}
@@ -46,6 +86,8 @@ export function Sidebar() {
             >
               <Icon size={16} className={clsx('transition-colors', isActive ? 'text-accent' : 'text-textSecondary group-hover:text-textPrimary')} />
               <span className="truncate">{label}</span>
+              {locked ? <LockedNavIcon size={14} className="ml-auto text-amber-300/90" aria-hidden="true" /> : null}
+              {badge ? <span className="ml-1 rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-200">{badge}</span> : null}
             </Link>
           )
         })}
@@ -55,7 +97,7 @@ export function Sidebar() {
         <div className="mt-6 rounded-2xl border border-border/80 bg-bg/60 p-3.5 text-sm text-textSecondary lg:mt-auto">
           <div className="flex items-center gap-2">
             <UserButton afterSignOutUrl="/" />
-            <p className="font-medium text-textPrimary">Authenticated user</p>
+            <p className="font-medium text-textPrimary">{userDisplayName}</p>
           </div>
           <SignOutButton>
             <button className="mt-2 inline-block text-accent transition-colors hover:text-[#86beff]">Log out</button>
