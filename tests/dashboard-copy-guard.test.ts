@@ -8,7 +8,7 @@ test('dashboard view keeps pre-result copy progress-oriented and removes legacy 
   assert.match(source, /Assessment in progress/)
   assert.match(source, /Start assessment/)
   assert.match(source, /Resume assessment/)
-  assert.match(source, /Individual Intelligence will become available once the assessment is completed/)
+  assert.match(source, /Individual Intelligence availability follows assessment completion and persisted result readiness/)
 
   assert.doesNotMatch(source, /Dominant Behaviour Style/)
   assert.doesNotMatch(source, /Leadership Architecture/)

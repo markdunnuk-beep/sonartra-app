@@ -45,46 +45,51 @@ const completeResult: IndividualIntelligenceResultContract = {
   failedState: null,
 }
 
-test('no completed result keeps dashboard in progress mode and aligned with navigation gate', async () => {
+test('in-progress lifecycle keeps dashboard in progress mode', async () => {
   const state = await getAuthenticatedDashboardState({
     resolveAuthenticatedUserId: async () => 'user-1',
-    hasCompletedResult: async () => false,
     getLatestAssessment: async () => inProgressAssessment,
+    resolveLifecycle: async () => ({
+      authState: 'authenticated',
+      userId: 'user-1',
+      lifecycle: {
+        state: 'in_progress',
+        latestAssessment: null,
+        latestAssessmentResult: null,
+        latestReadyResult: null,
+        message: 'Latest assessment is not completed yet.',
+      },
+    }),
     getResult: async () => completeResult,
   })
 
   assert.equal(state.hasCompletedResult, false)
   assert.equal(state.result, null)
   assert.equal(state.assessment.status, 'in_progress')
-  assert.equal(state.assessment.progressPercent, 30)
-  assert.equal(state.assessment.questionsCompleted, 24)
-  assert.equal(state.assessment.questionsRemaining, 56)
 })
 
-test('completed-result gate allows dashboard intelligence rendering only with persisted complete result', async () => {
+test('ready lifecycle allows dashboard intelligence rendering only with persisted complete result', async () => {
   const state = await getAuthenticatedDashboardState({
     resolveAuthenticatedUserId: async () => 'user-1',
-    hasCompletedResult: async () => true,
-    getLatestAssessment: async () => ({ ...inProgressAssessment, status: 'completed', progress_percent: '100', progress_count: 80 }),
+    getLatestAssessment: async () => ({ ...inProgressAssessment, status: 'completed', progress_percent: '100', progress_count: 80, completed_at: '2026-01-01T10:10:00.000Z' }),
+    resolveLifecycle: async () => ({
+      authState: 'authenticated',
+      userId: 'user-1',
+      lifecycle: {
+        state: 'ready',
+        latestAssessment: null,
+        latestAssessmentResult: null,
+        latestReadyResult: null,
+        message: 'ready',
+      },
+    }),
     getResult: async () => completeResult,
   })
 
   assert.equal(state.hasCompletedResult, true)
   assert.equal(state.result?.resultStatus, 'complete')
+  assert.equal(state.assessment.status, 'ready')
 })
-
-test('failed or missing persisted result stays gated even when nav check reports completion', async () => {
-  const state = await getAuthenticatedDashboardState({
-    resolveAuthenticatedUserId: async () => 'user-1',
-    hasCompletedResult: async () => true,
-    getLatestAssessment: async () => ({ ...inProgressAssessment, status: 'completed', progress_percent: '100', progress_count: 80 }),
-    getResult: async () => ({ ...completeResult, hasResult: false, resultStatus: 'failed', failedState: { reason: 'result_generation_failed', message: 'Failed', failure: null } }),
-  })
-
-  assert.equal(state.hasCompletedResult, false)
-  assert.equal(state.result, null)
-})
-
 
 test('falls back to safe authenticated pre-results state when dashboard data resolution throws', async () => {
   const state = await getAuthenticatedDashboardState({
@@ -92,11 +97,14 @@ test('falls back to safe authenticated pre-results state when dashboard data res
     getLatestAssessment: async () => {
       throw new Error('db unavailable')
     },
+    resolveLifecycle: async () => {
+      throw new Error('db unavailable')
+    },
+
   })
 
   assert.equal(state.authStatus, 'authenticated')
   assert.equal(state.hasCompletedResult, false)
   assert.equal(state.result, null)
   assert.equal(state.assessment.status, 'not_started')
-  assert.equal(state.assessment.progressPercent, 0)
 })

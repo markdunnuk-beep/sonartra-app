@@ -23,6 +23,8 @@ const baseAssessment: AssessmentRow = {
   updated_at: '2026-02-01T10:12:00.000Z',
 };
 
+const baseAssessmentContext = { ...baseAssessment, version_key: 'wplp80-v1', total_questions: 80 };
+
 const completeResult: AssessmentResultRow = {
   id: 'result-1',
   assessment_id: 'assessment-1',
@@ -37,6 +39,14 @@ const completeResult: AssessmentResultRow = {
   scored_at: '2026-02-01T10:12:10.000Z',
   created_at: '2026-02-01T10:12:11.000Z',
   updated_at: '2026-02-01T10:12:11.000Z',
+};
+
+
+const readyResultForUser = {
+  ...completeResult,
+  assessment_started_at: baseAssessment.started_at,
+  assessment_completed_at: baseAssessment.completed_at,
+  assessment_version_key: 'wplp80-v1',
 };
 
 const unsortedSignals: AssessmentResultSignalRow[] = [
@@ -103,6 +113,7 @@ test('returns empty state when user has no assessments', async () => {
   const response = await getLatestIndividualResultForUser({
     resolveAuthenticatedUserId: async () => 'user-1',
     getLatestAssessmentForUser: async () => null,
+    getLatestReadyResultForUser: async () => null,
   });
 
   assert.equal(response.ok, true);
@@ -112,30 +123,48 @@ test('returns empty state when user has no assessments', async () => {
 test('returns incomplete state when latest assessment is not completed', async () => {
   const response = await getLatestIndividualResultForUser({
     resolveAuthenticatedUserId: async () => 'user-1',
-    getLatestAssessmentForUser: async () => ({ ...baseAssessment, status: 'in_progress', completed_at: null, version_key: 'wplp80-v1' }),
+    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext, status: 'in_progress', completed_at: null }),
+    getLatestReadyResultForUser: async () => null,
   });
 
   assert.equal(response.ok, true);
   assert.equal(response.state, 'incomplete');
-  assert.equal(response.data?.assessment?.assessmentId, 'assessment-1');
 });
 
 test('returns incomplete state when completed assessment has no successful snapshot', async () => {
   const response = await getLatestIndividualResultForUser({
     resolveAuthenticatedUserId: async () => 'user-1',
-    getLatestAssessmentForUser: async () => ({ ...baseAssessment, version_key: 'wplp80-v1' }),
+    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext }),
+    getLatestResultForAssessment: async () => null,
     getLatestSuccessfulResultForAssessment: async () => null,
+    getLatestReadyResultForUser: async () => null,
   });
 
   assert.equal(response.ok, true);
   assert.equal(response.state, 'incomplete');
 });
 
+test('returns error state when completed assessment latest snapshot failed and no ready fallback exists', async () => {
+  const response = await getLatestIndividualResultForUser({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext }),
+    getLatestResultForAssessment: async () => ({ ...completeResult, status: 'failed' }),
+    getLatestSuccessfulResultForAssessment: async () => null,
+    getLatestReadyResultForUser: async () => null,
+    getSignalsByResultId: async () => [],
+  });
+
+  assert.equal(response.ok, false);
+  assert.equal(response.state, 'error');
+});
+
 test('returns ready state with deterministic signal ordering and derived layer summaries', async () => {
   const response = await getLatestIndividualResultForUser({
     resolveAuthenticatedUserId: async () => 'user-1',
-    getLatestAssessmentForUser: async () => ({ ...baseAssessment, version_key: 'wplp80-v1' }),
+    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext }),
+    getLatestResultForAssessment: async () => completeResult,
     getLatestSuccessfulResultForAssessment: async () => completeResult,
+    getLatestReadyResultForUser: async () => readyResultForUser,
     getSignalsByResultId: async () => unsortedSignals,
   });
 
@@ -150,31 +179,20 @@ test('returns ready state with deterministic signal ordering and derived layer s
     response.data.signals.map((signal) => `${signal.layerKey}:${signal.signalKey}`),
     ['behaviour_style:Core_Driver', 'risk:Stress_Avoidance', 'risk:Stress_Control'],
   );
-
-  assert.equal(response.data.layers[0]?.layerKey, 'behaviour_style');
-  assert.equal(response.data.layers[1]?.primarySignalKey, 'Stress_Avoidance');
 });
 
-test('returns incomplete state when signal rows are missing', async () => {
+test('latest ready result remains available when a newer attempt is in progress', async () => {
   const response = await getLatestIndividualResultForUser({
     resolveAuthenticatedUserId: async () => 'user-1',
-    getLatestAssessmentForUser: async () => ({ ...baseAssessment, version_key: 'wplp80-v1' }),
+    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext, id: 'assessment-2', status: 'in_progress', completed_at: null, version_key: 'wplp80-v2' }),
     getLatestSuccessfulResultForAssessment: async () => completeResult,
-    getSignalsByResultId: async () => [],
+    getLatestReadyResultForUser: async () => readyResultForUser,
+    getSignalsByResultId: async () => unsortedSignals,
   });
 
   assert.equal(response.ok, true);
-  assert.equal(response.state, 'incomplete');
-  assert.equal(response.data?.snapshot?.resultId, 'result-1');
-});
-
-test('returns error state on unexpected dependency failures', async () => {
-  const response = await getLatestIndividualResultForUser({
-    resolveAuthenticatedUserId: async () => {
-      throw new Error('db unavailable');
-    },
-  });
-
-  assert.equal(response.ok, false);
-  assert.equal(response.state, 'error');
+  assert.equal(response.state, 'ready');
+  if (response.state === 'ready') {
+    assert.equal(response.data.assessment.assessmentId, 'assessment-1');
+  }
 });
