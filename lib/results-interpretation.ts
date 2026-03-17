@@ -18,7 +18,38 @@ export interface IndividualResultInterpretation {
     title: string
     points: string[]
   }
+  performanceProfile: {
+    title: string
+    summary: string
+    operatingTraits: string[]
+  }
+  bestFit: {
+    title: string
+    items: string[]
+  }
+  leveragePoints: {
+    title: string
+    items: string[]
+  }
+  pressureWatchouts: {
+    title: string
+    items: string[]
+  }
+  teamDynamics: {
+    title: string
+    items: string[]
+  }
+  managerPlaybook: {
+    title: string
+    doItems: string[]
+    avoidItems: string[]
+  }
   caveats: string[]
+}
+
+interface InterpretationContext {
+  firstName?: string | null
+  fullName?: string | null
 }
 
 const LAYER_META: Record<string, { title: string; operationalContext: string }> = {
@@ -179,6 +210,19 @@ function titleCase(value: string) {
   return value.replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function toSafeFirstName(value?: string | null) {
+  if (!value) return null
+  const cleaned = value.trim().replace(/\s+/g, ' ')
+  if (!cleaned) return null
+  const firstToken = cleaned.split(' ')[0]
+  if (!/^[A-Za-z][A-Za-z'\-]{1,29}$/.test(firstToken)) return null
+  return firstToken
+}
+
+export function getInterpretationSubjectLabel(context: InterpretationContext = {}) {
+  return toSafeFirstName(context.firstName) ?? toSafeFirstName(context.fullName) ?? 'This individual'
+}
+
 function extractSignalPattern(signalKey: string) {
   const tokens = signalKey.split('_').filter(Boolean).reverse()
   return tokens.find((token) => SIGNAL_PATTERN_COPY[token]) ?? null
@@ -248,13 +292,31 @@ function buildLayerInterpretation(layer: IndividualResultLayerSummary, signals: 
   }
 }
 
-export function buildIndividualResultInterpretation(data: IndividualResultReadyData): IndividualResultInterpretation {
+export function buildIndividualResultInterpretation(data: IndividualResultReadyData, context: InterpretationContext = {}): IndividualResultInterpretation {
   const layerInterpretations = data.layers
     .map((layer) => buildLayerInterpretation(layer, data.signals))
     .filter((layer): layer is LayerInterpretationBlock => Boolean(layer))
 
   const topSignal = [...data.signals].sort((a, b) => b.normalisedScore - a.normalisedScore)[0]
+  const secondSignal = [...data.signals].sort((a, b) => b.normalisedScore - a.normalisedScore)[1]
   const topNarrative = getSignalNarrative(topSignal)
+  const secondNarrative = getSignalNarrative(secondSignal)
+  const subject = getInterpretationSubjectLabel(context)
+
+  const topLayers = [...data.layers]
+    .sort((a, b) => b.totalRawValue - a.totalRawValue)
+    .slice(0, 2)
+    .map((layer) => LAYER_META[layer.layerKey]?.title ?? titleCase(layer.layerKey))
+
+  const styleLayer = data.layers.find((layer) => layer.layerKey === 'behaviour_style')
+  const riskLayer = data.layers.find((layer) => layer.layerKey === 'risk')
+  const behaviourPrimary = getSignalNarrative(data.signals.find((signal) => signal.layerKey === 'behaviour_style' && signal.isPrimary) ?? data.signals.find((signal) => signal.layerKey === 'behaviour_style'))
+  const riskPrimary = getSignalNarrative(data.signals.find((signal) => signal.layerKey === 'risk' && signal.isPrimary) ?? data.signals.find((signal) => signal.layerKey === 'risk'))
+  const influenceSignal = data.signals.find((signal) => /Influencer|Influence|Vision/.test(signal.signalKey))
+  const controlSignal = data.signals.find((signal) => /Control|Process|Evidence|Hierarchy/.test(signal.signalKey))
+  const paceSignal = data.signals.find((signal) => /Driver|Compete|Results|Opportunity/.test(signal.signalKey))
+
+  const pressureRisk = riskLayer && riskLayer.totalRawValue > 0 && (riskLayer.primarySignalKey ?? '').toLowerCase().includes('avoid')
 
   return {
     onboarding: {
@@ -267,6 +329,68 @@ export function buildIndividualResultInterpretation(data: IndividualResultReadyD
       ],
     },
     layerInterpretations,
+    performanceProfile: {
+      title: 'Performance profile',
+      summary: `${subject} tends to operate with ${topNarrative?.signalLabel ?? 'the leading'} patterns front-of-mind${secondNarrative ? `, supported by ${secondNarrative.signalLabel}` : ''}. This pattern is most visible in ${topLayers.join(' and ') || 'the scored layers'}.`,
+      operatingTraits: [
+        behaviourPrimary ? `Execution posture: ${behaviourPrimary.tendency}.` : 'Execution posture: shaped by the top ranked behaviour-style signal.',
+        topNarrative ? `Decision tendency: ${topNarrative.tendency}.` : 'Decision tendency: inferred from ranked signal concentration.',
+        controlSignal ? 'Work quality is likely to improve when expectations, standards, and review points are explicit.' : 'Work quality is likely to improve when priorities and delivery standards are explicit.',
+      ],
+    },
+    bestFit: {
+      title: 'Where this person is likely to be most effective',
+      items: [
+        'Roles where output quality, reliability, and judgement standards are visible and measurable.',
+        paceSignal
+          ? 'Assignments with clear priorities and enough authority to convert decisions into execution quickly.'
+          : 'Assignments where priorities are clear and execution can be planned with controlled pacing.',
+        influenceSignal
+          ? 'Cross-functional work that benefits from stakeholder alignment and communication momentum.'
+          : 'Workstreams where role boundaries and decision handoffs are clearly defined.',
+      ],
+    },
+    leveragePoints: {
+      title: 'Leverage points',
+      items: [
+        'Set explicit outcome priorities and define what “good enough” looks like before execution starts.',
+        'Use clear decision rights and escalation thresholds to reduce avoidable cycle-time loss.',
+        styleLayer && styleLayer.signalCount > 1
+          ? `Use ${titleCase(styleLayer.secondarySignalKey ?? 'secondary style signals')} deliberately when requirements shift.`
+          : 'Pair this profile with complementary teammates when role demands require broader behavioural range.',
+      ],
+    },
+    pressureWatchouts: {
+      title: 'Watchouts under pressure',
+      items: [
+        topNarrative ? `Under sustained pressure, this profile may over-index on ${topNarrative.signalLabel} behaviour and narrow optionality.` : 'Under sustained pressure, behaviour can become more concentrated and less adaptive.',
+        pressureRisk ? 'Risk handling may tilt toward caution or decision deferral when uncertainty remains high.' : 'Risk handling can tilt toward speed or control at the expense of balance if guardrails are weak.',
+        riskPrimary ? `Potential friction point: ${riskPrimary.tradeoff}.` : 'Potential friction point: monitor decision speed versus execution quality trade-offs.',
+      ],
+    },
+    teamDynamics: {
+      title: 'Team dynamics',
+      items: [
+        topNarrative ? `Likely contribution in group decisions: ${topNarrative.tendency}.` : 'Likely contribution in group decisions follows the leading ranked signal pattern.',
+        secondNarrative
+          ? `Secondary contribution pattern: ${secondNarrative.signalLabel} can broaden coverage when explicitly requested.`
+          : 'Secondary contribution pattern is less pronounced, so complementary peers may be needed in volatile contexts.',
+        'Most effective partnerships usually pair this profile with colleagues who balance pace, challenge, and execution detail.',
+      ],
+    },
+    managerPlaybook: {
+      title: 'Manager playbook',
+      doItems: [
+        'Define the operating objective, decision boundaries, and quality thresholds up front.',
+        'Use regular but lightweight check-ins focused on trade-offs, blockers, and next execution decisions.',
+        'Assign work where dominant signal strengths are useful, then add explicit counterbalance support for weaker ranges.',
+      ],
+      avoidItems: [
+        'Do not rely on implied priorities when timelines or dependencies are tight.',
+        'Avoid shifting direction repeatedly without clarifying the new success criteria.',
+        'Do not evaluate this profile from a single behaviour in isolation; use signal pattern + context together.',
+      ],
+    },
     managerNotes: {
       title: 'Manager notes',
       points: [

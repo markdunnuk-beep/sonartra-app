@@ -80,7 +80,7 @@ const readyModel: IndividualResultApiResponse = {
 }
 
 test('ready state renders core sections and signal blocks from persisted model', () => {
-  const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} />)
+  const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
 
   assert.match(html, /Individual Intelligence/)
   assert.match(html, /Layer breakdown/)
@@ -90,6 +90,25 @@ test('ready state renders core sections and signal blocks from persisted model',
   assert.match(html, /How to read this profile/)
   assert.match(html, /Interpretation by layer/)
   assert.match(html, /Manager notes/)
+
+  assert.match(html, /Performance profile/)
+  assert.match(html, /Where this person is likely to be most effective/)
+  assert.match(html, /Leverage points/)
+  assert.match(html, /Watchouts under pressure/)
+  assert.match(html, /Team dynamics/)
+  assert.match(html, /Manager playbook/)
+  assert.match(html, /What to do/)
+  assert.match(html, /What to avoid/)
+  assert.match(html, /Mark tends to operate/)
+
+})
+
+
+
+test('ready state uses neutral personalisation fallback when first name is unavailable', () => {
+  const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName={null} />)
+  assert.match(html, /This individual tends to operate/)
+  assert.doesNotMatch(html, /Mark tends to operate/)
 })
 
 test('empty state renders explanation and assessment CTA', () => {
@@ -107,7 +126,11 @@ test('empty state renders explanation and assessment CTA', () => {
   assert.match(html, /No assessment found for this user/)
   assert.match(html, /Start or resume assessment/)
   assert.doesNotMatch(html, /How to read this profile/)
+  assert.doesNotMatch(html, /Performance profile/)
+  assert.doesNotMatch(html, /Manager playbook/)
   assert.doesNotMatch(html, /Manager notes/)
+  assert.doesNotMatch(html, /Performance profile/)
+  assert.doesNotMatch(html, /Manager playbook/)
 })
 
 test('incomplete state renders visible progress copy and resume CTA', () => {
@@ -125,6 +148,8 @@ test('incomplete state renders visible progress copy and resume CTA', () => {
   assert.match(html, /not completed yet/)
   assert.match(html, /Resume assessment/)
   assert.doesNotMatch(html, /How to read this profile/)
+  assert.doesNotMatch(html, /Performance profile/)
+  assert.doesNotMatch(html, /Manager playbook/)
 })
 
 test('error state renders a controlled failure panel', () => {

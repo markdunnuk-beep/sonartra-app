@@ -79,7 +79,7 @@ const withDevelopmentDiagnostic = (state: string, children: React.ReactNode) => 
   </>
 )
 
-const renderReady = (data: IndividualResultReadyData, state: string) => (
+const renderReady = (data: IndividualResultReadyData, state: string, firstName?: string | null) => (
   <ResultsWorkspaceShell
     title="Individual Intelligence"
     subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure."
@@ -88,7 +88,7 @@ const renderReady = (data: IndividualResultReadyData, state: string) => (
     {withDevelopmentDiagnostic(
       state,
       <>
-        <ResultInterpretationSections interpretation={buildIndividualResultInterpretation(data)} />
+        <ResultInterpretationSections interpretation={buildIndividualResultInterpretation(data, { firstName })} />
 
         <section className="surface space-y-4 p-6">
           <div className="flex flex-wrap items-center gap-2">
@@ -158,9 +158,9 @@ const renderReady = (data: IndividualResultReadyData, state: string) => (
   </ResultsWorkspaceShell>
 )
 
-export function IndividualIntelligenceResultView({ model }: { model: ViewModel }) {
+export function IndividualIntelligenceResultView({ model, firstName }: { model: ViewModel; firstName?: string | null }) {
   if (model.state === 'ready' && 'data' in model) {
-    return renderReady(model.data, model.state)
+    return renderReady(model.data, model.state, firstName)
   }
 
   if (model.state === 'empty') {
