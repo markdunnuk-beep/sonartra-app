@@ -181,9 +181,10 @@ function mapLayerSummaries(
 }
 
 export async function getAuthenticatedIndividualIntelligenceResult(
-  dependencies: IndividualIntelligenceDependencies = defaultDependencies
+  dependencies: Partial<IndividualIntelligenceDependencies> = {}
 ): Promise<IndividualIntelligenceResultContract> {
-  const userId = await dependencies.resolveAuthenticatedUserId();
+  const resolvedDependencies = { ...defaultDependencies, ...dependencies };
+  const userId = await resolvedDependencies.resolveAuthenticatedUserId();
 
   if (!userId) {
     return {
@@ -201,7 +202,7 @@ export async function getAuthenticatedIndividualIntelligenceResult(
     };
   }
 
-  const assessment = await dependencies.getLatestCompletedAssessmentForUser(userId);
+  const assessment = await resolvedDependencies.getLatestCompletedAssessmentForUser(userId);
 
   if (!assessment) {
     return {
@@ -222,7 +223,7 @@ export async function getAuthenticatedIndividualIntelligenceResult(
     };
   }
 
-  const preferredResult = await dependencies.getPreferredResultForAssessment(assessment.id);
+  const preferredResult = await resolvedDependencies.getPreferredResultForAssessment(assessment.id);
 
   if (!preferredResult) {
     return {
@@ -270,7 +271,7 @@ export async function getAuthenticatedIndividualIntelligenceResult(
     };
   }
 
-  const signalSummaries = mapSignals(await dependencies.getSignalsByResultId(preferredResult.id));
+  const signalSummaries = mapSignals(await resolvedDependencies.getSignalsByResultId(preferredResult.id));
   const snapshot = parseSnapshot(preferredResult.result_payload);
 
   return {
