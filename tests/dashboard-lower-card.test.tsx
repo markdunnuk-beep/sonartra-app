@@ -51,7 +51,7 @@ test('lower card renders ready title, body, and results CTA', () => {
 
   assert.match(html, /Results available/)
   assert.match(html, /Your latest completed profile is ready to view\./)
-  assert.match(html, />View Individual Results</)
+  assert.match(html, />View Results</)
 })
 
 test('lower card renders error title, body, and safe CTA', () => {

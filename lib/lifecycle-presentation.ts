@@ -40,7 +40,7 @@ const lifecyclePresentationMap: Record<IndividualLifecycleState, LifecyclePresen
   },
   ready: {
     dashboardStatusLabel: 'Results available',
-    dashboardActionLabel: 'View Individual Results',
+    dashboardActionLabel: 'View Results',
     dashboardActionHref: '/results/individual',
     dashboardDetailTitle: 'Results available',
     dashboardDetailBody: 'Your latest completed profile is ready to view.',
