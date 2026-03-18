@@ -114,8 +114,8 @@ function buildHeaderSummary(
   behaviour: LayerInsight,
   motivators: LayerInsight
 ): string {
-  const behaviourStatement = behaviour.statement.replace(/^[A-Z][a-z]+\s+is\s+/i, "")
-  const motivatorsStatement = motivators.statement.replace(/^[A-Z][a-z]+\s+is\s+/i, "")
+const behaviourStatement = behaviour.statement.replace(/^([A-Z][a-z]+|you)\s+is\s+/i, "")
+const motivatorsStatement = motivators.statement.replace(/^([A-Z][a-z]+|you)\s+is\s+/i, "")
 
   const combined = `${behaviourStatement} Motivated by ${motivatorsStatement.charAt(0).toLowerCase()}${motivatorsStatement.slice(1)}`
 
