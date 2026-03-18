@@ -10,6 +10,9 @@ test('dashboard pre-result copy is lifecycle-driven from shared mapper', async (
   assert.match(viewSource, /presentation\.dashboardDetailBody/)
   assert.match(viewSource, /presentation\.dashboardDetailFootnote/)
   assert.match(viewSource, /presentation\.dashboardActionLabel && presentation\.dashboardActionHref/)
+  assert.match(viewSource, /Next Actions/)
+  assert.match(viewSource, /Key Signals Snapshot/)
+  assert.match(viewSource, /Intelligence Coverage/)
 
   assert.match(mapperSource, /Assessment not started/)
   assert.match(mapperSource, /Assessment in progress/)
@@ -22,4 +25,5 @@ test('dashboard pre-result copy is lifecycle-driven from shared mapper', async (
   assert.doesNotMatch(viewSource, /Dominant Behaviour Style/)
   assert.doesNotMatch(viewSource, /Leadership Architecture/)
   assert.doesNotMatch(viewSource, /Stress Risk Index/)
+  assert.doesNotMatch(viewSource, /Individual Intelligence Overview/)
 })

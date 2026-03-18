@@ -12,9 +12,9 @@ test('dashboard route uses authenticated workspace view and keeps unauthenticate
   assert.doesNotMatch(source, /individualResults/)
 })
 
-test('dashboard workspace view is wrapped in AppShell for both gated and completed states', async () => {
+test('dashboard workspace view is wrapped in AppShell', async () => {
   const source = await readFile(new URL('../components/dashboard/DashboardPageView.tsx', import.meta.url), 'utf8')
 
   const appShellCount = (source.match(/<AppShell>/g) ?? []).length
-  assert.equal(appShellCount, 2)
+  assert.equal(appShellCount, 1)
 })
