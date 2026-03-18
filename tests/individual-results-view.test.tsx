@@ -85,6 +85,12 @@ const readyModel: IndividualResultApiResponse = {
 
 const buildPresentationModel = () => buildReadyIndividualResultViewModel(readyModel.data, 'Mark')
 
+function getArchetypeSummary() {
+  const summary = buildPresentationModel().interpretation.archetypeSummary
+  assert.ok(summary)
+  return summary
+}
+
 test('ready state renders archetype overview on the individual results page and preserves lower sections', () => {
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
 
@@ -124,7 +130,7 @@ test('archetype map renders the primary archetype in the active primary state wi
 test('archetype map renders an optional secondary influence in the softer active state', () => {
   const readyViewModel = buildPresentationModel()
   readyViewModel.interpretation.archetypeSummary = {
-    ...readyViewModel.interpretation.archetypeSummary,
+    ...getArchetypeSummary(),
     secondaryKey: 'systems_architect',
     secondaryLabel: 'Systems Architect',
   }
@@ -166,7 +172,7 @@ test('ready-state sections omit the archetype overview gracefully when archetype
 test('archetype summary content renders primary, behavioural tilt, summary, and list blocks', () => {
   const readyViewModel = buildPresentationModel()
   readyViewModel.interpretation.archetypeSummary = {
-    ...readyViewModel.interpretation.archetypeSummary,
+    ...getArchetypeSummary(),
     secondaryKey: 'systems_architect',
     secondaryLabel: 'Systems Architect',
   }
@@ -284,4 +290,32 @@ test('unexpected state renders fallback instead of blank output', () => {
 
   assert.match(html, /Results are temporarily unavailable/)
   assert.match(html, /could not interpret the latest results state/i)
+})
+
+
+test('non-ready states do not render archetype UI prematurely', () => {
+  const incompleteHtml = renderToStaticMarkup(
+    <IndividualIntelligenceResultView
+      model={{
+        ok: true,
+        state: 'incomplete',
+        message: 'Latest assessment is not completed yet.',
+      }}
+    />,
+  )
+
+  const errorHtml = renderToStaticMarkup(
+    <IndividualIntelligenceResultView
+      model={{
+        ok: false,
+        state: 'error',
+        message: 'Results are unavailable.',
+      }}
+    />,
+  )
+
+  assert.doesNotMatch(incompleteHtml, /Archetype Overview/)
+  assert.doesNotMatch(incompleteHtml, /data-archetype-key=/)
+  assert.doesNotMatch(errorHtml, /Archetype Overview/)
+  assert.doesNotMatch(errorHtml, /data-archetype-key=/)
 })

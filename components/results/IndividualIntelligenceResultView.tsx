@@ -21,12 +21,7 @@ export type ReadyIndividualResultViewModel = {
   interpretation: IndividualResultInterpretation
 }
 
-export type ReadyIndividualResultPresentationModel = {
-  dashboardProfile: ReturnType<typeof buildLiveIndividualDashboardProfile>
-  interpretation: Omit<IndividualResultInterpretation, 'archetypeSummary'> & {
-    archetypeSummary?: IndividualResultInterpretation['archetypeSummary']
-  }
-}
+export type ReadyIndividualResultPresentationModel = ReadyIndividualResultViewModel
 
 const formatDateTime = (value: string | null) => {
   if (!value) return '—'
@@ -86,7 +81,7 @@ export function ReadyIndividualResultSections({
 
       <IndividualDashboard profile={readyViewModel.dashboardProfile} showOverview={!hasArchetypeSummary} />
 
-      <ResultInterpretationSections interpretation={readyViewModel.interpretation as IndividualResultInterpretation} />
+      <ResultInterpretationSections interpretation={readyViewModel.interpretation} />
 
       <section className="surface space-y-4 p-6">
         <div className="flex flex-wrap items-center gap-2">
@@ -117,13 +112,16 @@ export function ReadyIndividualResultSections({
   )
 }
 
+const RESULT_TITLE = 'Individual Intelligence'
+const RESULT_SUBTITLE = 'Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure.'
+
 const renderReady = (data: IndividualResultReadyData, state: string, firstName?: string | null) => {
   const readyViewModel = buildReadyIndividualResultViewModel(data, firstName)
 
   return (
     <ResultsWorkspaceShell
-      title="Individual Intelligence"
-      subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure."
+      title={RESULT_TITLE}
+      subtitle={RESULT_SUBTITLE}
       statusLabel="Persisted Result"
     >
       {withDevelopmentDiagnostic(state, <ReadyIndividualResultSections data={data} readyViewModel={readyViewModel} />)}
@@ -138,7 +136,7 @@ export function IndividualIntelligenceResultView({ model, firstName }: { model: 
 
   if (model.state === 'empty') {
     return (
-      <ResultsWorkspaceShell title="Individual Intelligence" subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure." statusLabel="No Result Yet">
+      <ResultsWorkspaceShell title={RESULT_TITLE} subtitle={RESULT_SUBTITLE} statusLabel="No Result Yet">
         {withDevelopmentDiagnostic(
           model.state,
           <ResultEmptyStatePanel
@@ -154,7 +152,7 @@ export function IndividualIntelligenceResultView({ model, firstName }: { model: 
 
   if (model.state === 'incomplete') {
     return (
-      <ResultsWorkspaceShell title="Individual Intelligence" subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure." statusLabel="Assessment In Progress">
+      <ResultsWorkspaceShell title={RESULT_TITLE} subtitle={RESULT_SUBTITLE} statusLabel="Assessment In Progress">
         {withDevelopmentDiagnostic(
           model.state,
           <ResultEmptyStatePanel
@@ -170,7 +168,7 @@ export function IndividualIntelligenceResultView({ model, firstName }: { model: 
 
   if (model.state === 'error') {
     return (
-      <ResultsWorkspaceShell title="Individual Intelligence" subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure." statusLabel="Temporarily Unavailable">
+      <ResultsWorkspaceShell title={RESULT_TITLE} subtitle={RESULT_SUBTITLE} statusLabel="Temporarily Unavailable">
         {withDevelopmentDiagnostic(
           model.state,
           <ResultFailedStatePanel
@@ -187,7 +185,7 @@ export function IndividualIntelligenceResultView({ model, firstName }: { model: 
   }
 
   return (
-    <ResultsWorkspaceShell title="Individual Intelligence" subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure." statusLabel="Unexpected State">
+    <ResultsWorkspaceShell title={RESULT_TITLE} subtitle={RESULT_SUBTITLE} statusLabel="Unexpected State">
       {withDevelopmentDiagnostic(
         model.state,
         <ResultFailedStatePanel

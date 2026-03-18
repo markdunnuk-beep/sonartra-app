@@ -5,7 +5,7 @@ import type { ArchetypeSummary } from '@/lib/interpretation/archetypes'
 import { ArchetypeIcon, type ArchetypeDisplayState } from '@/components/results/ArchetypeIcon'
 import { ARCHETYPE_META } from '@/components/results/archetypeMeta'
 
-function resolveState(archetypeKey: string, summary: ArchetypeSummary): ArchetypeDisplayState {
+function resolveArchetypeDisplayState(archetypeKey: string, summary: ArchetypeSummary): ArchetypeDisplayState {
   if (archetypeKey === summary.primaryKey) {
     return 'primary'
   }
@@ -28,7 +28,7 @@ export function ArchetypeMap({ summary }: { summary: ArchetypeSummary }) {
       </div>
       <ol className="grid grid-cols-2 gap-3.5 sm:gap-4 lg:grid-cols-5 lg:gap-4" aria-label="Archetype map">
         {ARCHETYPE_META.map((archetype) => (
-          <ArchetypeIcon key={archetype.key} archetype={archetype} state={resolveState(archetype.key, summary)} />
+          <ArchetypeIcon key={archetype.key} archetype={archetype} state={resolveArchetypeDisplayState(archetype.key, summary)} />
         ))}
       </ol>
     </section>
