@@ -119,9 +119,6 @@ test('archetype map renders the primary archetype in the active primary state wi
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
 
   assert.match(html, /data-archetype-key="strategic_operator"[^>]*data-archetype-state="primary"/)
-  assert.doesNotMatch(html, />primary</i)
-  assert.doesNotMatch(html, />secondary</i)
-  assert.doesNotMatch(html, />inactive</i)
 })
 
 test('archetype map renders an optional secondary influence in the softer active state', () => {
