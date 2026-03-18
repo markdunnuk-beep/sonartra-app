@@ -9,7 +9,7 @@ import { ArchitectureDiagram } from '@/components/visuals/ArchitectureDiagram'
 import { PlatformDashboardPreview } from '@/components/visuals/PlatformDashboardPreview'
 import { ResultsPanel } from '@/components/visuals/ResultsPanel'
 import { SignalsPreview } from '@/components/visuals/SignalsPreview'
-import { caseStudies, layerData, measurePillars, testimonials } from '@/data/mockData'
+import { caseStudies, layerData, measurePillars, testimonials, workflowSteps } from '@/data/mockData'
 
 export default function HomePage() {
   return (
@@ -18,7 +18,11 @@ export default function HomePage() {
       <Hero />
 
       <section className="section section-tight">
-        <SectionHeading eyebrow="Architecture" title="Three-layer intelligence model" />
+        <SectionHeading
+          eyebrow="Section 2"
+          title="Three-Layer Intelligence Model"
+          description="Sonartra uses a three-layer model to separate performance analysis by operating level before combining it into one system view."
+        />
         <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
           <Reveal y={10} className="architecture-anchor-effect">
             <ArchitectureDiagram />
@@ -27,39 +31,49 @@ export default function HomePage() {
             {layerData.map((layer) => (
               <RevealItem key={layer.title}>
                 <Card interactive>
-                  <h3 className="text-lg font-semibold text-[#E4EBF8]">
-                    <span className="text-accent-soft">{layer.title.split(' ')[0]}</span>{' '}
-                    <span>{layer.title.split(' ').slice(1).join(' ')}</span>
-                  </h3>
-                  <p className="text-muted-meta mt-3">{layer.description}</p>
+                  <h3 className="text-lg font-semibold text-[#E4EBF8]">{layer.title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-[#D5E1F2]">{layer.description}</p>
+                  <p className="text-muted-meta mt-3">{layer.detail}</p>
                 </Card>
               </RevealItem>
             ))}
           </RevealGroup>
         </div>
+        <Reveal y={8} className="mt-6">
+          <p className="max-w-3xl text-sm leading-relaxed text-[#A9BDD8]">
+            The layers move from person to team to organisation, so local patterns can be read in context instead of in isolation.
+          </p>
+        </Reveal>
       </section>
 
       <section className="section section-spacious">
         <SectionHeading
-          eyebrow="Signals"
+          eyebrow="Section 3"
           title="What Sonartra Measures"
-          description="Signals assesses the core performance factors behind leadership, teamwork, and decision-making."
+          description="Sonartra measures the performance signals that shape execution, coordination, and judgement under real operating conditions."
         />
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <RevealGroup className="grid gap-4 sm:auto-rows-fr sm:grid-cols-2 lg:grid-cols-3" staggerChildren={0.05}>
-            {measurePillars.map((pillar) => (
-              <RevealItem key={pillar.title}>
-                <Card
-                  interactive
-                  tabIndex={0}
-                  className="measure-card flex h-full min-h-[152px] flex-col justify-center gap-3.5"
-                >
-                  <p className="measure-card-title text-base font-medium text-[#DEE7F6]">{pillar.title}</p>
-                  <p className="measure-card-summary text-sm leading-relaxed text-[#B5C3DA]">{pillar.summary}</p>
-                </Card>
-              </RevealItem>
-            ))}
-          </RevealGroup>
+          <div>
+            <RevealGroup className="grid gap-4 sm:auto-rows-fr sm:grid-cols-2 lg:grid-cols-3" staggerChildren={0.05}>
+              {measurePillars.map((pillar) => (
+                <RevealItem key={pillar.title}>
+                  <Card
+                    interactive
+                    tabIndex={0}
+                    className="measure-card flex h-full min-h-[152px] flex-col justify-center gap-3.5"
+                  >
+                    <p className="measure-card-title text-base font-medium text-[#DEE7F6]">{pillar.title}</p>
+                    <p className="measure-card-summary text-sm leading-relaxed text-[#B5C3DA]">{pillar.summary}</p>
+                  </Card>
+                </RevealItem>
+              ))}
+            </RevealGroup>
+            <Reveal y={8} className="mt-6">
+              <p className="text-sm leading-relaxed text-[#A9BDD8]">
+                These signals are combined into structured performance profiles.
+              </p>
+            </Reveal>
+          </div>
           <Reveal y={8}>
             <SignalsPreview />
           </Reveal>
@@ -67,14 +81,19 @@ export default function HomePage() {
       </section>
 
       <section className="section section-spacious">
-        <SectionHeading eyebrow="Platform" title="How it Works" />
+        <SectionHeading
+          eyebrow="Section 4"
+          title="How It Works"
+          description="Sonartra turns raw signal capture into usable intelligence through a continuous four-step processing flow."
+        />
         <div className="grid items-start gap-6 lg:grid-cols-[0.95fr_1.05fr]">
           <RevealGroup className="grid gap-5 sm:grid-cols-2" staggerChildren={0.06}>
-            {['Assess', 'Analyse', 'Interpret', 'Optimise'].map((step, i) => (
-              <RevealItem key={step}>
-                <Card interactive>
+            {workflowSteps.map((step, i) => (
+              <RevealItem key={step.title}>
+                <Card interactive className="h-full">
                   <p className="eyebrow">0{i + 1}</p>
-                  <p className="mt-3 text-lg font-semibold text-[#E2EAF8]">{step}</p>
+                  <p className="mt-3 text-lg font-semibold text-[#E2EAF8]">{step.title}</p>
+                  <p className="text-muted-meta mt-3">{step.summary}</p>
                 </Card>
               </RevealItem>
             ))}

@@ -8,28 +8,36 @@ export const navLinks = [
 export const layerData = [
   {
     title: 'Individual Intelligence',
-    description:
-      'Understand how individuals think, operate, and respond under pressure — helping leaders place people and teams in roles where they perform at their best.',
+    description: 'Defines how one person thinks, behaves, and performs in live operating conditions.',
+    detail: 'This is the unit level of the system: one profile, one operating pattern, one performance signature.',
   },
   {
     title: 'Team Intelligence',
-    description:
-      'Reveals how teams actually function — highlighting leadership balance, collaboration dynamics, and potential conflict risks.',
+    description: 'Defines how individual patterns combine through complement, friction, and dependency.',
+    detail: 'This layer shows whether a team can coordinate cleanly under the same demands.',
   },
   {
     title: 'Organisational Intelligence',
-    description:
-      'Identifies organisational strengths, cultural friction points, and structural risks across the business.',
+    description: 'Defines how teams align, compound, or break down across the wider operating system.',
+    detail: 'It treats the organisation as a connected structure rather than a collection of separate teams.',
   },
 ]
 
 export const measurePillars = [
-  { title: 'Behaviour Style', summary: 'How people naturally work and interact.' },
-  { title: 'Motivators', summary: 'What drives people to perform and stay engaged.' },
-  { title: 'Leadership', summary: 'How people guide, influence, and make decisions.' },
-  { title: 'Conflict', summary: 'How people handle disagreement and tension.' },
-  { title: 'Culture', summary: 'The environment where people perform best.' },
-  { title: 'Stress', summary: 'How behaviour changes under pressure.' },
+  { title: 'Behavioural Style', summary: 'Shows how work is approached, paced, and executed under normal conditions.' },
+  { title: 'Motivational Drivers', summary: 'Shows which incentives increase discretionary effort and sustained output.' },
+  { title: 'Leadership Orientation', summary: 'Shows how direction is set, decisions are framed, and accountability is applied.' },
+  { title: 'Conflict Behaviour', summary: 'Shows how tension is managed when priorities, control, or standards collide.' },
+  { title: 'Cultural Preferences', summary: 'Shows which operating environment supports reliable contribution and decision quality.' },
+  { title: 'Stress Response', summary: 'Shows which patterns emerge when pressure, uncertainty, or workload intensify.' },
+  { title: 'Cognitive Tendencies', summary: 'Shows how information is filtered, weighed, and converted into judgement.' },
+]
+
+export const workflowSteps = [
+  { title: 'Assess', summary: 'Signals captures behavioural performance data through a structured assessment layer.' },
+  { title: 'Analyse', summary: 'The system converts response patterns into structured intelligence that can be compared and tracked.' },
+  { title: 'Interpret', summary: 'Sonartra identifies patterns, risks, and performance implications inside the resulting profile.' },
+  { title: 'Apply', summary: 'Outputs are used to support decisions at individual, team, and organisational level as new data accumulates.' },
 ]
 
 export const testimonials = [
