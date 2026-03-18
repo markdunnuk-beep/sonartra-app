@@ -115,10 +115,13 @@ test('ready state renders archetype overview on the individual results page and 
   assert.doesNotMatch(html, /Individual Overview/)
 })
 
-test('archetype map renders the primary archetype in the active primary state', () => {
+test('archetype map renders the primary archetype in the active primary state without visible state badges', () => {
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
 
   assert.match(html, /data-archetype-key="strategic_operator"[^>]*data-archetype-state="primary"/)
+  assert.doesNotMatch(html, />primary</i)
+  assert.doesNotMatch(html, />secondary</i)
+  assert.doesNotMatch(html, />inactive</i)
 })
 
 test('archetype map renders an optional secondary influence in the softer active state', () => {
@@ -135,11 +138,12 @@ test('archetype map renders an optional secondary influence in the softer active
   assert.match(html, /data-archetype-key="systems_architect"[^>]*data-archetype-state="secondary"/)
 })
 
-test('non-selected archetypes render in the inactive state', () => {
+test('non-selected archetypes render in the inactive state with lightweight tile content', () => {
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
 
   assert.match(html, /data-archetype-key="growth_catalyst"[^>]*data-archetype-state="inactive"/)
   assert.match(html, /data-archetype-key="balanced_operator"[^>]*data-archetype-state="inactive"/)
+  assert.doesNotMatch(html, /Accelerates movement through visible energy and expansion\./)
 })
 
 test('ready state uses neutral personalisation fallback when first name is unavailable', () => {
