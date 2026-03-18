@@ -9,35 +9,35 @@ export const layerData = [
   {
     title: 'Individual Intelligence',
     description: 'Defines how one person thinks, behaves, and performs in live operating conditions.',
-    detail: 'This is the unit level of the system: one profile, one operating pattern, one performance signature.',
+    detail: 'The unit of analysis: one profile, one operating pattern.',
   },
   {
     title: 'Team Intelligence',
     description: 'Defines how individual patterns combine through complement, friction, and dependency.',
-    detail: 'This layer shows whether a team can coordinate cleanly under the same demands.',
+    detail: 'Tests whether a team can coordinate cleanly under shared demands.',
   },
   {
     title: 'Organisational Intelligence',
     description: 'Defines how teams align, compound, or break down across the wider operating system.',
-    detail: 'It treats the organisation as a connected structure rather than a collection of separate teams.',
+    detail: 'Maps whether teams align as one operating structure.',
   },
 ]
 
 export const measurePillars = [
-  { title: 'Behavioural Style', summary: 'Shows how work is approached, paced, and executed under normal conditions.' },
-  { title: 'Motivational Drivers', summary: 'Shows which incentives increase discretionary effort and sustained output.' },
-  { title: 'Leadership Orientation', summary: 'Shows how direction is set, decisions are framed, and accountability is applied.' },
-  { title: 'Conflict Behaviour', summary: 'Shows how tension is managed when priorities, control, or standards collide.' },
-  { title: 'Cultural Preferences', summary: 'Shows which operating environment supports reliable contribution and decision quality.' },
-  { title: 'Stress Response', summary: 'Shows which patterns emerge when pressure, uncertainty, or workload intensify.' },
-  { title: 'Cognitive Tendencies', summary: 'Shows how information is filtered, weighed, and converted into judgement.' },
+  { title: 'Behavioural Style', summary: 'Defines execution pattern: pace, structure, and approach to work.' },
+  { title: 'Motivational Drivers', summary: 'Shapes where effort is allocated and how long it is sustained.' },
+  { title: 'Leadership Orientation', summary: 'Defines how decisions are framed and accountability is applied.' },
+  { title: 'Conflict Behaviour', summary: 'Determines response under tension, disagreement, and contested priorities.' },
+  { title: 'Cultural Preferences', summary: 'Determines alignment with the operating environments where work holds.' },
+  { title: 'Stress Response', summary: 'Controls behaviour under pressure, fatigue, and sustained load.' },
+  { title: 'Cognitive Tendencies', summary: 'Shapes how information is filtered, weighted, and turned into judgement.' },
 ]
 
 export const workflowSteps = [
   { title: 'Assess', summary: 'Signals captures behavioural performance data through a structured assessment layer.' },
-  { title: 'Analyse', summary: 'The system converts response patterns into structured intelligence that can be compared and tracked.' },
+  { title: 'Analyse', summary: 'The system converts response patterns into structured intelligence for comparison and tracking.' },
   { title: 'Interpret', summary: 'Sonartra identifies patterns, risks, and performance implications inside the resulting profile.' },
-  { title: 'Apply', summary: 'Outputs are used to support decisions at individual, team, and organisational level as new data accumulates.' },
+  { title: 'Apply', summary: 'Outputs are used to inform decisions across individuals, teams, and organisations.' },
 ]
 
 export const testimonials = [
@@ -49,7 +49,7 @@ export const testimonials = [
 export const caseStudies = [
   { company: 'Northline Capital', challenge: 'Leadership misalignment across regional teams', outcome: '18% faster strategic decision cycle', metric: '18%' },
   { company: 'Aster Biotech', challenge: 'Escalating conflict during scale phase', outcome: '32% reduction in cross-team escalation incidents', metric: '32%' },
-  { company: 'Helio Systems', challenge: 'Unclear behavioural fit for mission-critical roles', outcome: '24% improvement in high-stakes project delivery', metric: '24%' },
+  { company: 'Helio Systems', challenge: 'Unclear behavioural fit for mission-critical roles', outcome: '24% gain in high-stakes project delivery', metric: '24%' },
 ]
 
 export const assessmentQuestions = [

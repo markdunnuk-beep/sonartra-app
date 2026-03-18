@@ -9,7 +9,7 @@ export function PlatformDashboardPreview() {
     <div className="visual-shell visual-grid-overlay interactive-surface dashboard-preview relative rounded-2xl p-5">
       <div className="flex items-center justify-between">
         <p className="eyebrow">Executive Intelligence Console</p>
-        <span className="live-indicator rounded-full border border-accent/35 bg-accent/10 px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-[#afd0ff]">
+        <span className="live-indicator rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#7f93af]">
           live telemetry
         </span>
       </div>

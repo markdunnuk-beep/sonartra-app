@@ -30,7 +30,7 @@ export default function HomePage() {
           <RevealGroup className="grid gap-5" staggerChildren={0.06} delayChildren={0.02}>
             {layerData.map((layer) => (
               <RevealItem key={layer.title}>
-                <Card interactive>
+                <Card interactive className="h-full p-6">
                   <h3 className="text-lg font-semibold text-[#E4EBF8]">{layer.title}</h3>
                   <p className="mt-3 text-sm leading-relaxed text-[#D5E1F2]">{layer.description}</p>
                   <p className="text-muted-meta mt-3">{layer.detail}</p>
@@ -39,9 +39,9 @@ export default function HomePage() {
             ))}
           </RevealGroup>
         </div>
-        <Reveal y={8} className="mt-6">
-          <p className="max-w-3xl text-sm leading-relaxed text-[#A9BDD8]">
-            The layers move from person to team to organisation, so local patterns can be read in context instead of in isolation.
+        <Reveal y={8} className="mt-5">
+          <p className="max-w-2xl text-sm leading-relaxed text-[#A9BDD8]">
+            The system progresses from individual to team to organisation, so behaviour is interpreted in context, not isolation.
           </p>
         </Reveal>
       </section>
@@ -60,7 +60,7 @@ export default function HomePage() {
                   <Card
                     interactive
                     tabIndex={0}
-                    className="measure-card flex h-full min-h-[152px] flex-col justify-center gap-3.5"
+                    className="measure-card flex h-full min-h-[152px] flex-col justify-center gap-3 p-5"
                   >
                     <p className="measure-card-title text-base font-medium text-[#DEE7F6]">{pillar.title}</p>
                     <p className="measure-card-summary text-sm leading-relaxed text-[#B5C3DA]">{pillar.summary}</p>
@@ -69,7 +69,7 @@ export default function HomePage() {
               ))}
             </RevealGroup>
             <Reveal y={8} className="mt-6">
-              <p className="text-sm leading-relaxed text-[#A9BDD8]">
+              <p className="max-w-xl text-sm leading-relaxed text-[#A9BDD8]">
                 These signals are combined into structured performance profiles.
               </p>
             </Reveal>
@@ -90,7 +90,7 @@ export default function HomePage() {
           <RevealGroup className="grid gap-5 sm:grid-cols-2" staggerChildren={0.06}>
             {workflowSteps.map((step, i) => (
               <RevealItem key={step.title}>
-                <Card interactive className="h-full">
+                <Card interactive className="h-full p-6">
                   <p className="eyebrow">0{i + 1}</p>
                   <p className="mt-3 text-lg font-semibold text-[#E2EAF8]">{step.title}</p>
                   <p className="text-muted-meta mt-3">{step.summary}</p>
@@ -142,7 +142,7 @@ export default function HomePage() {
               Deploy <span className="headline-emphasis">performance intelligence</span> at scale.
             </h3>
             <p className="prose-support mx-auto mt-4 max-w-2xl">
-              Run Sonartra Signals and generate actionable performance insight for sharper strategic decisions.
+              Run Sonartra Signals and generate performance analysis for sharper strategic decisions.
             </p>
             <div className="mt-8 flex justify-center">
               <Button href="/signup">Start with Sonartra Signals</Button>
