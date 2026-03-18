@@ -41,7 +41,7 @@ test('ready lifecycle maps to results-available detail copy and Individual Resul
   assert.equal(presentation.dashboardStatusLabel, 'Results available')
   assert.equal(presentation.dashboardDetailTitle, 'Results available')
   assert.equal(presentation.dashboardDetailBody, 'Your latest completed profile is ready to view.')
-  assert.equal(presentation.dashboardActionLabel, 'View Individual Results')
+  assert.equal(presentation.dashboardActionLabel, 'View Results')
   assert.equal(presentation.dashboardActionHref, '/results/individual')
 })
 

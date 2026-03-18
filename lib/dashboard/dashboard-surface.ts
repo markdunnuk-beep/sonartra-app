@@ -24,7 +24,7 @@ export interface DashboardCoverageItem {
   title: string
   stateLabel: string
   detail: string
-  tone: 'ready' | 'progress' | 'locked'
+  tone: 'active' | 'coming_soon' | 'locked'
 }
 
 const LAYER_LABELS: Record<string, string> = {
@@ -39,9 +39,9 @@ const SIGNAL_META: Record<string, DashboardSignalMeta> = {
   Core_Driver: { label: 'Driver', summary: 'Pushes for pace, decisions, and measurable outcomes.' },
   Style_Driver: { label: 'Driver', summary: 'Pushes for pace, decisions, and measurable outcomes.' },
   Contribution_Drive: { label: 'Driver', summary: 'Pushes for pace, decisions, and measurable outcomes.' },
-  Core_Analyst: { label: 'Analyst', summary: 'Prefers evidence, structure, and controlled decisions.' },
-  Style_Analyst: { label: 'Analyst', summary: 'Prefers evidence, structure, and controlled decisions.' },
-  Contribution_Analyse: { label: 'Analyst', summary: 'Prefers evidence, structure, and controlled decisions.' },
+  Core_Analyst: { label: 'Analyst', summary: 'Prefers structured, evidence-led decisions.' },
+  Style_Analyst: { label: 'Analyst', summary: 'Prefers structured, evidence-led decisions.' },
+  Contribution_Analyse: { label: 'Analyst', summary: 'Prefers structured, evidence-led decisions.' },
   Core_Influencer: { label: 'Influencer', summary: 'Uses communication and momentum to move work forward.' },
   Style_Influencer: { label: 'Influencer', summary: 'Uses communication and momentum to move work forward.' },
   Contribution_Connect: { label: 'Influencer', summary: 'Uses communication and momentum to move work forward.' },
@@ -52,14 +52,14 @@ const SIGNAL_META: Record<string, DashboardSignalMeta> = {
   Need_Authority: { label: 'Achievement', summary: 'Energised by stretch targets, progress, and visible wins.' },
   Mot_Mastery: { label: 'Mastery', summary: 'Motivated by depth, quality, and capability growth.' },
   Need_Competence: { label: 'Mastery', summary: 'Motivated by depth, quality, and capability growth.' },
-  Mot_Influence: { label: 'Influence', summary: 'Responds to scope, impact, and directional input.' },
-  Need_Influence: { label: 'Influence', summary: 'Responds to scope, impact, and directional input.' },
+  Mot_Influence: { label: 'Influence', summary: 'Motivated by scope and impact.' },
+  Need_Influence: { label: 'Influence', summary: 'Motivated by scope and impact.' },
   Mot_Stability: { label: 'Stability', summary: 'Prefers predictability, role clarity, and steady cadence.' },
   Need_Belonging: { label: 'Stability', summary: 'Prefers predictability, role clarity, and steady cadence.' },
   Leader_Results: { label: 'Results', summary: 'Leads through pace, accountability, and delivery focus.' },
   Integrity_Driver: { label: 'Results', summary: 'Leads through pace, accountability, and delivery focus.' },
-  Leader_Vision: { label: 'Vision', summary: 'Frames direction, change, and future-state ambition.' },
-  Integrity_Influencer: { label: 'Vision', summary: 'Frames direction, change, and future-state ambition.' },
+  Leader_Vision: { label: 'Vision', summary: 'Focuses on direction and future outcomes.' },
+  Integrity_Influencer: { label: 'Vision', summary: 'Focuses on direction and future outcomes.' },
   Leader_People: { label: 'People', summary: 'Builds cohesion, support, and capability across the team.' },
   Integrity_Stabiliser: { label: 'People', summary: 'Builds cohesion, support, and capability across the team.' },
   Leader_Process: { label: 'Process', summary: 'Uses standards, structure, and repeatable execution.' },
@@ -67,7 +67,7 @@ const SIGNAL_META: Record<string, DashboardSignalMeta> = {
   Conflict_Compete: { label: 'Compete', summary: 'Takes a firm position and pushes toward closure.' },
   Conflict_Collaborate: { label: 'Collaborate', summary: 'Seeks shared resolution and cross-party alignment.' },
   Conflict_Compromise: { label: 'Compromise', summary: 'Prefers pragmatic middle-ground decisions.' },
-  Conflict_Avoid: { label: 'Avoid', summary: 'Reduces friction and limits direct confrontation.' },
+  Conflict_Avoid: { label: 'Avoid', summary: 'Avoids direct confrontation and reduces friction.' },
   Conflict_Accommodate: { label: 'Accommodate', summary: 'Protects relationships by yielding where needed.' },
   Culture_Market: { label: 'Performance', summary: 'Aligns with targets, competitiveness, and external pressure.' },
   Culture_Hierarchy: { label: 'Control', summary: 'Prefers structure, clarity, and disciplined execution.' },
@@ -116,7 +116,7 @@ export function buildDashboardNextActions(
     actions.push({
       title: presentation.dashboardActionLabel,
       description: hasCompletedResult
-        ? 'Open the latest completed profile and review the full signal analysis.'
+        ? 'Review your latest signal profile.'
         : presentation.dashboardDetailBody,
       href: presentation.dashboardActionHref,
       status: hasCompletedResult ? 'available' : status === 'in_progress' ? 'in_progress' : 'available',
@@ -126,14 +126,14 @@ export function buildDashboardNextActions(
   if (hasCompletedResult) {
     actions.push(
       {
-        title: 'Review leadership profile',
-        description: 'Inspect leadership orientation and supporting signal detail.',
+        title: 'Review Leadership',
+        description: 'Understand your leadership orientation.',
         href: '/results/individual',
         status: 'available',
       },
       {
-        title: 'Revisit behavioural profile',
-        description: 'Re-open behaviour style findings from the latest result set.',
+        title: 'Review Behaviour',
+        description: 'Revisit your behavioural style.',
         href: '/results/individual',
         status: 'available',
       },
@@ -163,8 +163,8 @@ export function buildDashboardNextActions(
 
   actions.push(
     {
-      title: 'Share profile',
-      description: 'Export and sharing workflows are planned for a future release.',
+      title: 'Share Profile',
+      description: 'Export and sharing not yet available.',
       disabled: true,
       status: 'coming_soon',
     },
@@ -183,26 +183,26 @@ export function buildDashboardCoverage(hasCompletedResult: boolean, status: 'not
   return [
     {
       title: 'Individual Intelligence',
-      stateLabel: hasCompletedResult ? 'Available' : status === 'completed_processing' ? 'Processing' : status === 'error' ? 'Attention required' : 'In progress',
+      stateLabel: hasCompletedResult ? 'Active' : status === 'completed_processing' ? 'Coming soon' : 'Locked',
       detail: hasCompletedResult
-        ? 'Latest individual result snapshot is available.'
+        ? 'Individual intelligence is active.'
         : status === 'completed_processing'
-          ? 'Completed assessment is being converted into results.'
+          ? 'Individual intelligence not yet enabled.'
           : status === 'error'
-            ? 'Completed assessment exists but results could not be loaded.'
-            : 'Assessment completion is required before results become available.',
-      tone: hasCompletedResult ? 'ready' : status === 'error' ? 'locked' : 'progress',
+            ? 'Individual intelligence not yet available.'
+            : 'Individual intelligence not yet enabled.',
+      tone: hasCompletedResult ? 'active' : status === 'completed_processing' ? 'coming_soon' : 'locked',
     },
     {
       title: 'Team Intelligence',
       stateLabel: 'Coming soon',
-      detail: 'Shared team signal analysis is not yet enabled.',
-      tone: 'locked',
+      detail: 'Team intelligence not yet enabled.',
+      tone: 'coming_soon',
     },
     {
       title: 'Organisation Intelligence',
       stateLabel: 'Locked',
-      detail: 'Organisation-wide intelligence remains outside the current workspace tier.',
+      detail: 'Organisation intelligence not yet available.',
       tone: 'locked',
     },
   ]

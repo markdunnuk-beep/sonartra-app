@@ -79,9 +79,9 @@ test('ready dashboard replaces individual overview with action-oriented sections
 test('next actions render ready-state primary CTA to individual results', () => {
   const html = renderToStaticMarkup(<DashboardPreResultContent state={makeReadyState()} />)
 
-  assert.match(html, />View Individual Results</)
-  assert.match(html, /Review leadership profile/)
-  assert.match(html, /Revisit behavioural profile/)
+  assert.match(html, />View Results</)
+  assert.match(html, /Review Leadership/)
+  assert.match(html, /Review Behaviour/)
 })
 
 test('next actions adapt to non-ready lifecycle states', () => {
@@ -91,14 +91,14 @@ test('next actions adapt to non-ready lifecycle states', () => {
   assert.match(html, /Results unlock after completion/)
   assert.match(html, /Key signals will populate once a persisted individual result is available\./)
   assert.match(html, /Individual Intelligence/)
-  assert.match(html, /In progress/)
+  assert.match(html, /Locked/)
 })
 
 test('intelligence coverage renders current and future platform states', () => {
   const html = renderToStaticMarkup(<DashboardPreResultContent state={makeReadyState()} />)
 
   assert.match(html, /Individual Intelligence/)
-  assert.match(html, /Latest individual result snapshot is available\./)
+  assert.match(html, /Individual intelligence is active\./)
   assert.match(html, /Team Intelligence/)
   assert.match(html, /Coming soon/)
   assert.match(html, /Organisation Intelligence/)
