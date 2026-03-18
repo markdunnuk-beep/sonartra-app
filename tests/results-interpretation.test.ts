@@ -60,6 +60,7 @@ function makeReadyData(overrides: Partial<IndividualResultReadyData> = {}): Indi
 
 test('creates deterministic interpretation blocks from ready-result layers and ranked signals', () => {
   const interpretation = buildIndividualResultInterpretation(makeReadyData())
+  assert.ok(interpretation.archetypeSummary)
 
   assert.equal(interpretation.onboarding.title, 'How to use this report')
   assert.equal(interpretation.layerInterpretations.length, 1)
@@ -207,4 +208,36 @@ test('refined interpretation avoids banned scaffolding phrasing', () => {
   assert.doesNotMatch(flattened, /supported by/i)
   assert.doesNotMatch(flattened, /counterbalance available/i)
   assert.doesNotMatch(flattened, /requires deliberate context-setting/i)
+})
+
+
+test('archetype summary is omitted when no mappable behaviour signals are available', () => {
+  const interpretation = buildIndividualResultInterpretation(
+    makeReadyData({
+      layers: [
+        {
+          layerKey: 'behaviour_style',
+          totalRawValue: 12,
+          signalCount: 1,
+          primarySignalKey: 'Unknown_Behaviour',
+          secondarySignalKey: null,
+          rankedSignalKeys: ['Unknown_Behaviour'],
+        },
+      ],
+      signals: [
+        {
+          layerKey: 'behaviour_style',
+          signalKey: 'Unknown_Behaviour',
+          signalTotal: 12,
+          normalisedScore: 0.6,
+          relativeShare: 0.6,
+          rank: 1,
+          isPrimary: true,
+          isSecondary: false,
+        },
+      ],
+    }),
+  )
+
+  assert.equal(interpretation.archetypeSummary, undefined)
 })

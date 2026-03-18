@@ -1,7 +1,7 @@
 import React from 'react'
 
-import { IndividualLayerCard } from "@/components/individual/IndividualLayerCard"
-import type { IndividualDashboardProfile } from "@/lib/interpretation/buildIndividualDashboardProfile"
+import { IndividualLayerCard } from '@/components/individual/IndividualLayerCard'
+import type { IndividualDashboardProfile } from '@/lib/interpretation/buildIndividualDashboardProfile'
 
 type Props = {
   profile: IndividualDashboardProfile
@@ -12,12 +12,12 @@ export function IndividualDashboard({ profile, showOverview = true }: Props) {
   const { header, layers } = profile
 
   const cards = [
-    { title: "Behaviour Style", insight: layers.behaviour },
-    { title: "Motivators", insight: layers.motivators },
-    { title: "Leadership", insight: layers.leadership },
-    { title: "Conflict", insight: layers.conflict },
-    { title: "Culture", insight: layers.culture },
-    { title: "Stress", insight: layers.stress },
+    { title: 'Behaviour Style', insight: layers.behaviour },
+    { title: 'Motivators', insight: layers.motivators },
+    { title: 'Leadership', insight: layers.leadership },
+    { title: 'Conflict', insight: layers.conflict },
+    { title: 'Culture', insight: layers.culture },
+    { title: 'Stress', insight: layers.stress },
   ] as const
 
   return (

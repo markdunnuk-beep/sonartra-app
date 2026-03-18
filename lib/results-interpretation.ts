@@ -1,4 +1,4 @@
-import { resolveArchetypeSummary, type ArchetypeSummary } from '@/lib/interpretation/archetypes'
+import { resolveOptionalArchetypeSummary, type ArchetypeSummary } from '@/lib/interpretation/archetypes'
 import { IndividualResultLayerSummary, IndividualResultReadyData, IndividualResultSignalSummary } from '@/lib/server/individual-results'
 
 export interface LayerInterpretationBlock {
@@ -18,7 +18,7 @@ export interface IndividualResultInterpretation {
     title: string
     items: string[]
   }
-  archetypeSummary: ArchetypeSummary
+  archetypeSummary?: ArchetypeSummary
   layerInterpretations: LayerInterpretationBlock[]
   managerNotes: {
     title: string
@@ -327,14 +327,15 @@ function buildWhyThisMayFeelFamiliarItems(signals: IndividualResultSignalSummary
 }
 
 export function buildIndividualResultInterpretation(data: IndividualResultReadyData, context: InterpretationContext = {}): IndividualResultInterpretation {
-  const archetypeSummary = resolveArchetypeSummary(data.signals)
+  const archetypeSummary = resolveOptionalArchetypeSummary(data.signals)
+
+  const rankedSignals = [...data.signals].sort((a, b) => b.normalisedScore - a.normalisedScore)
 
   const layerInterpretations = data.layers
     .map((layer) => buildLayerInterpretation(layer, data.signals))
     .filter((layer): layer is LayerInterpretationBlock => Boolean(layer))
 
-  const topSignal = [...data.signals].sort((a, b) => b.normalisedScore - a.normalisedScore)[0]
-  const secondSignal = [...data.signals].sort((a, b) => b.normalisedScore - a.normalisedScore)[1]
+  const [topSignal, secondSignal] = rankedSignals
   const topNarrative = getSignalNarrative(topSignal)
   const secondNarrative = getSignalNarrative(secondSignal)
   const subject = getInterpretationSubjectLabel(context)

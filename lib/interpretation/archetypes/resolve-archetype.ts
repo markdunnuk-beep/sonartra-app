@@ -1,4 +1,4 @@
-import { ARCHETYPE_LABELS } from '@/lib/interpretation/archetypes/archetype-constants'
+import { ARCHETYPE_LABELS, BEHAVIOUR_SIGNAL_MAP } from '@/lib/interpretation/archetypes/archetype-constants'
 import { buildArchetypeSummaryCopy } from '@/lib/interpretation/archetypes/build-archetype-summary'
 import { resolveBehaviourRanking, isBalancedBehaviourProfile } from '@/lib/interpretation/archetypes/resolve-behaviour-ranking'
 import type {
@@ -102,6 +102,23 @@ export function resolveArchetypeFromInput(input: ArchetypeResolverInput): Archet
   }
 }
 
+function hasResolvableBehaviourSignals(signals: IndividualResultSignalSummary[]) {
+  return signals.some((signal) => {
+    const mappedBehaviour = BEHAVIOUR_SIGNAL_MAP[signal.signalKey]
+    const hasSignalWeight = signal.normalisedScore > 0 || signal.relativeShare > 0 || signal.signalTotal > 0
+
+    return signal.layerKey === 'behaviour_style' && Boolean(mappedBehaviour) && hasSignalWeight
+  })
+}
+
 export function resolveArchetypeSummary(signals: IndividualResultSignalSummary[]) {
   return resolveArchetypeFromInput(buildArchetypeResolverInput(signals))
+}
+
+export function resolveOptionalArchetypeSummary(signals: IndividualResultSignalSummary[]) {
+  if (!hasResolvableBehaviourSignals(signals)) {
+    return undefined
+  }
+
+  return resolveArchetypeSummary(signals)
 }

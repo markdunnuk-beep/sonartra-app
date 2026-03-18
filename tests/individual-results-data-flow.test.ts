@@ -86,6 +86,7 @@ function makeReadyData(): IndividualResultReadyData {
 
 test('ready individual results view model carries archetypeSummary through the page-level ready path', () => {
   const readyViewModel = buildReadyIndividualResultViewModel(makeReadyData(), 'Mark')
+  assert.ok(readyViewModel.interpretation.archetypeSummary)
 
   assert.equal(readyViewModel.interpretation.archetypeSummary.primaryKey, 'strategic_operator')
   assert.equal(readyViewModel.interpretation.archetypeSummary.primaryLabel, 'Strategic Operator')
@@ -94,4 +95,26 @@ test('ready individual results view model carries archetypeSummary through the p
   assert.equal(typeof readyViewModel.interpretation.archetypeSummary.summary, 'string')
   assert.equal(readyViewModel.interpretation.archetypeSummary.secondaryKey, undefined)
   assert.equal(readyViewModel.interpretation.archetypeSummary.secondaryLabel, undefined)
+})
+
+
+test('ready individual results view model keeps archetypeSummary optional when behaviour signals cannot resolve an archetype', () => {
+  const data = makeReadyData()
+  data.layers = [
+    {
+      layerKey: 'behaviour_style',
+      totalRawValue: 12,
+      signalCount: 1,
+      primarySignalKey: 'Unknown_Behaviour',
+      secondarySignalKey: null,
+      rankedSignalKeys: ['Unknown_Behaviour'],
+    },
+  ]
+  data.signals = [
+    { layerKey: 'behaviour_style', signalKey: 'Unknown_Behaviour', signalTotal: 12, normalisedScore: 0.6, relativeShare: 0.6, rank: 1, isPrimary: true, isSecondary: false },
+  ]
+
+  const readyViewModel = buildReadyIndividualResultViewModel(data, 'Mark')
+
+  assert.equal(readyViewModel.interpretation.archetypeSummary, undefined)
 })
