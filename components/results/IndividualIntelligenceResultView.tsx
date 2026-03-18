@@ -1,47 +1,17 @@
 import React from 'react'
 
-import { IndividualResultApiResponse, IndividualResultLayerSummary, IndividualResultReadyData, IndividualResultSignalSummary } from '@/lib/server/individual-results'
+import { IndividualResultApiResponse, IndividualResultReadyData } from '@/lib/server/individual-results'
 import {
   ResultEmptyStatePanel,
   ResultFailedStatePanel,
-  ResultsSectionBlock,
   ResultsWorkspaceShell,
   ResultMetadataGrid,
   SignalChip,
-  SignalRankList,
-  SignalScoreRow,
 } from '@/components/results/ResultsPrimitives'
-import { buildIndividualResultInterpretation } from '@/lib/results-interpretation'
-import { ResultInterpretationSections } from '@/components/results/ResultInterpretationSections'
+import { IndividualDashboard } from '@/components/individual/IndividualDashboard'
+import { buildLiveIndividualDashboardProfile } from '@/lib/interpretation/buildLiveIndividualDashboardProfile'
 
 type ViewModel = IndividualResultApiResponse | { state: string; message?: string }
-
-const LAYER_COPY: Record<string, { title: string; description: string }> = {
-  behaviour_style: {
-    title: 'Behaviour Style',
-    description: 'How this person tends to organise work, prioritise effort, and execute decisions.',
-  },
-  motivators: {
-    title: 'Motivators',
-    description: 'The conditions and drivers that are most likely to sustain performance energy.',
-  },
-  leadership: {
-    title: 'Leadership',
-    description: 'How influence is likely to be expressed in planning, delegation, and accountability.',
-  },
-  conflict: {
-    title: 'Conflict',
-    description: 'Typical response posture when priorities clash or delivery tension rises.',
-  },
-  risk: {
-    title: 'Risk and Pressure Response',
-    description: 'Likely decision and execution tendencies under uncertainty, urgency, or stress.',
-  },
-  culture: {
-    title: 'Cultural Layer',
-    description: 'The operating environment where this profile is most likely to align and contribute.',
-  },
-}
 
 const formatDateTime = (value: string | null) => {
   if (!value) return '—'
@@ -79,68 +49,34 @@ const withDevelopmentDiagnostic = (state: string, children: React.ReactNode) => 
   </>
 )
 
-const renderReady = (data: IndividualResultReadyData, state: string, firstName?: string | null) => (
-  <ResultsWorkspaceShell
-    title="Individual Intelligence"
-    subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure."
-    statusLabel="Persisted Result"
-  >
-    {withDevelopmentDiagnostic(
-      state,
-      <>
-        <ResultInterpretationSections interpretation={buildIndividualResultInterpretation(data, { firstName })} />
+const renderReady = (data: IndividualResultReadyData, state: string, firstName?: string | null) => {
+  const dashboardProfile = buildLiveIndividualDashboardProfile(data, firstName)
 
-        <section className="surface space-y-4 p-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <SignalChip tone="accent">Status: ready</SignalChip>
-            <SignalChip tone="neutral">Assessment version: {data.assessment.versionKey ?? '—'}</SignalChip>
-            <SignalChip tone="neutral">Completed: {formatDateTime(data.assessment.completedAt)}</SignalChip>
-          </div>
-          <p className="text-sm leading-6 text-textSecondary">{buildSummary(data)}</p>
-        </section>
+  return (
+    <ResultsWorkspaceShell
+      title="Individual Intelligence"
+      subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure."
+      statusLabel="Persisted Result"
+    >
+      {withDevelopmentDiagnostic(
+        state,
+        <>
+          <IndividualDashboard profile={dashboardProfile} />
 
-        <ResultsSectionBlock title="Layer breakdown" description="Per-layer signal ranking and relative contribution.">
-          <div className="space-y-5">
-            {data.layers.map((layer: IndividualResultLayerSummary) => {
-              const meta = LAYER_COPY[layer.layerKey]
-              const layerSignals = data.signals.filter((signal: IndividualResultSignalSummary) => signal.layerKey === layer.layerKey)
+          <section className="surface space-y-4 p-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <SignalChip tone="accent">Status: ready</SignalChip>
+              <SignalChip tone="neutral">Assessment version: {data.assessment.versionKey ?? '—'}</SignalChip>
+              <SignalChip tone="neutral">Completed: {formatDateTime(data.assessment.completedAt)}</SignalChip>
+            </div>
+            <p className="text-sm leading-6 text-textSecondary">{buildSummary(data)}</p>
+          </section>
 
-              return (
-                <div key={layer.layerKey} className="rounded-2xl border border-border/70 bg-panel/60 p-4">
-                  <h3 className="text-base font-semibold text-textPrimary">{meta?.title ?? titleCase(layer.layerKey)}</h3>
-                  <p className="mt-1 text-sm text-textSecondary">{meta?.description ?? 'Layer-level behavioural signal summary.'}</p>
-                  <div className="mt-4 space-y-3">
-                    {layerSignals.map((signal: IndividualResultSignalSummary) => (
-                      <SignalScoreRow
-                        key={signal.signalKey}
-                        label={titleCase(signal.signalKey)}
-                        normalisedScore={signal.normalisedScore}
-                        relativeShare={signal.relativeShare}
-                        rank={signal.rank}
-                        isPrimary={signal.isPrimary}
-                        isSecondary={signal.isSecondary}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </ResultsSectionBlock>
-
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <ResultsSectionBlock title="Signal ranking" description="Highest-to-lowest signal order across all measured layers.">
-            <SignalRankList
-              title="Ranked signals"
-              items={data.signals.map((signal: IndividualResultSignalSummary) => ({
-                label: titleCase(signal.signalKey),
-                score: Math.round(signal.normalisedScore * 100),
-                note: `${titleCase(signal.layerKey)} • Share ${formatPercent(signal.relativeShare)}`,
-              }))}
-            />
-          </ResultsSectionBlock>
-
-          <ResultsSectionBlock title="Metadata" description="Persisted completion and scoring metadata.">
+          <section className="surface space-y-4 p-6">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold tracking-tight text-textPrimary">Result metadata</h2>
+              <p className="text-sm text-textSecondary">Persisted completion and scoring metadata for this dashboard.</p>
+            </div>
             <ResultMetadataGrid
               items={[
                 { label: 'Assessment ID', value: data.assessment.assessmentId },
@@ -151,12 +87,12 @@ const renderReady = (data: IndividualResultReadyData, state: string, firstName?:
                 { label: 'Snapshot version', value: data.snapshot.snapshotVersion.toString() },
               ]}
             />
-          </ResultsSectionBlock>
-        </div>
-      </>,
-    )}
-  </ResultsWorkspaceShell>
-)
+          </section>
+        </>,
+      )}
+    </ResultsWorkspaceShell>
+  )
+}
 
 export function IndividualIntelligenceResultView({ model, firstName }: { model: ViewModel; firstName?: string | null }) {
   if (model.state === 'ready' && 'data' in model) {
