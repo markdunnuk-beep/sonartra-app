@@ -26,7 +26,7 @@ export function Hero() {
         </RevealItem>
         <RevealItem>
           <div className="flex flex-wrap gap-3 pt-1">
-            <Button href="/assessment" className="min-h-11 px-5">
+            <Button href="/assessment-entry" className="min-h-11 px-5">
               Start Signals Assessment
             </Button>
             <Button href="/platform" variant="secondary" className="min-h-11 px-5">
