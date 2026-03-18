@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { AssessmentFlowTransition } from '@/components/assessment/AssessmentFlowTransition'
 import { AssessmentQuestionNavigator } from '@/components/assessment/AssessmentQuestionNavigator'
 import { AssessmentProgress, AssessmentProgressRail } from '@/components/assessment/AssessmentProgress'
@@ -12,6 +13,8 @@ import { Card } from '@/components/ui/Card'
 import { isFinalQuestionIndex, shouldClearReviewModeOnAnswer } from '@/lib/assessment-player'
 import { deriveAssessmentSessionState, getResumeQuestionIndex } from '@/lib/assessment-session'
 import { deriveAssessmentEntryPhase } from '@/lib/assessment-entry-state'
+import { mapLifecyclePresentation } from '@/lib/lifecycle-presentation'
+import { type IndividualLifecycleResolution, type IndividualLifecycleState } from '@/lib/server/assessment-readiness'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const ACTIVE_ASSESSMENT_STORAGE_KEY = 'sonartra_active_assessment_id'
@@ -57,20 +60,61 @@ function normalizeQuestions(response: AssessmentQuestionsResponse): LiveQuestion
   }))
 }
 
-interface AssessmentPageClientProps {
-  initialAssessmentId: string | null
+interface AssessmentLifecycleCardProps {
+  lifecycleState: IndividualLifecycleState
+  startError: string | null
+  loading: boolean
+  onPrimaryAction: () => void | Promise<void>
 }
 
-export default function AssessmentPageClient({ initialAssessmentId }: AssessmentPageClientProps) {
+export function AssessmentLifecycleCard({ lifecycleState, startError, loading, onPrimaryAction }: AssessmentLifecycleCardProps) {
+  const presentation = mapLifecyclePresentation(lifecycleState)
+  const isInteractivePrimary = presentation.assessmentPrimaryActionHref === null
+
+  return (
+    <AssessmentShell className="max-w-[70rem] p-5 sm:p-8 lg:p-10">
+      <Card className="mx-auto w-full max-w-3xl space-y-8 border-border/75 bg-bg/40 px-6 py-8 sm:px-9 sm:py-10 lg:px-12 lg:py-12">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-textSecondary/90">{presentation.assessmentEyebrow}</p>
+        <h2 className="text-3xl font-semibold tracking-tight sm:text-[2.15rem]">{presentation.assessmentTitle}</h2>
+        <p className="max-w-2xl text-base leading-7 text-textSecondary">{presentation.assessmentBody}</p>
+        {startError ? <p className="text-sm text-rose-300">{startError}</p> : null}
+        <div className="flex flex-wrap items-center gap-3.5 pt-1 sm:gap-4">
+          {isInteractivePrimary ? (
+            <Button onClick={() => void onPrimaryAction()} className="min-w-[11rem] px-6" disabled={loading}>
+              {loading ? 'Starting…' : presentation.assessmentPrimaryActionLabel}
+            </Button>
+          ) : (
+            <Button href={presentation.assessmentPrimaryActionHref ?? undefined} className="min-w-[11rem] px-6">
+              {presentation.assessmentPrimaryActionLabel}
+            </Button>
+          )}
+          {presentation.assessmentSecondaryActionLabel && presentation.assessmentSecondaryActionHref ? (
+            <Button variant="secondary" href={presentation.assessmentSecondaryActionHref} className="min-w-[11rem] px-6" disabled={loading && isInteractivePrimary}>
+              {presentation.assessmentSecondaryActionLabel}
+            </Button>
+          ) : null}
+        </div>
+      </Card>
+    </AssessmentShell>
+  )
+}
+
+interface AssessmentPageClientProps {
+  initialAssessmentId: string | null
+  canonicalAssessmentId: string | null
+  initialLifecycle: IndividualLifecycleResolution
+}
+
+export default function AssessmentPageClient({ initialAssessmentId, canonicalAssessmentId, initialLifecycle }: AssessmentPageClientProps) {
   const [viewState, setViewState] = useState<'intro' | 'starting' | 'active'>('intro')
-  const [assessmentId, setAssessmentId] = useState<string | null>(initialAssessmentId)
+  const [assessmentId, setAssessmentId] = useState<string | null>(canonicalAssessmentId ?? initialAssessmentId)
+  const [lifecycleState, setLifecycleState] = useState<IndividualLifecycleState>(initialLifecycle.state)
   const [questions, setQuestions] = useState<LiveQuestion[]>([])
   const [answers, setAnswers] = useState<Record<number, number>>({})
   const [index, setIndex] = useState(0)
   const [loading, setLoading] = useState(false)
   const [savingCount, setSavingCount] = useState(0)
   const [completing, setCompleting] = useState(false)
-  const [completed, setCompleted] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [assessmentError, setAssessmentError] = useState<string | null>(null)
   const [saveWarning, setSaveWarning] = useState<string | null>(null)
@@ -97,6 +141,12 @@ export default function AssessmentPageClient({ initialAssessmentId }: Assessment
   const saveStatusLabel = savingCount > 0 ? 'Saving…' : 'All changes saved'
   const entryPhase = deriveAssessmentEntryPhase(viewState, startError)
   const isFinalQuestion = isFinalQuestionIndex(index, totalQuestions)
+
+  useEffect(() => {
+    if (lifecycleState !== 'in_progress') {
+      window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
+    }
+  }, [lifecycleState])
 
   useEffect(() => {
     if (allAnswered) {
@@ -182,7 +232,8 @@ export default function AssessmentPageClient({ initialAssessmentId }: Assessment
     setAnswers(restoredAnswers)
     setIndex(initialIndex)
     setViewState('active')
-    setCompleted(data.assessment.status === 'completed')
+    setLifecycleState(data.assessment.status === 'completed' ? 'completed_processing' : 'in_progress')
+    setAssessmentId(data.assessment.id)
   }
 
   const fetchAssessmentQuestions = async (id: string, reason: 'resume' | 'start') => {
@@ -200,6 +251,22 @@ export default function AssessmentPageClient({ initialAssessmentId }: Assessment
     logPerf('initial-question-load', { durationMs: Math.round(performance.now() - startedAt), questionCount: data.questions.length })
   }
 
+  const resolveResumeAssessmentId = () => {
+    if (lifecycleState === 'in_progress' && canonicalAssessmentId) {
+      return canonicalAssessmentId
+    }
+
+    if (lifecycleState === 'in_progress' && initialAssessmentId) {
+      return initialAssessmentId
+    }
+
+    if (lifecycleState === 'in_progress') {
+      return window.localStorage.getItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
+    }
+
+    return null
+  }
+
   const startAssessment = async () => {
     setViewState('starting')
     setLoading(true)
@@ -207,32 +274,17 @@ export default function AssessmentPageClient({ initialAssessmentId }: Assessment
     setAssessmentError(null)
 
     try {
-      const queryAssessmentId = initialAssessmentId
-      const storedAssessmentId = window.localStorage.getItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
+      const resumableAssessmentId = resolveResumeAssessmentId()
 
-      if (queryAssessmentId) {
+      if (resumableAssessmentId) {
         try {
-          setAssessmentId(queryAssessmentId)
-          await fetchAssessmentQuestions(queryAssessmentId, 'resume')
-          window.localStorage.setItem(ACTIVE_ASSESSMENT_STORAGE_KEY, queryAssessmentId)
+          setAssessmentId(resumableAssessmentId)
+          await fetchAssessmentQuestions(resumableAssessmentId, 'resume')
+          window.localStorage.setItem(ACTIVE_ASSESSMENT_STORAGE_KEY, resumableAssessmentId)
           return
         } catch (resumeError) {
-          console.error('[assessment] query-param resume failed, falling back', {
-            queryAssessmentId,
-            error: resumeError,
-          })
-          setAssessmentId(null)
-        }
-      }
-
-      if (storedAssessmentId) {
-        try {
-          setAssessmentId(storedAssessmentId)
-          await fetchAssessmentQuestions(storedAssessmentId, 'resume')
-          return
-        } catch (resumeError) {
-          console.error('[assessment] resume failed, falling back to new start', {
-            storedAssessmentId,
+          console.error('[assessment] canonical resume failed, falling back to new start', {
+            resumableAssessmentId,
             error: resumeError,
           })
           window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
@@ -261,6 +313,7 @@ export default function AssessmentPageClient({ initialAssessmentId }: Assessment
       }
 
       setAssessmentId(startData.assessmentId)
+      setLifecycleState('in_progress')
       window.localStorage.setItem(ACTIVE_ASSESSMENT_STORAGE_KEY, startData.assessmentId)
       await fetchAssessmentQuestions(startData.assessmentId, 'start')
     } catch (startFailure) {
@@ -358,7 +411,11 @@ export default function AssessmentPageClient({ initialAssessmentId }: Assessment
         throw new Error(data.error ?? 'Unable to complete assessment.')
       }
 
-      setCompleted(true)
+      setQuestions([])
+      setAnswers({})
+      setIndex(0)
+      setViewState('intro')
+      setLifecycleState('completed_processing')
       window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
     } catch (completeError) {
       console.error(completeError)
@@ -374,33 +431,7 @@ export default function AssessmentPageClient({ initialAssessmentId }: Assessment
         <TopHeader title="Sonartra Signals Assessment" subtitle="Behavioural signal capture" />
 
         {entryPhase !== 'active' ? (
-          <AssessmentShell className="max-w-[70rem] p-5 sm:p-8 lg:p-10">
-            <Card className="mx-auto w-full max-w-3xl space-y-8 border-border/75 bg-bg/40 px-6 py-8 sm:px-9 sm:py-10 lg:px-12 lg:py-12">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-textSecondary/90">Readiness</p>
-              <h2 className="text-3xl font-semibold tracking-tight sm:text-[2.15rem]">Begin your signal capture session</h2>
-              <p className="max-w-2xl text-base leading-7 text-textSecondary">
-                80 questions • approximately 10–12 minutes • structured behavioural output.
-              </p>
-              {startError ? <p className="text-sm text-rose-300">{startError}</p> : null}
-              <div className="flex flex-wrap items-center gap-3.5 pt-1 sm:gap-4">
-                <Button onClick={startAssessment} className="min-w-[11rem] px-6" disabled={entryPhase === 'starting'}>
-                  {entryPhase === 'starting' ? 'Starting…' : 'Begin Assessment'}
-                </Button>
-                <Button variant="secondary" href="/dashboard" className="min-w-[11rem] px-6" disabled={entryPhase === 'starting'}>
-                  Return to Dashboard
-                </Button>
-              </div>
-            </Card>
-          </AssessmentShell>
-        ) : completed ? (
-          <AssessmentShell>
-            <Card className="space-y-4 border-accent/40 bg-bg/30">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Complete</p>
-              <h2 className="text-2xl font-semibold">Assessment complete</h2>
-              <p className="text-sm leading-6 text-textSecondary">Assessment completed successfully.</p>
-              <Button href="/dashboard">Return to Dashboard</Button>
-            </Card>
-          </AssessmentShell>
+          <AssessmentLifecycleCard lifecycleState={lifecycleState} startError={startError} loading={entryPhase === 'starting'} onPrimaryAction={startAssessment} />
         ) : (
           <AssessmentShell
             header={
