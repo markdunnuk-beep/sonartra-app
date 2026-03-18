@@ -1,3 +1,5 @@
+import React from 'react'
+
 type LayerInsight = {
   primaryLabel: string
   statement: string
