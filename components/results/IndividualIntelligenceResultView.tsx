@@ -10,8 +10,14 @@ import {
 } from '@/components/results/ResultsPrimitives'
 import { IndividualDashboard } from '@/components/individual/IndividualDashboard'
 import { buildLiveIndividualDashboardProfile } from '@/lib/interpretation/buildLiveIndividualDashboardProfile'
+import { buildIndividualResultInterpretation, type IndividualResultInterpretation } from '@/lib/results-interpretation'
 
 type ViewModel = IndividualResultApiResponse | { state: string; message?: string }
+
+export type ReadyIndividualResultViewModel = {
+  dashboardProfile: ReturnType<typeof buildLiveIndividualDashboardProfile>
+  interpretation: IndividualResultInterpretation
+}
 
 const formatDateTime = (value: string | null) => {
   if (!value) return '—'
@@ -42,6 +48,13 @@ function buildSummary(data: IndividualResultReadyData) {
   }`
 }
 
+export function buildReadyIndividualResultViewModel(data: IndividualResultReadyData, firstName?: string | null): ReadyIndividualResultViewModel {
+  return {
+    dashboardProfile: buildLiveIndividualDashboardProfile(data, firstName),
+    interpretation: buildIndividualResultInterpretation(data, { firstName }),
+  }
+}
+
 const withDevelopmentDiagnostic = (state: string, children: React.ReactNode) => (
   <>
     {process.env.NODE_ENV !== 'production' ? <p className="text-xs uppercase tracking-[0.14em] text-textSecondary">Rendering state: {state}</p> : null}
@@ -50,7 +63,7 @@ const withDevelopmentDiagnostic = (state: string, children: React.ReactNode) => 
 )
 
 const renderReady = (data: IndividualResultReadyData, state: string, firstName?: string | null) => {
-  const dashboardProfile = buildLiveIndividualDashboardProfile(data, firstName)
+  const readyViewModel = buildReadyIndividualResultViewModel(data, firstName)
 
   return (
     <ResultsWorkspaceShell
@@ -61,7 +74,7 @@ const renderReady = (data: IndividualResultReadyData, state: string, firstName?:
       {withDevelopmentDiagnostic(
         state,
         <>
-          <IndividualDashboard profile={dashboardProfile} />
+          <IndividualDashboard profile={readyViewModel.dashboardProfile} />
 
           <section className="surface space-y-4 p-6">
             <div className="flex flex-wrap items-center gap-2">
