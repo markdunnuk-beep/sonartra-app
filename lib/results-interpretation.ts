@@ -1,3 +1,4 @@
+import { resolveArchetypeSummary, type ArchetypeSummary } from '@/lib/interpretation/archetypes'
 import { IndividualResultLayerSummary, IndividualResultReadyData, IndividualResultSignalSummary } from '@/lib/server/individual-results'
 
 export interface LayerInterpretationBlock {
@@ -17,6 +18,7 @@ export interface IndividualResultInterpretation {
     title: string
     items: string[]
   }
+  archetypeSummary: ArchetypeSummary
   layerInterpretations: LayerInterpretationBlock[]
   managerNotes: {
     title: string
@@ -325,6 +327,8 @@ function buildWhyThisMayFeelFamiliarItems(signals: IndividualResultSignalSummary
 }
 
 export function buildIndividualResultInterpretation(data: IndividualResultReadyData, context: InterpretationContext = {}): IndividualResultInterpretation {
+  const archetypeSummary = resolveArchetypeSummary(data.signals)
+
   const layerInterpretations = data.layers
     .map((layer) => buildLayerInterpretation(layer, data.signals))
     .filter((layer): layer is LayerInterpretationBlock => Boolean(layer))
@@ -361,6 +365,7 @@ export function buildIndividualResultInterpretation(data: IndividualResultReadyD
       ],
     },
     whyThisMayFeelFamiliar: familiarItems.length > 0 ? { title: 'Why this may feel familiar', items: familiarItems } : undefined,
+    archetypeSummary,
     layerInterpretations,
     performanceProfile: {
       title: 'Performance profile',

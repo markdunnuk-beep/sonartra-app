@@ -65,6 +65,8 @@ test('creates deterministic interpretation blocks from ready-result layers and r
   assert.equal(interpretation.layerInterpretations.length, 1)
   assert.match(interpretation.layerInterpretations[0].summary, /Core Driver/)
   assert.match(interpretation.layerInterpretations[0].summary, /Core Analyst/)
+  assert.equal(interpretation.archetypeSummary.primaryKey, 'strategic_operator')
+  assert.equal(interpretation.archetypeSummary.primaryLabel, 'Strategic Operator')
   assert.equal(interpretation.managerNotes.title, 'Manager notes')
   assert.equal(interpretation.performanceProfile.title, 'Performance profile')
   assert.equal(interpretation.bestFit.title, 'Where this person is likely to be most effective')
@@ -72,6 +74,7 @@ test('creates deterministic interpretation blocks from ready-result layers and r
   assert.equal(interpretation.pressureWatchouts.title, 'Watchouts under pressure')
   assert.equal(interpretation.teamDynamics.title, 'Team dynamics')
   assert.equal(interpretation.managerPlaybook.title, 'Manager playbook')
+  assert.equal(Array.isArray(interpretation.archetypeSummary.strengths), true)
 })
 
 test('different signal patterns produce different mapped interpretations', () => {
