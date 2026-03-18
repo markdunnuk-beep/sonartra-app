@@ -9,6 +9,8 @@ import {
   SignalChip,
 } from '@/components/results/ResultsPrimitives'
 import { IndividualDashboard } from '@/components/individual/IndividualDashboard'
+import { ArchetypeOverview } from '@/components/results/ArchetypeOverview'
+import { ResultInterpretationSections } from '@/components/results/ResultInterpretationSections'
 import { buildLiveIndividualDashboardProfile } from '@/lib/interpretation/buildLiveIndividualDashboardProfile'
 import { buildIndividualResultInterpretation, type IndividualResultInterpretation } from '@/lib/results-interpretation'
 
@@ -17,6 +19,13 @@ type ViewModel = IndividualResultApiResponse | { state: string; message?: string
 export type ReadyIndividualResultViewModel = {
   dashboardProfile: ReturnType<typeof buildLiveIndividualDashboardProfile>
   interpretation: IndividualResultInterpretation
+}
+
+export type ReadyIndividualResultPresentationModel = {
+  dashboardProfile: ReturnType<typeof buildLiveIndividualDashboardProfile>
+  interpretation: Omit<IndividualResultInterpretation, 'archetypeSummary'> & {
+    archetypeSummary?: IndividualResultInterpretation['archetypeSummary']
+  }
 }
 
 const formatDateTime = (value: string | null) => {
@@ -62,6 +71,52 @@ const withDevelopmentDiagnostic = (state: string, children: React.ReactNode) => 
   </>
 )
 
+export function ReadyIndividualResultSections({
+  data,
+  readyViewModel,
+}: {
+  data: IndividualResultReadyData
+  readyViewModel: ReadyIndividualResultPresentationModel
+}) {
+  const hasArchetypeSummary = Boolean(readyViewModel.interpretation.archetypeSummary)
+
+  return (
+    <>
+      {hasArchetypeSummary ? <ArchetypeOverview summary={readyViewModel.interpretation.archetypeSummary} /> : null}
+
+      <IndividualDashboard profile={readyViewModel.dashboardProfile} showOverview={!hasArchetypeSummary} />
+
+      <ResultInterpretationSections interpretation={readyViewModel.interpretation as IndividualResultInterpretation} />
+
+      <section className="surface space-y-4 p-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <SignalChip tone="accent">Status: ready</SignalChip>
+          <SignalChip tone="neutral">Assessment version: {data.assessment.versionKey ?? '—'}</SignalChip>
+          <SignalChip tone="neutral">Completed: {formatDateTime(data.assessment.completedAt)}</SignalChip>
+        </div>
+        <p className="text-sm leading-6 text-textSecondary">{buildSummary(data)}</p>
+      </section>
+
+      <section className="surface space-y-4 p-6">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold tracking-tight text-textPrimary">Result metadata</h2>
+          <p className="text-sm text-textSecondary">Persisted completion and scoring metadata for this dashboard.</p>
+        </div>
+        <ResultMetadataGrid
+          items={[
+            { label: 'Assessment ID', value: data.assessment.assessmentId },
+            { label: 'Completion date', value: formatDateTime(data.assessment.completedAt) },
+            { label: 'Scored at', value: formatDateTime(data.snapshot.scoredAt) },
+            { label: 'Version key', value: data.assessment.versionKey ?? '—' },
+            { label: 'Scoring model', value: data.snapshot.scoringModelKey ?? '—' },
+            { label: 'Snapshot version', value: data.snapshot.snapshotVersion.toString() },
+          ]}
+        />
+      </section>
+    </>
+  )
+}
+
 const renderReady = (data: IndividualResultReadyData, state: string, firstName?: string | null) => {
   const readyViewModel = buildReadyIndividualResultViewModel(data, firstName)
 
@@ -71,38 +126,7 @@ const renderReady = (data: IndividualResultReadyData, state: string, firstName?:
       subtitle="Structured analysis of how this individual tends to operate, decide, lead, and respond under pressure."
       statusLabel="Persisted Result"
     >
-      {withDevelopmentDiagnostic(
-        state,
-        <>
-          <IndividualDashboard profile={readyViewModel.dashboardProfile} />
-
-          <section className="surface space-y-4 p-6">
-            <div className="flex flex-wrap items-center gap-2">
-              <SignalChip tone="accent">Status: ready</SignalChip>
-              <SignalChip tone="neutral">Assessment version: {data.assessment.versionKey ?? '—'}</SignalChip>
-              <SignalChip tone="neutral">Completed: {formatDateTime(data.assessment.completedAt)}</SignalChip>
-            </div>
-            <p className="text-sm leading-6 text-textSecondary">{buildSummary(data)}</p>
-          </section>
-
-          <section className="surface space-y-4 p-6">
-            <div className="space-y-1">
-              <h2 className="text-lg font-semibold tracking-tight text-textPrimary">Result metadata</h2>
-              <p className="text-sm text-textSecondary">Persisted completion and scoring metadata for this dashboard.</p>
-            </div>
-            <ResultMetadataGrid
-              items={[
-                { label: 'Assessment ID', value: data.assessment.assessmentId },
-                { label: 'Completion date', value: formatDateTime(data.assessment.completedAt) },
-                { label: 'Scored at', value: formatDateTime(data.snapshot.scoredAt) },
-                { label: 'Version key', value: data.assessment.versionKey ?? '—' },
-                { label: 'Scoring model', value: data.snapshot.scoringModelKey ?? '—' },
-                { label: 'Snapshot version', value: data.snapshot.snapshotVersion.toString() },
-              ]}
-            />
-          </section>
-        </>,
-      )}
+      {withDevelopmentDiagnostic(state, <ReadyIndividualResultSections data={data} readyViewModel={readyViewModel} />)}
     </ResultsWorkspaceShell>
   )
 }

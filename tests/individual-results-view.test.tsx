@@ -3,7 +3,11 @@ import test from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import { IndividualIntelligenceResultView } from '../components/results/IndividualIntelligenceResultView'
+import {
+  buildReadyIndividualResultViewModel,
+  IndividualIntelligenceResultView,
+  ReadyIndividualResultSections,
+} from '../components/results/IndividualIntelligenceResultView'
 import { IndividualResultApiResponse } from '../lib/server/individual-results'
 
 const readyModel: IndividualResultApiResponse = {
@@ -79,14 +83,21 @@ const readyModel: IndividualResultApiResponse = {
   },
 }
 
-test('ready state renders core sections and signal blocks from persisted model', () => {
+const buildPresentationModel = () => buildReadyIndividualResultViewModel(readyModel.data, 'Mark')
+
+test('ready state renders archetype overview on the individual results page and preserves lower sections', () => {
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
 
   assert.match(html, /Individual Intelligence/)
-  assert.match(html, /Layer breakdown/)
-  assert.match(html, /Signal ranking/)
-  assert.match(html, /Core Driver/)
-  assert.match(html, /Decisive Lead/)
+  assert.match(html, /Archetype Overview/)
+  assert.match(html, /Primary Archetype: Strategic Operator/)
+  assert.match(html, /Behavioural Tilt:/)
+  assert.match(html, /Behaviour Style/)
+  assert.match(html, /Motivators/)
+  assert.match(html, /Leadership/)
+  assert.match(html, /Conflict/)
+  assert.match(html, /Culture/)
+  assert.match(html, /Stress/)
   assert.match(html, /How to use this report/)
   assert.match(html, /Interpretation by layer/)
   assert.match(html, /Manager notes/)
@@ -101,10 +112,35 @@ test('ready state renders core sections and signal blocks from persisted model',
   assert.match(html, /What to do/)
   assert.match(html, /What to avoid/)
   assert.match(html, /Mark is likely to establish clarity before committing/)
-
+  assert.doesNotMatch(html, /Individual Overview/)
 })
 
+test('archetype map renders the primary archetype in the active primary state', () => {
+  const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
 
+  assert.match(html, /data-archetype-key="strategic_operator"[^>]*data-archetype-state="primary"/)
+})
+
+test('archetype map renders an optional secondary influence in the softer active state', () => {
+  const readyViewModel = buildPresentationModel()
+  readyViewModel.interpretation.archetypeSummary = {
+    ...readyViewModel.interpretation.archetypeSummary,
+    secondaryKey: 'systems_architect',
+    secondaryLabel: 'Systems Architect',
+  }
+
+  const html = renderToStaticMarkup(<ReadyIndividualResultSections data={readyModel.data} readyViewModel={readyViewModel} />)
+
+  assert.match(html, /Secondary Influence: Systems Architect/)
+  assert.match(html, /data-archetype-key="systems_architect"[^>]*data-archetype-state="secondary"/)
+})
+
+test('non-selected archetypes render in the inactive state', () => {
+  const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
+
+  assert.match(html, /data-archetype-key="growth_catalyst"[^>]*data-archetype-state="inactive"/)
+  assert.match(html, /data-archetype-key="balanced_operator"[^>]*data-archetype-state="inactive"/)
+})
 
 test('ready state uses neutral personalisation fallback when first name is unavailable', () => {
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName={null} />)
@@ -112,7 +148,41 @@ test('ready state uses neutral personalisation fallback when first name is unava
   assert.doesNotMatch(html, /Mark is likely to establish clarity before committing/)
 })
 
+test('ready-state sections omit the archetype overview gracefully when archetypeSummary is absent', () => {
+  const readyViewModel = buildPresentationModel() as Parameters<typeof ReadyIndividualResultSections>[0]['readyViewModel']
+  readyViewModel.interpretation = {
+    ...readyViewModel.interpretation,
+    archetypeSummary: undefined,
+  }
 
+  const html = renderToStaticMarkup(<ReadyIndividualResultSections data={readyModel.data} readyViewModel={readyViewModel} />)
+
+  assert.doesNotMatch(html, /Archetype Overview/)
+  assert.match(html, /Individual Overview/)
+  assert.match(html, /Behaviour Style/)
+})
+
+test('archetype summary content renders primary, behavioural tilt, summary, and list blocks', () => {
+  const readyViewModel = buildPresentationModel()
+  readyViewModel.interpretation.archetypeSummary = {
+    ...readyViewModel.interpretation.archetypeSummary,
+    secondaryKey: 'systems_architect',
+    secondaryLabel: 'Systems Architect',
+  }
+
+  const html = renderToStaticMarkup(<ReadyIndividualResultSections data={readyModel.data} readyViewModel={readyViewModel} />)
+
+  assert.match(html, /Primary Archetype: Strategic Operator/)
+  assert.match(html, /Secondary Influence: Systems Architect/)
+  assert.match(html, /Behavioural Tilt:/)
+  assert.match(html, /The profile shows a clear directional bias\./)
+  assert.match(html, /Strengths/)
+  assert.match(html, /Watchouts/)
+  assert.match(html, /Focus Areas/)
+  assert.match(html, /Sets direction quickly once evidence is good enough/)
+  assert.match(html, /Can narrow consultation when pace is high/)
+  assert.match(html, /Make room for challenge before locking direction/)
+})
 
 test('ready state omits why-this-may-feel-familiar section when no deterministic familiar patterns are present', () => {
   const html = renderToStaticMarkup(
