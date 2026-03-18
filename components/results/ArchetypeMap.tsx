@@ -24,9 +24,9 @@ export function ArchetypeMap({ summary }: { summary: ArchetypeSummary }) {
         <h3 id="archetype-map-title" className="text-[11px] font-semibold uppercase tracking-[0.18em] text-textPrimary/82">
           Archetype map
         </h3>
-        <p className="max-w-[48ch] text-sm leading-6 text-textSecondary/92">A quick recognition view of the 10 Sonartra operating archetypes.</p>
+        <p className="max-w-[44ch] text-sm leading-6 text-textSecondary/92">A quick recognition view of the 10 Sonartra operating archetypes.</p>
       </div>
-      <ol className="grid grid-cols-2 gap-3.5 sm:gap-4 lg:grid-cols-5 lg:gap-[1.125rem]" aria-label="Archetype map">
+      <ol className="grid grid-cols-2 gap-3.5 sm:gap-4 lg:grid-cols-5 lg:gap-4" aria-label="Archetype map">
         {ARCHETYPE_META.map((archetype) => (
           <ArchetypeIcon key={archetype.key} archetype={archetype} state={resolveState(archetype.key, summary)} />
         ))}
