@@ -7,7 +7,7 @@ export default function SignUpPage() {
     <div>
       <PublicNav />
       <section className="section flex justify-center">
-        <SignUp routing="path" path="/sign-up" signInUrl="/sign-in" fallbackRedirectUrl="/assessment" />
+        <SignUp routing="path" path="/sign-up" signInUrl="/sign-in" fallbackRedirectUrl="/dashboard" />
       </section>
     </div>
   );

@@ -1,5 +1,8 @@
 import AssessmentPageClient from './AssessmentPageClient'
 
+import { resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness'
+import { redirect } from 'next/navigation'
+
 interface AssessmentPageProps {
   searchParams?: {
     assessmentId?: string | string[]
@@ -17,8 +20,21 @@ function getAssessmentId(searchParams: AssessmentPageProps['searchParams']): str
   return assessmentId
 }
 
-export default function AssessmentPage({ searchParams }: AssessmentPageProps) {
-  const initialAssessmentId = getAssessmentId(searchParams)
+export default async function AssessmentPage({ searchParams }: AssessmentPageProps) {
+  const requestedAssessmentId = getAssessmentId(searchParams)
+  const resolved = await resolveIndividualLifecycleState()
 
-  return <AssessmentPageClient initialAssessmentId={initialAssessmentId} />
+  if (resolved.authState === 'unauthenticated') {
+    redirect('/sign-in')
+  }
+
+  const canonicalAssessmentId = resolved.lifecycle.latestAssessment?.assessmentId ?? null
+
+  return (
+    <AssessmentPageClient
+      initialAssessmentId={requestedAssessmentId}
+      initialLifecycle={resolved.lifecycle}
+      canonicalAssessmentId={canonicalAssessmentId}
+    />
+  )
 }
