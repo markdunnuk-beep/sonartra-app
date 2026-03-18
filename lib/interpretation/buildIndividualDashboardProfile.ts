@@ -104,7 +104,7 @@ function buildProfileLabel(
   const leadershipLabel = leadership.primaryLabel
 
   if (behaviourLabel && leadershipLabel) {
-    return `${behaviourLabel} with ${leadershipLabel} leadership`
+    return `${behaviourLabel} | ${leadershipLabel}`
   }
 
   return behaviourLabel || leadershipLabel || "Balanced profile"
@@ -114,10 +114,18 @@ function buildHeaderSummary(
   behaviour: LayerInsight,
   motivators: LayerInsight
 ): string {
-const behaviourStatement = behaviour.statement.replace(/^([A-Z][a-z]+|you)\s+is\s+/i, "")
-const motivatorsStatement = motivators.statement.replace(/^([A-Z][a-z]+|you)\s+is\s+/i, "")
+  const behaviourStatement = behaviour.statement
+    .replace(/^([A-Z][a-z]+|you)\s+is\s+/i, "")
+    .trim()
 
-  const combined = `${behaviourStatement} Motivated by ${motivatorsStatement.charAt(0).toLowerCase()}${motivatorsStatement.slice(1)}`
+  const motivatorsStatement = motivators.statement
+    .replace(/^([A-Z][a-z]+|you)\s+is\s+/i, "")
+    .trim()
+
+  const capitalisedMotivators =
+    motivatorsStatement.charAt(0).toUpperCase() + motivatorsStatement.slice(1)
+
+  const combined = `${behaviourStatement} ${capitalisedMotivators}`
 
   return truncateSentence(combined, 110)
 }
@@ -139,8 +147,12 @@ function enforceLayerLimits(insight: LayerInsight): LayerInsight {
   return {
     ...insight,
     statement: truncateSentence(insight.statement, 160),
-    strengths: insight.strengths.slice(0, 3).map((item) => truncateSentence(item, 48)),
-    watchouts: insight.watchouts.slice(0, 3).map((item) => truncateSentence(item, 48)),
+    strengths: insight.strengths
+      .slice(0, 3)
+      .map((item) => truncateSentence(item, 48)),
+    watchouts: insight.watchouts
+      .slice(0, 3)
+      .map((item) => truncateSentence(item, 48)),
   }
 }
 
@@ -156,21 +168,30 @@ export function buildIndividualDashboardProfile(
 
   const behaviour = enforceLayerLimits(
     injectBehaviourFirstName(
-      resolveBehaviourStyle(signals.behaviour.primary, signals.behaviour.secondary),
+      resolveBehaviourStyle(
+        signals.behaviour.primary,
+        signals.behaviour.secondary
+      ),
       safeFirstName
     )
   )
 
   const motivators = enforceLayerLimits(
     injectMotivatorsFirstName(
-      resolveMotivators(signals.motivators.primary, signals.motivators.secondary),
+      resolveMotivators(
+        signals.motivators.primary,
+        signals.motivators.secondary
+      ),
       safeFirstName
     )
   )
 
   const leadership = enforceLayerLimits(
     injectLeadershipFirstName(
-      resolveLeadership(signals.leadership.primary, signals.leadership.secondary),
+      resolveLeadership(
+        signals.leadership.primary,
+        signals.leadership.secondary
+      ),
       safeFirstName
     )
   )
