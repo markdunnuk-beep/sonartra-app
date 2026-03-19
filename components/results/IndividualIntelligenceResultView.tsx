@@ -5,57 +5,24 @@ import {
   ResultEmptyStatePanel,
   ResultFailedStatePanel,
   ResultsWorkspaceShell,
-  ResultMetadataGrid,
-  SignalChip,
 } from '@/components/results/ResultsPrimitives'
-import { IndividualDashboard } from '@/components/individual/IndividualDashboard'
-import { ArchetypeOverview } from '@/components/results/ArchetypeOverview'
-import { ResultInterpretationSections } from '@/components/results/ResultInterpretationSections'
-import { buildLiveIndividualDashboardProfile } from '@/lib/interpretation/buildLiveIndividualDashboardProfile'
-import { buildIndividualResultInterpretation, type IndividualResultInterpretation } from '@/lib/results-interpretation'
+import {
+  buildIndividualResultsPresentationModel,
+  type IndividualResultsPresentationModel,
+} from '@/lib/results/individual-results-presentation'
+import { IndividualResultsExperience } from '@/components/results/IndividualResultsExperience'
 
 type ViewModel = IndividualResultApiResponse | { state: string; message?: string }
 
 export type ReadyIndividualResultViewModel = {
-  dashboardProfile: ReturnType<typeof buildLiveIndividualDashboardProfile>
-  interpretation: IndividualResultInterpretation
+  presentation: IndividualResultsPresentationModel
 }
 
 export type ReadyIndividualResultPresentationModel = ReadyIndividualResultViewModel
 
-const formatDateTime = (value: string | null) => {
-  if (!value) return '—'
-  return new Date(value).toLocaleString('en-GB', {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-const formatPercent = (value: number) => `${Math.round(value * 100)}%`
-
-const titleCase = (value: string) => value.replaceAll('_', ' ').replaceAll('-', ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-
-function buildSummary(data: IndividualResultReadyData) {
-  const ranked = [...data.signals].sort((a, b) => b.normalisedScore - a.normalisedScore)
-  const primary = ranked.find((signal) => signal.isPrimary) ?? ranked[0]
-  const secondary = ranked.find((signal) => signal.isSecondary) ?? ranked[1]
-
-  if (!primary) return 'No scored signal data is currently available for this assessment completion.'
-
-  return `Primary concentration sits in ${titleCase(primary.signalKey)} (${formatPercent(primary.normalisedScore)}). ${
-    secondary
-      ? `${titleCase(secondary.signalKey)} is a supporting signal (${formatPercent(secondary.normalisedScore)}), suggesting additional leverage through that operating style.`
-      : 'Secondary concentration is currently limited in the persisted output.'
-  }`
-}
-
 export function buildReadyIndividualResultViewModel(data: IndividualResultReadyData, firstName?: string | null): ReadyIndividualResultViewModel {
   return {
-    dashboardProfile: buildLiveIndividualDashboardProfile(data, firstName),
-    interpretation: buildIndividualResultInterpretation(data, { firstName }),
+    presentation: buildIndividualResultsPresentationModel(data, firstName),
   }
 }
 
@@ -67,49 +34,12 @@ const withDevelopmentDiagnostic = (state: string, children: React.ReactNode) => 
 )
 
 export function ReadyIndividualResultSections({
-  data,
   readyViewModel,
 }: {
   data: IndividualResultReadyData
   readyViewModel: ReadyIndividualResultPresentationModel
 }) {
-  const hasArchetypeSummary = Boolean(readyViewModel.interpretation.archetypeSummary)
-
-  return (
-    <>
-      {hasArchetypeSummary ? <ArchetypeOverview summary={readyViewModel.interpretation.archetypeSummary} /> : null}
-
-      <IndividualDashboard profile={readyViewModel.dashboardProfile} showOverview={!hasArchetypeSummary} />
-
-      <ResultInterpretationSections interpretation={readyViewModel.interpretation} />
-
-      <section className="surface space-y-4 p-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <SignalChip tone="accent">Status: ready</SignalChip>
-          <SignalChip tone="neutral">Assessment version: {data.assessment.versionKey ?? '—'}</SignalChip>
-          <SignalChip tone="neutral">Completed: {formatDateTime(data.assessment.completedAt)}</SignalChip>
-        </div>
-        <p className="text-sm leading-6 text-textSecondary">{buildSummary(data)}</p>
-      </section>
-
-      <section className="surface space-y-4 p-6">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight text-textPrimary">Result metadata</h2>
-          <p className="text-sm text-textSecondary">Persisted completion and scoring metadata for this dashboard.</p>
-        </div>
-        <ResultMetadataGrid
-          items={[
-            { label: 'Assessment ID', value: data.assessment.assessmentId },
-            { label: 'Completion date', value: formatDateTime(data.assessment.completedAt) },
-            { label: 'Scored at', value: formatDateTime(data.snapshot.scoredAt) },
-            { label: 'Version key', value: data.assessment.versionKey ?? '—' },
-            { label: 'Scoring model', value: data.snapshot.scoringModelKey ?? '—' },
-            { label: 'Snapshot version', value: data.snapshot.snapshotVersion.toString() },
-          ]}
-        />
-      </section>
-    </>
-  )
+  return <IndividualResultsExperience model={readyViewModel.presentation} />
 }
 
 const RESULT_TITLE = 'Individual Intelligence'
@@ -118,15 +48,7 @@ const RESULT_SUBTITLE = 'Structured analysis of how this individual tends to ope
 const renderReady = (data: IndividualResultReadyData, state: string, firstName?: string | null) => {
   const readyViewModel = buildReadyIndividualResultViewModel(data, firstName)
 
-  return (
-    <ResultsWorkspaceShell
-      title={RESULT_TITLE}
-      subtitle={RESULT_SUBTITLE}
-      statusLabel="Persisted Result"
-    >
-      {withDevelopmentDiagnostic(state, <ReadyIndividualResultSections data={data} readyViewModel={readyViewModel} />)}
-    </ResultsWorkspaceShell>
-  )
+  return withDevelopmentDiagnostic(state, <ReadyIndividualResultSections data={data} readyViewModel={readyViewModel} />)
 }
 
 export function IndividualIntelligenceResultView({ model, firstName }: { model: ViewModel; firstName?: string | null }) {
