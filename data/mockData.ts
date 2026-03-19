@@ -30,7 +30,6 @@ export const measurePillars = [
   { title: 'Conflict Behaviour', summary: 'Determines response under tension, disagreement, and contested priorities.' },
   { title: 'Cultural Preferences', summary: 'Determines alignment with the operating environments where work holds.' },
   { title: 'Stress Response', summary: 'Controls behaviour under pressure, fatigue, and sustained load.' },
-  { title: 'Cognitive Tendencies', summary: 'Shapes how information is filtered, weighted, and turned into judgement.' },
 ]
 
 export const workflowSteps = [

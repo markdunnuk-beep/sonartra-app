@@ -17,17 +17,22 @@ export default function HomePage() {
       <PublicNav />
       <Hero />
 
-      <section id="platform-model" className="section section-tight pt-4 md:pt-10">
+      <section id="platform-model" className="section section-tight pt-4 md:pt-8">
         <SectionHeading
           eyebrow="Section 2"
           title="Three-Layer Intelligence Model"
           description="Sonartra uses a three-layer model to separate performance analysis by operating level before combining it into one system view."
         />
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+        <Reveal y={8} className="-mt-6 mb-6 md:-mt-8 md:mb-8">
+          <p className="max-w-2xl text-sm leading-relaxed text-[#A9BDD8]">
+            The system progresses from individual to team to organisation, so behaviour is interpreted in context, not isolation.
+          </p>
+        </Reveal>
+        <div className="grid items-start gap-4 lg:grid-cols-[1.05fr_1fr] lg:gap-5">
           <Reveal y={10} className="architecture-anchor-effect">
             <ArchitectureDiagram />
           </Reveal>
-          <RevealGroup className="grid gap-5" staggerChildren={0.06} delayChildren={0.02}>
+          <RevealGroup className="grid gap-4" staggerChildren={0.06} delayChildren={0.02}>
             {layerData.map((layer) => (
               <RevealItem key={layer.title}>
                 <Card interactive className="h-full p-6">
@@ -39,11 +44,6 @@ export default function HomePage() {
             ))}
           </RevealGroup>
         </div>
-        <Reveal y={8} className="mt-5">
-          <p className="max-w-2xl text-sm leading-relaxed text-[#A9BDD8]">
-            The system progresses from individual to team to organisation, so behaviour is interpreted in context, not isolation.
-          </p>
-        </Reveal>
       </section>
 
       <section className="section section-spacious">
@@ -54,7 +54,7 @@ export default function HomePage() {
         />
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <div>
-            <RevealGroup className="grid gap-4 sm:auto-rows-fr sm:grid-cols-2 lg:grid-cols-3" staggerChildren={0.05}>
+            <RevealGroup className="grid gap-4 sm:auto-rows-fr sm:grid-cols-2 xl:grid-cols-3" staggerChildren={0.05}>
               {measurePillars.map((pillar) => (
                 <RevealItem key={pillar.title}>
                   <Card
@@ -139,10 +139,10 @@ export default function HomePage() {
           <Card interactive className="p-8 text-center sm:p-10">
             <p className="eyebrow mb-4">Decision Support</p>
             <h3 className="text-3xl font-semibold text-[#ECF2FC]">
-              Activate <span className="headline-emphasis">performance intelligence</span> with Signals.
+              Activate <span className="headline-emphasis">performance intelligence</span> with Sonartra Signals.
             </h3>
             <p className="prose-support mx-auto mt-4 max-w-2xl">
-              Begin with Signals, then extend analysis across individuals, teams, and organisational performance.
+              Begin with Sonartra Signals, then extend analysis across individuals, teams, and organisational performance.
             </p>
             <div className="mt-8 flex justify-center">
               <Button href="/signup">Run Sonartra Signals</Button>
