@@ -17,7 +17,7 @@ export default function HomePage() {
       <PublicNav />
       <Hero />
 
-      <section className="section section-tight">
+      <section id="platform-model" className="section section-tight pt-4 md:pt-10">
         <SectionHeading
           eyebrow="Section 2"
           title="Three-Layer Intelligence Model"
@@ -139,13 +139,13 @@ export default function HomePage() {
           <Card interactive className="p-8 text-center sm:p-10">
             <p className="eyebrow mb-4">Decision Support</p>
             <h3 className="text-3xl font-semibold text-[#ECF2FC]">
-              Deploy <span className="headline-emphasis">performance intelligence</span> at scale.
+              Activate <span className="headline-emphasis">performance intelligence</span> with Signals.
             </h3>
             <p className="prose-support mx-auto mt-4 max-w-2xl">
-              Run Sonartra Signals and generate performance analysis for sharper strategic decisions.
+              Begin with Signals, then extend analysis across individuals, teams, and organisational performance.
             </p>
             <div className="mt-8 flex justify-center">
-              <Button href="/signup">Start with Sonartra Signals</Button>
+              <Button href="/signup">Run Sonartra Signals</Button>
             </div>
           </Card>
         </Reveal>
