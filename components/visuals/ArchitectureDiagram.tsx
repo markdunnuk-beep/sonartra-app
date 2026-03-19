@@ -164,7 +164,7 @@ export function ArchitectureDiagram() {
             <circle cx="400" cy="212" r="11.5" className="intelligence-glow fill-[#e6f2ff] stroke-[#c0dcfb]/65" strokeWidth="0.9" />
             <circle cx="400" cy="212" r="3.2" className="fill-[#d9edff]" />
             <text x="400" y="252" textAnchor="middle" className="fill-[#dce9f8] text-[11px] tracking-[0.28em] uppercase">
-              Core Signal Engine
+              Sonartra Signals Engine
             </text>
           </g>
 

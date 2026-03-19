@@ -46,9 +46,11 @@ export default function HomePage() {
               <div className="absolute inset-0 opacity-30 bg-[linear-gradient(rgba(130,151,178,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(130,151,178,0.05)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(circle_at_center,black,transparent_92%)]" />
               <div className="relative z-10 space-y-6 sm:space-y-7">
                 <div className="max-w-[42rem] space-y-3">
-                  <h2 className="headline-section max-w-[18ch] md:max-w-[15ch]">Sonartra Three-Layer Intelligence Model</h2>
+                  <h2 className="headline-section max-w-[18ch] md:max-w-[15ch]">
+                    Sonartra <span className="hero-headline-emphasis">Three-Layer Intelligence</span> Model
+                  </h2>
                   <p className="prose-support max-w-[42rem] text-[15px] leading-7 text-[#b1c0d3]">
-                    Sonartra interprets performance across individual, team, and organisational layers—combining behavioural signals into one operating model.
+                    Sonartra interprets performance across individual, team, and organisational layers, combining behavioural signals into one operating model.
                   </p>
                 </div>
 
