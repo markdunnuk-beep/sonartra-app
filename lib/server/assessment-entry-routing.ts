@@ -5,7 +5,7 @@ export const ASSESSMENT_ENTRY_PATH = '/assessment-entry'
 
 export function getAssessmentEntryRedirectTarget(lifecycleState: IndividualLifecycleState): string {
   if (lifecycleState === 'not_started' || lifecycleState === 'in_progress') {
-    return '/assessment'
+    return '/assessment/workspace'
   }
 
   return getGenericAuthFallbackRedirectUrl()

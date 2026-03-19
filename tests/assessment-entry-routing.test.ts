@@ -8,9 +8,9 @@ import {
   resolveAssessmentEntryRedirect,
 } from '../lib/server/assessment-entry-routing'
 
-test('assessment entry routes not_started and in_progress users to assessment', () => {
-  assert.equal(getAssessmentEntryRedirectTarget('not_started'), '/assessment')
-  assert.equal(getAssessmentEntryRedirectTarget('in_progress'), '/assessment')
+test('assessment entry routes not_started and in_progress users to the live assessment workspace', () => {
+  assert.equal(getAssessmentEntryRedirectTarget('not_started'), '/assessment/workspace')
+  assert.equal(getAssessmentEntryRedirectTarget('in_progress'), '/assessment/workspace')
 })
 
 test('assessment entry routes completed and non-startable states to dashboard', () => {
@@ -53,5 +53,5 @@ test('assessment entry uses canonical lifecycle state to choose the authenticate
   }))
 
   assert.equal(dashboardTarget, '/dashboard')
-  assert.equal(assessmentTarget, '/assessment')
+  assert.equal(assessmentTarget, '/assessment/workspace')
 })
