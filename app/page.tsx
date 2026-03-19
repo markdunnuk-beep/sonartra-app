@@ -29,6 +29,15 @@ const homepageLayerData = [
     description: 'Surface organisation-wide performance patterns.',
     label: 'L03',
     toneClass: 'architecture-layer-card-3',
+    description: 'Measure behavioural patterns at the individual operating level.',
+  },
+  {
+    title: 'Team Intelligence',
+    description: 'Understand coordination, interaction, and execution dynamics across teams.',
+  },
+  {
+    title: 'Organisational Intelligence',
+    description: 'Surface system-wide performance patterns across the organisation.',
   },
 ]
 
@@ -87,6 +96,45 @@ export default function HomePage() {
             ))}
           </RevealGroup>
         </div>
+        <Reveal y={8} className="architecture-anchor-effect">
+          <div className="architecture-banner-shell surface relative isolate overflow-hidden px-6 py-7 sm:px-8 sm:py-8 lg:px-10 lg:py-10">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(101,156,226,0.18),transparent_28%),radial-gradient(circle_at_top_right,rgba(87,109,145,0.14),transparent_24%),linear-gradient(150deg,rgba(6,11,18,0.98),rgba(7,12,20,0.92)_42%,rgba(5,9,15,0.98))]" />
+            <div className="absolute inset-0 opacity-30 bg-[linear-gradient(rgba(130,151,178,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(130,151,178,0.05)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(circle_at_center,black,transparent_92%)]" />
+            <div className="relative z-10 space-y-6 sm:space-y-7">
+              <div className="max-w-[42rem] space-y-3">
+                <h2 className="headline-section max-w-[18ch] md:max-w-[15ch]">Sonartra Three-Layer Intelligence Model</h2>
+                <p className="prose-support max-w-[42rem] text-[15px] leading-7 text-[#b1c0d3]">
+                  Sonartra interprets performance across individual, team, and organisational layers—combining behavioural signals into one operating model.
+                </p>
+              </div>
+
+              <ArchitectureDiagram />
+            </div>
+          </div>
+        </Reveal>
+
+        <RevealGroup className="mx-auto mt-5 flex w-full max-w-4xl flex-col gap-4 md:mt-6" staggerChildren={0.06} delayChildren={0.02}>
+          {homepageLayerData.map((layer, index) => (
+            <RevealItem key={layer.title} className="h-full">
+              <Card interactive className="architecture-layer-card flex h-full flex-col gap-3.5 px-5 py-[1.125rem] sm:px-6 sm:py-[1.375rem]">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="architecture-layer-dot" aria-hidden="true" />
+                      <p className="architecture-layer-label">Layer 0{index + 1}</p>
+                    </div>
+                    <h3 className="text-[1.15rem] font-semibold text-[#E4EBF8] sm:text-[1.2rem]">{layer.title}</h3>
+                  </div>
+                  <span className="architecture-live-chip">
+                    <span className="hero-live-dot" aria-hidden="true" />
+                    <span>Live</span>
+                  </span>
+                </div>
+                <p className="max-w-[44rem] text-sm leading-6 text-[#C6D2E4] sm:text-[0.95rem]">{layer.description}</p>
+              </Card>
+            </RevealItem>
+          ))}
+        </RevealGroup>
       </section>
 
       <section className="section section-spacious">

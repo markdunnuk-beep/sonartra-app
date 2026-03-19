@@ -2,6 +2,9 @@ const ringLabels = [
   { label: 'Individual Intelligence', x: 400, y: 112, textClass: 'fill-[#c3d7ef]', rectOpacity: 0.88, textSize: '11px' },
   { label: 'Team Intelligence', x: 400, y: 76, textClass: 'fill-[#b2c7e1]', rectOpacity: 0.74, textSize: '10.5px' },
   { label: 'Organisational Intelligence', x: 400, y: 40, textClass: 'fill-[#9fb4cf]', rectOpacity: 0.6, textSize: '10px' },
+  { label: 'Individual Intelligence', x: 400, y: 112 },
+  { label: 'Team Intelligence', x: 400, y: 76 },
+  { label: 'Organisational Intelligence', x: 400, y: 40 },
 ]
 
 const ringNodes = [
@@ -165,6 +168,11 @@ export function ArchitectureDiagram() {
             <circle cx="400" cy="212" r="3.2" className="fill-[#d9edff]" />
             <text x="400" y="252" textAnchor="middle" className="fill-[#dce9f8] text-[11px] tracking-[0.28em] uppercase">
               Sonartra Signals Engine
+            <circle cx="400" cy="212" r="38" fill="url(#radar-core-glow)" className="intelligence-glow" />
+            <circle cx="400" cy="212" r="20" className="fill-[#0f1b2b] stroke-[#9dc3ef]/45" strokeWidth="1.3" />
+            <circle cx="400" cy="212" r="9" className="intelligence-glow fill-[#dcecff] stroke-[#accff7]/55" strokeWidth="0.8" />
+            <text x="400" y="250" textAnchor="middle" className="fill-[#d8e6f7] text-[11px] tracking-[0.28em] uppercase">
+              Core Signal Engine
             </text>
           </g>
 
@@ -191,12 +199,14 @@ export function ArchitectureDiagram() {
           {ringLabels.map((ring, index) => (
             <g key={ring.label} className="hidden sm:block">
               <rect x="312" y={ring.y - 17} width="176" height="24" rx="12" className="fill-[#0b1320]/78 stroke-white/10 architecture-label-glow" style={{ animationDelay: `${index * 1.1}s`, opacity: ring.rectOpacity }} />
+              <rect x="312" y={ring.y - 17} width="176" height="24" rx="12" className="fill-[#0b1320]/78 stroke-white/10 architecture-label-glow" style={{ animationDelay: `${index * 1.1}s` }} />
               <text
                 x={400}
                 y={ring.y}
                 textAnchor="middle"
                 className={`${ring.textClass} font-medium uppercase tracking-[0.24em]`}
                 style={{ fontSize: ring.textSize }}
+                className="fill-[#b5c9e4] text-[10px] font-medium uppercase tracking-[0.24em]"
               >
                 {ring.label}
               </text>
