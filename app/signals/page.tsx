@@ -14,7 +14,7 @@ export default function SignalsPage() {
           eyebrow="Product"
           title="Sonartra Signals"
           description="Assessment engine for behavioural performance intelligence."
-          right={<Button href="/assessment">Start Assessment</Button>}
+          right={<Button href="/assessment-entry">Start Assessment</Button>}
         />
         <Card>
           <p className="prose-copy max-w-none">
