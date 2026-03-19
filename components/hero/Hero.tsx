@@ -19,7 +19,7 @@ export function Hero() {
               <p className="eyebrow">Sonartra Performance Intelligence Platform</p>
             </RevealItem>
             <RevealItem y={10}>
-              <h1 className="headline-display hero-headline max-w-[15ch] text-balance">
+              <h1 className="headline-display hero-headline max-w-[16.4ch] text-balance lg:max-w-[16.1ch]">
                 <HeadlineReveal text="Make smarter decisions with real insight into individual and team behaviour.">
                   Make smarter decisions with real insight into <span className="headline-emphasis hero-headline-emphasis">individual and team behaviour</span>.
                 </HeadlineReveal>
