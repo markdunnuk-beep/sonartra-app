@@ -12,7 +12,7 @@ test('individual results wireframe renders the stacked assessment model and requ
   assert.match(html, /Prompt 1 wireframe/)
   assert.match(html, /Latest assessment/)
   assert.match(html, /Archived snapshot/)
-  assert.match(html, /Analyst–Driver profile with high structure, autonomy, and outcome focus\./)
+  assert.match(html, /Analyst–Driver — structured, autonomous, outcome-focused\./)
 
   const sectionOrder = [
     'How to Use This Report',
@@ -38,10 +38,10 @@ test('individual results wireframe renders the stacked assessment model and requ
 test('individual results wireframe includes practical guidance and repeated domain scaffolding', () => {
   const html = renderToStaticMarkup(<IndividualResultsWireframeContent />)
 
-  assert.match(html, /Mark tends to operate as an Analyst–Driver/)
+  assert.match(html, /Mark operates as an Analyst–Driver/)
   assert.match(html, /Primary profile: Analyst–Driver/)
   assert.match(html, /Primary profile: Mastery and autonomy/)
-  assert.match(html, /Distribution \+ guidance/)
+  assert.match(html, /Profile \+ guidance/)
   assert.match(html, /Where Mark performs best/)
   assert.match(html, /Where performance risk appears/)
   assert.match(html, /Recommended focus/)
