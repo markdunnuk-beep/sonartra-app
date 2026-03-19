@@ -8,28 +8,36 @@ export const navLinks = [
 export const layerData = [
   {
     title: 'Individual Intelligence',
-    description:
-      'Understand how individuals think, operate, and respond under pressure — helping leaders place people and teams in roles where they perform at their best.',
+    description: 'Defines how one person thinks, behaves, and performs in live operating conditions.',
+    detail: 'The unit of analysis: one profile, one operating pattern.',
   },
   {
     title: 'Team Intelligence',
-    description:
-      'Reveals how teams actually function — highlighting leadership balance, collaboration dynamics, and potential conflict risks.',
+    description: 'Defines how individual patterns combine through complement, friction, and dependency.',
+    detail: 'Tests whether a team can coordinate cleanly under shared demands.',
   },
   {
     title: 'Organisational Intelligence',
-    description:
-      'Identifies organisational strengths, cultural friction points, and structural risks across the business.',
+    description: 'Defines how teams align, compound, or break down across the wider operating system.',
+    detail: 'Maps whether teams align as one operating structure.',
   },
 ]
 
 export const measurePillars = [
-  { title: 'Behaviour Style', summary: 'How people naturally work and interact.' },
-  { title: 'Motivators', summary: 'What drives people to perform and stay engaged.' },
-  { title: 'Leadership', summary: 'How people guide, influence, and make decisions.' },
-  { title: 'Conflict', summary: 'How people handle disagreement and tension.' },
-  { title: 'Culture', summary: 'The environment where people perform best.' },
-  { title: 'Stress', summary: 'How behaviour changes under pressure.' },
+  { title: 'Behavioural Style', summary: 'Defines execution pattern: pace, structure, and approach to work.' },
+  { title: 'Motivational Drivers', summary: 'Shapes where effort is allocated and how long it is sustained.' },
+  { title: 'Leadership Orientation', summary: 'Defines how decisions are framed and accountability is applied.' },
+  { title: 'Conflict Behaviour', summary: 'Determines response under tension, disagreement, and contested priorities.' },
+  { title: 'Cultural Preferences', summary: 'Determines alignment with the operating environments where work holds.' },
+  { title: 'Stress Response', summary: 'Controls behaviour under pressure, fatigue, and sustained load.' },
+  { title: 'Cognitive Tendencies', summary: 'Shapes how information is filtered, weighted, and turned into judgement.' },
+]
+
+export const workflowSteps = [
+  { title: 'Assess', summary: 'Signals captures behavioural performance data through a structured assessment layer.' },
+  { title: 'Analyse', summary: 'The system converts response patterns into structured intelligence for comparison and tracking.' },
+  { title: 'Interpret', summary: 'Sonartra identifies patterns, risks, and performance implications inside the resulting profile.' },
+  { title: 'Apply', summary: 'Outputs are used to inform decisions across individuals, teams, and organisations.' },
 ]
 
 export const testimonials = [
@@ -41,7 +49,7 @@ export const testimonials = [
 export const caseStudies = [
   { company: 'Northline Capital', challenge: 'Leadership misalignment across regional teams', outcome: '18% faster strategic decision cycle', metric: '18%' },
   { company: 'Aster Biotech', challenge: 'Escalating conflict during scale phase', outcome: '32% reduction in cross-team escalation incidents', metric: '32%' },
-  { company: 'Helio Systems', challenge: 'Unclear behavioural fit for mission-critical roles', outcome: '24% improvement in high-stakes project delivery', metric: '24%' },
+  { company: 'Helio Systems', challenge: 'Unclear behavioural fit for mission-critical roles', outcome: '24% gain in high-stakes project delivery', metric: '24%' },
 ]
 
 export const assessmentQuestions = [

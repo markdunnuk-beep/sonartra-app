@@ -21,7 +21,7 @@ export function Hero() {
         </RevealItem>
         <RevealItem>
           <p className="prose-support max-w-[38rem]">
-            Sonartra transforms behavioural data into practical insight leaders can use to build stronger teams and make better decisions.
+            Sonartra analyses behavioural signal data to model how people operate, how teams interact, and how organisations perform — giving leaders a clearer basis for decision-making.
           </p>
         </RevealItem>
         <RevealItem>
