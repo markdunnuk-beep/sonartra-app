@@ -107,6 +107,14 @@ const readyModel: IndividualResultApiResponse = {
 
 const buildPresentationModel = () => buildReadyIndividualResultViewModel(readyData, 'Mark')
 
+function assertSortedDistribution(distribution: Array<{ label: string; value: number }>) {
+  const sorted = [...distribution].sort((a, b) => b.value - a.value)
+  assert.deepEqual(distribution, sorted)
+
+  const total = distribution.reduce((sum, d) => sum + d.value, 0)
+  assert.equal(total, 100)
+}
+
 function renderExpandedReadySections() {
   const readyViewModel = buildPresentationModel()
   readyViewModel.presentation.assessments[0]!.defaultExpanded = true
@@ -167,6 +175,7 @@ test('archetype overview renders only primary and secondary archetypes with the 
 
 test('domain sections render with repeated structure, live bars, and concise guidance cards', () => {
   const html = renderExpandedReadySections()
+  const readyViewModel = buildPresentationModel()
 
   assert.match(html, /Primary profile: Driver – Analyst/)
   assert.match(html, /Primary profile: Mastery – Achievement/)
@@ -178,6 +187,10 @@ test('domain sections render with repeated structure, live bars, and concise gui
   assert.match(html, /Watchouts/)
   assert.match(html, /52%/)
   assert.match(html, /42%/)
+
+  for (const domain of readyViewModel.presentation.assessments[0].domains) {
+    assertSortedDistribution(domain.bars)
+  }
 })
 
 test('performance implications section renders the synthesised best-fit, risk, and focus guidance', () => {

@@ -105,7 +105,7 @@ test('presentation model keeps archetype overview limited to primary and seconda
   assert.equal(assessment.archetype.focusAreas.length, 3)
 })
 
-test('presentation model maps live domain distributions into visible percentage bars', () => {
+test('presentation model maps live domain distributions into visible percentage bars sorted descending after normalisation', () => {
   const readyViewModel = buildReadyIndividualResultViewModel(makeReadyData(), 'Mark')
   const [behaviour, motivators, leadership, conflict, culture, stress] = readyViewModel.presentation.assessments[0].domains
 
@@ -116,16 +116,16 @@ test('presentation model maps live domain distributions into visible percentage 
     { label: 'Stabiliser', value: 16 },
   ])
   assert.deepEqual(motivators.bars, [
-    { label: 'Achievement', value: 30 },
     { label: 'Mastery', value: 32 },
+    { label: 'Achievement', value: 30 },
     { label: 'Influence', value: 22 },
     { label: 'Stability', value: 16 },
   ])
   assert.deepEqual(leadership.bars, [
     { label: 'Results', value: 36 },
     { label: 'Vision', value: 26 },
-    { label: 'People', value: 18 },
     { label: 'Process', value: 20 },
+    { label: 'People', value: 18 },
   ])
   assert.deepEqual(conflict.bars, [
     { label: 'Compete', value: 32 },
@@ -136,8 +136,8 @@ test('presentation model maps live domain distributions into visible percentage 
   ])
   assert.deepEqual(culture.bars, [
     { label: 'Performance', value: 31 },
-    { label: 'Control', value: 24 },
     { label: 'Collaboration', value: 27 },
+    { label: 'Control', value: 24 },
     { label: 'Innovation', value: 18 },
   ])
   assert.deepEqual(stress.bars, [
@@ -146,6 +146,15 @@ test('presentation model maps live domain distributions into visible percentage 
     { label: 'Withdraw', value: 25 },
     { label: 'Support', value: 15 },
   ])
+
+  for (const distribution of [behaviour.bars, motivators.bars, leadership.bars, conflict.bars, culture.bars, stress.bars]) {
+    const sorted = [...distribution].sort((a, b) => b.value - a.value)
+    assert.deepEqual(distribution, sorted)
+
+    const total = distribution.reduce((sum, d) => sum + d.value, 0)
+    assert.equal(total, 100)
+  }
+
   assert.equal(leadership.primaryProfile, 'Primary profile: Results – Process')
   assert.equal(conflict.primaryProfile, 'Primary profile: Compete – Collaborate')
   assert.equal(culture.primaryProfile, 'Primary profile: Performance – Collaboration')
