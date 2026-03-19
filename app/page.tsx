@@ -28,13 +28,17 @@ export default function HomePage() {
             The system progresses from individual to team to organisation, so behaviour is interpreted in context, not isolation.
           </p>
         </Reveal>
-        <div className="grid items-start gap-3 lg:grid-cols-[1fr_0.96fr] lg:gap-4">
-          <Reveal y={10} className="architecture-anchor-effect">
+        <div className="grid gap-4 md:gap-5">
+          <Reveal y={10} className="architecture-anchor-effect mx-auto w-full max-w-5xl">
             <ArchitectureDiagram />
           </Reveal>
-          <RevealGroup className="grid gap-3" staggerChildren={0.06} delayChildren={0.02}>
+          <RevealGroup
+            className="grid gap-3 sm:auto-rows-fr lg:grid-cols-3"
+            staggerChildren={0.06}
+            delayChildren={0.02}
+          >
             {layerData.map((layer) => (
-              <RevealItem key={layer.title}>
+              <RevealItem key={layer.title} className="h-full">
                 <Card interactive className="h-full p-5">
                   <h3 className="text-lg font-semibold text-[#E4EBF8]">{layer.title}</h3>
                   <p className="mt-3 text-sm leading-relaxed text-[#D5E1F2]">{layer.description}</p>
