@@ -179,6 +179,16 @@ function getSignalWeight(relativeShare: number, normalisedScore: number) {
   return relativeShare > 0 ? relativeShare : normalisedScore
 }
 
+function sortDomainBarsDescending(distribution: IndividualResultDomainBarModel[]): IndividualResultDomainBarModel[] {
+  return distribution
+    .map((item, index) => ({ ...item, __index: index }))
+    .sort((a, b) => {
+      if (b.value !== a.value) return b.value - a.value
+      return a.__index - b.__index
+    })
+    .map(({ __index, ...rest }) => rest)
+}
+
 function normaliseDomainBars(values: Array<{ label: string; weight: number }>): IndividualResultDomainBarModel[] {
   const totalWeight = values.reduce((sum, item) => sum + item.weight, 0)
   if (totalWeight <= 0) {
@@ -209,10 +219,12 @@ function normaliseDomainBars(values: Array<{ label: string; weight: number }>): 
     remainingPoints -= 1
   }
 
-  return rawPercentages.map((item) => ({
-    label: item.label,
-    value: item.flooredValue,
-  }))
+  return sortDomainBarsDescending(
+    rawPercentages.map((item) => ({
+      label: item.label,
+      value: item.flooredValue,
+    })),
+  )
 }
 
 function buildCanonicalDomainBars(config: DomainConfig, data: IndividualResultReadyData) {
