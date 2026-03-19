@@ -20,11 +20,7 @@ export function PublicNav() {
 
           <nav className="header-nav hidden w-fit items-center gap-2 justify-self-center text-sm text-textSecondary lg:flex">
             {navLinks.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="nav-link"
-              >
+              <a key={link.href} href={link.href} className="nav-link">
                 {link.label}
               </a>
             ))}
@@ -34,7 +30,7 @@ export function PublicNav() {
             <Button href="/sign-in" variant="ghost" className="hidden sm:inline-flex">
               Log in
             </Button>
-            <Button href="/sign-up" className="px-4 sm:px-5">
+            <Button href="/sign-up" className="border-white/[0.08] bg-panel/70 px-4 text-[#E7EEF9] shadow-none hover:border-accent/35 hover:bg-panel/85 sm:px-5">
               Get Started
             </Button>
           </div>
