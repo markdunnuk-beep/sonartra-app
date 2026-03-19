@@ -158,17 +158,17 @@ const domainSections: DomainSectionModel[] = [
 const performanceImplications = {
   performsBest: [
     'Roles with clear decision rights, autonomy, and visible standards.',
-    'Complex delivery where rigour improves execution quality.',
+    'Complex delivery where rigour raises execution quality.',
     'Leadership contexts that reward precision and accountability.',
   ],
   risk: [
     'Cross-functional work where alignment needs more airtime.',
     'High-change periods that narrow consultation and tone.',
-    'Teams that need visible encouragement before they challenge back.',
+    'Teams that need visible encouragement before they push back.',
   ],
   focus: [
     'Signal rationale early, before decisions harden.',
-    'Use brief check-ins to test understanding, not just agreement.',
+    'Use brief check-ins to confirm understanding, not just agreement.',
     'Delegate pressure openly instead of absorbing it through tighter control.',
   ],
 }
@@ -220,12 +220,12 @@ function DistributionBar({ label, value }: DomainBar) {
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between text-sm">
-        <span className="font-medium tracking-[0.01em] text-textPrimary/94">{label}</span>
-        <span className="text-xs font-medium uppercase tracking-[0.12em] text-[#A8B6C9]">{value}%</span>
+        <span className="text-[13px] font-medium tracking-[0.01em] text-[#A5B1C2]">{label}</span>
+        <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[#94A7BE]">{value}%</span>
       </div>
-      <div className="h-3 overflow-hidden rounded-full bg-[#101926] ring-1 ring-white/[0.05]">
+      <div className="h-3.5 overflow-hidden rounded-full bg-[#101926] ring-1 ring-white/[0.05]">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-[#4E6B92] via-[#6F99C9] to-[#A5CBF6] shadow-[0_0_18px_-8px_rgba(133,186,255,0.9)]"
+          className="h-full rounded-full bg-gradient-to-r from-[#5879A6] via-[#79A6D8] to-[#B7DAFF] shadow-[0_0_22px_-8px_rgba(133,186,255,0.98)]"
           style={{ width: `${value}%` }}
         />
       </div>
@@ -262,10 +262,19 @@ function DomainListCard({
           ? 'bg-accent/80'
           : 'bg-accent/70'
 
+  const textClass =
+    tone === 'strength'
+      ? 'text-[#C4D5C9]'
+      : tone === 'watchout'
+        ? 'text-[#9FA8B4]'
+        : tone === 'focus'
+          ? 'text-[#AEBFD5]'
+          : 'text-textSecondary'
+
   return (
     <div className={`rounded-[1.125rem] border p-4 sm:p-5 ${toneClass}`}>
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#96AECB]">{title}</p>
-      <ul className={`mt-3 text-sm leading-6 text-textSecondary ${compact ? 'space-y-2' : 'space-y-3'}`}>
+      <ul className={`mt-3 text-sm leading-6 ${textClass} ${compact ? 'space-y-2' : 'space-y-3'}`}>
         {items.map((item) => (
           <li key={item} className="flex gap-2.5">
             <span className={`mt-2 h-1.5 w-1.5 rounded-full ${bulletClass}`} />
@@ -320,32 +329,32 @@ function ArchetypeOverviewSection() {
     <Card className="border-accent/18 bg-[linear-gradient(180deg,rgba(22,34,51,0.98),rgba(12,18,28,0.96))] px-5 py-6 sm:px-6 sm:py-7">
       <div className="space-y-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-4">
-            <div className="space-y-2">
+          <div className="space-y-5">
+            <div className="space-y-2.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8FA6C5]">Sonartra Archetype Overview</p>
               <h3 className="text-[1.4rem] font-semibold tracking-tight text-[#F0F5FD] sm:text-[1.55rem]">Primary identity summary for how Mark is most likely to operate.</h3>
             </div>
-            <div className="flex flex-wrap gap-3.5">
+            <div className="flex flex-wrap gap-4">
               {[archetypeCards.primary, archetypeCards.secondary].map((item) => (
                 <div
                   key={item.label}
-                  className="flex min-w-[210px] items-center gap-3.5 rounded-[1.25rem] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.018))] px-4 py-4"
+                  className="flex min-w-[214px] items-center gap-3.5 rounded-[1.25rem] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.018))] px-4 py-4"
                 >
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-accent/25 bg-accent/10 text-sm font-semibold text-[#D5E8FF] shadow-[0_0_22px_-14px_rgba(137,189,255,0.95)]">
                     {item.icon}
                   </div>
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">{item.note}</p>
-                    <p className="text-base font-semibold text-textPrimary">{item.label}</p>
+                    <p className="text-[1.05rem] font-semibold tracking-[0.01em] text-[#F2F6FD]">{item.label}</p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="max-w-md rounded-[1.25rem] border border-accent/14 bg-[linear-gradient(180deg,rgba(10,17,28,0.94),rgba(12,18,27,0.72))] px-4 py-4 sm:px-5">
+          <div className="max-w-md rounded-[1.25rem] border border-white/[0.07] bg-[linear-gradient(180deg,rgba(10,17,28,0.82),rgba(12,18,27,0.6))] px-4 py-4 sm:px-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8FA6C5]">Quick read</p>
-            <p className="mt-2 text-sm leading-6 text-[#C8D4E4]">{archetypeCards.summary}</p>
+            <p className="mt-2 text-sm leading-6 text-[#B8C7DA]">{archetypeCards.summary}</p>
           </div>
         </div>
 
@@ -387,7 +396,7 @@ function PerformanceImplicationsSection() {
       <div className="space-y-6">
         <div className="space-y-2 border-b border-white/[0.06] pb-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8FA6C5]">Performance Implications</p>
-          <h3 className="text-xl font-semibold tracking-tight text-textPrimary">Final readout on where Mark will create lift, where risk shows up, and what to tighten next.</h3>
+          <h3 className="text-xl font-semibold tracking-tight text-textPrimary">Where Mark creates value, where risk appears, and what to tighten.</h3>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-3">
@@ -431,7 +440,7 @@ export function IndividualResultsWireframeContent() {
           </div>
         </Card>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
           {assessments.map((assessment) => (
             <Card
               key={`${assessment.name}-${assessment.version}-${assessment.completedOn}`}
@@ -439,17 +448,17 @@ export function IndividualResultsWireframeContent() {
             >
               <AssessmentHeader assessment={assessment} />
 
-              {assessment.expanded ? (
-                <div className="mt-6 space-y-6 border-t border-white/[0.06] pt-6 sm:space-y-7 sm:pt-7">
-                  <HowToUseReportSection />
-                  <ArchetypeOverviewSection />
-                  {domainSections.map((section) => (
-                    <DomainSection key={section.title} section={section} />
-                  ))}
-                  <div className="pt-2 sm:pt-3">
-                    <PerformanceImplicationsSection />
+                {assessment.expanded ? (
+                  <div className="mt-6 space-y-7 border-t border-white/[0.06] pt-6 sm:space-y-8 sm:pt-7">
+                    <HowToUseReportSection />
+                    <ArchetypeOverviewSection />
+                    {domainSections.map((section) => (
+                      <DomainSection key={section.title} section={section} />
+                    ))}
+                    <div className="pt-3 sm:pt-4">
+                      <PerformanceImplicationsSection />
+                    </div>
                   </div>
-                </div>
               ) : null}
             </Card>
           ))}
