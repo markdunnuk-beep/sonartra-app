@@ -29,7 +29,6 @@ const homepageLayerData = [
     description: 'Surface organisation-wide performance patterns.',
     label: 'L03',
     toneClass: 'architecture-layer-card-3',
-    description: 'Measure behavioural patterns at the individual operating level.',
   },
   {
     title: 'Team Intelligence',
