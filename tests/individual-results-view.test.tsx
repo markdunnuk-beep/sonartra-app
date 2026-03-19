@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import TestRenderer, { act } from 'react-test-renderer'
 
 import {
   buildReadyIndividualResultViewModel,
@@ -96,18 +97,39 @@ function makeReadyData(overrides: Partial<IndividualResultReadyData> = {}): Indi
   }
 }
 
+const readyData = makeReadyData()
+
 const readyModel: IndividualResultApiResponse = {
   ok: true,
   state: 'ready',
-  data: makeReadyData(),
+  data: readyData,
 }
 
-const buildPresentationModel = () => buildReadyIndividualResultViewModel(readyModel.data, 'Mark')
+const buildPresentationModel = () => buildReadyIndividualResultViewModel(readyData, 'Mark')
 
-test('ready state renders the production scan-first results experience in the approved section order', () => {
+function renderExpandedReadySections() {
+  const readyViewModel = buildPresentationModel()
+  readyViewModel.presentation.assessments[0]!.defaultExpanded = true
+
+  return renderToStaticMarkup(<ReadyIndividualResultSections data={readyData} readyViewModel={readyViewModel} />)
+}
+
+test('ready state defaults the live assessment card to collapsed while preserving the summary line', () => {
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
 
   assert.match(html, /Sonartra Signals — Individual Results/)
+  assert.match(html, /Current assessment/)
+  assert.match(html, /Collapsed/)
+  assert.match(html, /View assessment/)
+  assert.match(html, /Strategic Operator with Insight Explorer as the supporting pattern/)
+  assert.doesNotMatch(html, /How to Use This Report/)
+  assert.doesNotMatch(html, /Sonartra Archetype Overview/)
+  assert.doesNotMatch(html, /Performance Implications/)
+})
+
+test('expanded ready state renders the production scan-first results experience in the approved section order', () => {
+  const html = renderExpandedReadySections()
+
   assert.match(html, /How to Use This Report/)
   assert.match(html, /Sonartra Archetype Overview/)
   assert.match(html, /Behaviour Style/)
@@ -120,12 +142,12 @@ test('ready state renders the production scan-first results experience in the ap
 
   assert.ok(html.indexOf('How to Use This Report') < html.indexOf('Sonartra Archetype Overview'))
   assert.ok(html.indexOf('Sonartra Archetype Overview') < html.indexOf('Primary profile: Driver – Analyst'))
-  assert.ok(html.indexOf('Behaviour Style') < html.indexOf('Motivators'))
-  assert.ok(html.indexOf('Motivators') < html.indexOf('Leadership'))
-  assert.ok(html.indexOf('Leadership') < html.indexOf('Conflict'))
-  assert.ok(html.indexOf('Conflict') < html.indexOf('Culture'))
-  assert.ok(html.indexOf('Culture') < html.indexOf('Stress'))
-  assert.ok(html.indexOf('Stress') < html.indexOf('Performance Implications'))
+  assert.ok(html.indexOf('Primary profile: Driver – Analyst') < html.indexOf('Primary profile: Mastery – Achievement'))
+  assert.ok(html.indexOf('Primary profile: Mastery – Achievement') < html.indexOf('Primary profile: Results – Process'))
+  assert.ok(html.indexOf('Primary profile: Results – Process') < html.indexOf('Primary profile: Compete – Collaborate'))
+  assert.ok(html.indexOf('Primary profile: Compete – Collaborate') < html.indexOf('Primary profile: Performance – Collaboration'))
+  assert.ok(html.indexOf('Primary profile: Performance – Collaboration') < html.indexOf('Primary profile: Control – Support'))
+  assert.ok(html.indexOf('Primary profile: Control – Support') < html.indexOf('Performance Implications'))
 
   assert.doesNotMatch(html, /Interpretation by layer/)
   assert.doesNotMatch(html, /Manager playbook/)
@@ -133,7 +155,7 @@ test('ready state renders the production scan-first results experience in the ap
 })
 
 test('archetype overview renders only primary and secondary archetypes with the live quick-read summary', () => {
-  const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
+  const html = renderExpandedReadySections()
 
   assert.match(html, /Primary archetype/)
   assert.match(html, /Secondary archetype/)
@@ -144,7 +166,7 @@ test('archetype overview renders only primary and secondary archetypes with the 
 })
 
 test('domain sections render with repeated structure, live bars, and concise guidance cards', () => {
-  const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
+  const html = renderExpandedReadySections()
 
   assert.match(html, /Primary profile: Driver – Analyst/)
   assert.match(html, /Primary profile: Mastery – Achievement/)
@@ -155,11 +177,11 @@ test('domain sections render with repeated structure, live bars, and concise gui
   assert.match(html, /Strengths/)
   assert.match(html, /Watchouts/)
   assert.match(html, /52%/)
-  assert.match(html, /58%/)
+  assert.match(html, /42%/)
 })
 
 test('performance implications section renders the synthesised best-fit, risk, and focus guidance', () => {
-  const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
+  const html = renderExpandedReadySections()
 
   assert.match(html, /Where performance is strongest/)
   assert.match(html, /Where performance risk appears/)
@@ -168,7 +190,9 @@ test('performance implications section renders the synthesised best-fit, risk, a
 })
 
 test('ready state uses neutral fallback language when first name is unavailable', () => {
-  const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName={null} />)
+  const readyViewModel = buildReadyIndividualResultViewModel(readyData, null)
+  readyViewModel.presentation.assessments[0]!.defaultExpanded = true
+  const html = renderToStaticMarkup(<ReadyIndividualResultSections data={readyData} readyViewModel={readyViewModel} />)
   assert.match(html, /this person is most likely to operate/i)
   assert.doesNotMatch(html, /Mark is likely to establish clarity before committing/)
 })
@@ -178,12 +202,41 @@ test('ready sections fall back safely when an archetype or a domain is unavailab
   readyViewModel.presentation.assessments[0].archetype.summary = undefined
   readyViewModel.presentation.assessments[0].archetype.personalSummary = 'Fallback summary.'
   readyViewModel.presentation.assessments[0].domains[3].bars = []
+  readyViewModel.presentation.assessments[0].defaultExpanded = true
 
-  const html = renderToStaticMarkup(<ReadyIndividualResultSections data={readyModel.data} readyViewModel={readyViewModel} />)
+  const html = renderToStaticMarkup(<ReadyIndividualResultSections data={readyData} readyViewModel={readyViewModel} />)
 
   assert.match(html, /Archetype unavailable/)
   assert.match(html, /Fallback summary/)
   assert.match(html, /No scored signal distribution is available yet for this domain/)
+})
+
+test('expanded assessment does not render the removed non-functional domain chip row', () => {
+  const html = renderExpandedReadySections()
+
+  assert.doesNotMatch(html, /text-\[#AFC0D3\]/)
+  assert.doesNotMatch(html, /rounded-xl border border-white\/\[0\.05\] bg-white\/\[0\.025\]/)
+})
+
+test('assessment card expand/collapse interaction still works', () => {
+  const renderer = TestRenderer.create(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
+  const toggle = renderer.root.findByType('button')
+
+  assert.equal((JSON.stringify(renderer.toJSON()).match(/How to Use This Report/g) ?? []).length, 0)
+
+  act(() => {
+    toggle.props.onClick()
+  })
+
+  assert.match(JSON.stringify(renderer.toJSON()), /Hide assessment/)
+  assert.match(JSON.stringify(renderer.toJSON()), /How to Use This Report/)
+
+  act(() => {
+    toggle.props.onClick()
+  })
+
+  assert.match(JSON.stringify(renderer.toJSON()), /View assessment/)
+  assert.equal((JSON.stringify(renderer.toJSON()).match(/How to Use This Report/g) ?? []).length, 0)
 })
 
 test('empty state renders explanation and assessment CTA', () => {

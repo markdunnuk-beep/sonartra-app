@@ -123,17 +123,10 @@ function AssessmentHeader({ assessment, expanded, onToggle }: { assessment: Indi
 function HowToUseReportSection({ assessment }: { assessment: IndividualAssessmentCardModel }) {
   return (
     <div className="rounded-[1.2rem] border border-white/[0.05] bg-[#0A1018]/76 px-4 py-3.5 sm:px-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="space-y-1.5">
         <div className="space-y-1.5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#7990AE]">How to Use This Report</p>
           <p className="max-w-3xl text-[13px] leading-[1.35rem] text-[#8FA0B4]">{assessment.howToUse.summary}</p>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-          {assessment.howToUse.sections.map((item) => (
-            <div key={item} className="rounded-xl border border-white/[0.05] bg-white/[0.025] px-3 py-2 text-[13px] text-[#AFC0D3]">
-              {item}
-            </div>
-          ))}
         </div>
       </div>
     </div>
