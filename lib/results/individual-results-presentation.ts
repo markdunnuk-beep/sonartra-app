@@ -58,64 +58,82 @@ type DomainConfig = {
   key: DomainKey
   title: string
   resultLayerKey: string
+  categories: Array<{
+    key: string
+    label: string
+    signalKeys: string[]
+  }>
 }
 
 const DOMAIN_CONFIG: DomainConfig[] = [
-  { key: 'behaviour', title: 'Behaviour Style', resultLayerKey: 'behaviour_style' },
-  { key: 'motivators', title: 'Motivators', resultLayerKey: 'motivators' },
-  { key: 'leadership', title: 'Leadership', resultLayerKey: 'leadership' },
-  { key: 'conflict', title: 'Conflict', resultLayerKey: 'conflict' },
-  { key: 'culture', title: 'Culture', resultLayerKey: 'culture' },
-  { key: 'stress', title: 'Stress', resultLayerKey: 'risk' },
+  {
+    key: 'behaviour',
+    title: 'Behaviour Style',
+    resultLayerKey: 'behaviour_style',
+    categories: [
+      { key: 'driver', label: 'Driver', signalKeys: ['Core_Driver', 'Style_Driver', 'Contribution_Drive'] },
+      { key: 'analyst', label: 'Analyst', signalKeys: ['Core_Analyst', 'Style_Analyst', 'Contribution_Analyse'] },
+      { key: 'influencer', label: 'Influencer', signalKeys: ['Core_Influencer', 'Style_Influencer', 'Contribution_Connect'] },
+      { key: 'stabiliser', label: 'Stabiliser', signalKeys: ['Core_Stabiliser', 'Style_Stabiliser', 'Contribution_Stabilise'] },
+    ],
+  },
+  {
+    key: 'motivators',
+    title: 'Motivators',
+    resultLayerKey: 'motivators',
+    categories: [
+      { key: 'achievement', label: 'Achievement', signalKeys: ['Mot_Achievement', 'Need_Authority'] },
+      { key: 'mastery', label: 'Mastery', signalKeys: ['Mot_Mastery', 'Need_Competence'] },
+      { key: 'influence', label: 'Influence', signalKeys: ['Mot_Influence', 'Need_Influence'] },
+      { key: 'stability', label: 'Stability', signalKeys: ['Mot_Stability', 'Need_Belonging'] },
+    ],
+  },
+  {
+    key: 'leadership',
+    title: 'Leadership',
+    resultLayerKey: 'leadership',
+    categories: [
+      { key: 'results', label: 'Results', signalKeys: ['Leader_Results', 'Integrity_Driver'] },
+      { key: 'vision', label: 'Vision', signalKeys: ['Leader_Vision', 'Integrity_Influencer'] },
+      { key: 'people', label: 'People', signalKeys: ['Leader_People', 'Integrity_Stabiliser'] },
+      { key: 'process', label: 'Process', signalKeys: ['Leader_Process', 'Integrity_Analyst'] },
+    ],
+  },
+  {
+    key: 'conflict',
+    title: 'Conflict',
+    resultLayerKey: 'conflict',
+    categories: [
+      { key: 'compete', label: 'Compete', signalKeys: ['Conflict_Compete'] },
+      { key: 'collaborate', label: 'Collaborate', signalKeys: ['Conflict_Collaborate'] },
+      { key: 'compromise', label: 'Compromise', signalKeys: ['Conflict_Compromise'] },
+      { key: 'avoid', label: 'Avoid', signalKeys: ['Conflict_Avoid'] },
+      { key: 'accommodate', label: 'Accommodate', signalKeys: ['Conflict_Accommodate'] },
+    ],
+  },
+  {
+    key: 'culture',
+    title: 'Culture',
+    resultLayerKey: 'culture',
+    categories: [
+      { key: 'performance', label: 'Performance', signalKeys: ['Culture_Market'] },
+      { key: 'control', label: 'Control', signalKeys: ['Culture_Hierarchy'] },
+      { key: 'collaboration', label: 'Collaboration', signalKeys: ['Culture_Clan'] },
+      { key: 'innovation', label: 'Innovation', signalKeys: ['Culture_Adhocracy'] },
+    ],
+  },
+  {
+    key: 'stress',
+    title: 'Stress',
+    resultLayerKey: 'risk',
+    categories: [
+      { key: 'control', label: 'Control', signalKeys: ['Stress_Control', 'Decision_Evidence'] },
+      { key: 'overdrive', label: 'Overdrive', signalKeys: ['Stress_Criticality', 'Decision_Opportunity'] },
+      { key: 'withdraw', label: 'Withdraw', signalKeys: ['Stress_Avoidance', 'Stress_Scatter'] },
+      { key: 'support', label: 'Support', signalKeys: ['Decision_Stability', 'Decision_Social'] },
+    ],
+  },
 ]
-
-const SIGNAL_LABELS: Record<string, string> = {
-  Core_Driver: 'Driver',
-  Style_Driver: 'Driver',
-  Contribution_Drive: 'Driver',
-  Core_Analyst: 'Analyst',
-  Style_Analyst: 'Analyst',
-  Contribution_Analyse: 'Analyst',
-  Core_Influencer: 'Influencer',
-  Style_Influencer: 'Influencer',
-  Contribution_Connect: 'Influencer',
-  Core_Stabiliser: 'Stabiliser',
-  Style_Stabiliser: 'Stabiliser',
-  Contribution_Stabilise: 'Stabiliser',
-  Mot_Achievement: 'Achievement',
-  Need_Authority: 'Authority',
-  Mot_Mastery: 'Mastery',
-  Need_Competence: 'Competence',
-  Mot_Influence: 'Influence',
-  Need_Influence: 'Influence',
-  Mot_Stability: 'Stability',
-  Need_Belonging: 'Belonging',
-  Leader_Results: 'Results',
-  Integrity_Driver: 'Results',
-  Leader_Vision: 'Vision',
-  Integrity_Influencer: 'Vision',
-  Leader_People: 'People',
-  Integrity_Stabiliser: 'People',
-  Leader_Process: 'Process',
-  Integrity_Analyst: 'Process',
-  Conflict_Compete: 'Compete',
-  Conflict_Collaborate: 'Collaborate',
-  Conflict_Compromise: 'Compromise',
-  Conflict_Avoid: 'Avoid',
-  Conflict_Accommodate: 'Accommodate',
-  Culture_Market: 'Performance',
-  Culture_Hierarchy: 'Control',
-  Culture_Clan: 'Collaboration',
-  Culture_Adhocracy: 'Innovation',
-  Stress_Control: 'Control',
-  Stress_Criticality: 'Criticality',
-  Stress_Scatter: 'Scatter',
-  Stress_Avoidance: 'Avoidance',
-  Decision_Opportunity: 'Opportunity',
-  Decision_Evidence: 'Evidence',
-  Decision_Social: 'Social',
-  Decision_Stability: 'Stability',
-}
 
 const DEFAULT_SECTION_LABELS = DOMAIN_CONFIG.map((section) => section.title)
 
@@ -127,13 +145,6 @@ function formatDate(value: string | null) {
     month: 'short',
     year: 'numeric',
   })
-}
-
-function titleCase(value: string) {
-  return value
-    .replaceAll('_', ' ')
-    .replaceAll('-', ' ')
-    .replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
 function truncate(text: string, maxLength: number) {
@@ -164,9 +175,64 @@ function stripLeadingName(statement: string, firstName?: string | null) {
   return statement.replace(/^You\s+are\s+/i, '').replace(/^You\s+/i, '')
 }
 
-function getBarValue(relativeShare: number, normalisedScore: number) {
-  const candidate = relativeShare > 0 ? relativeShare * 100 : normalisedScore * 100
-  return Math.max(0, Math.min(100, Math.round(candidate)))
+function getSignalWeight(relativeShare: number, normalisedScore: number) {
+  return relativeShare > 0 ? relativeShare : normalisedScore
+}
+
+function normaliseDomainBars(values: Array<{ label: string; weight: number }>): IndividualResultDomainBarModel[] {
+  const totalWeight = values.reduce((sum, item) => sum + item.weight, 0)
+  if (totalWeight <= 0) {
+    return values.map((item) => ({ label: item.label, value: 0 }))
+  }
+
+  const rawPercentages = values.map((item, index) => {
+    const rawValue = (item.weight / totalWeight) * 100
+    const flooredValue = Math.floor(rawValue)
+    return {
+      index,
+      label: item.label,
+      flooredValue,
+      remainder: rawValue - flooredValue,
+    }
+  })
+
+  let remainingPoints = 100 - rawPercentages.reduce((sum, item) => sum + item.flooredValue, 0)
+  const byRemainder = [...rawPercentages].sort((left, right) => {
+    const remainderDelta = right.remainder - left.remainder
+    if (remainderDelta !== 0) return remainderDelta
+    return left.index - right.index
+  })
+
+  while (remainingPoints > 0) {
+    const target = byRemainder[(100 - remainingPoints) % byRemainder.length]
+    rawPercentages[target.index]!.flooredValue += 1
+    remainingPoints -= 1
+  }
+
+  return rawPercentages.map((item) => ({
+    label: item.label,
+    value: item.flooredValue,
+  }))
+}
+
+function buildCanonicalDomainBars(config: DomainConfig, data: IndividualResultReadyData) {
+  const domainSignals = data.signals.filter((signal) => signal.layerKey === config.resultLayerKey)
+  if (domainSignals.length === 0) return []
+
+  const categoryWeights = config.categories.map((category) => {
+    const signalKeys = new Set(category.signalKeys)
+    const weight = domainSignals.reduce((sum, signal) => {
+      if (!signalKeys.has(signal.signalKey)) return sum
+      return sum + getSignalWeight(signal.relativeShare, signal.normalisedScore)
+    }, 0)
+
+    return {
+      label: category.label,
+      weight,
+    }
+  })
+
+  return normaliseDomainBars(categoryWeights)
 }
 
 function buildDomainSection(
@@ -175,17 +241,7 @@ function buildDomainSection(
   data: IndividualResultReadyData,
   firstName?: string | null,
 ): IndividualResultDomainSectionModel {
-  const bars = data.signals
-    .filter((signal) => signal.layerKey === config.resultLayerKey)
-    .sort((left, right) => {
-      const rankDelta = (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER)
-      if (rankDelta !== 0) return rankDelta
-      return right.normalisedScore - left.normalisedScore
-    })
-    .map((signal) => ({
-      label: SIGNAL_LABELS[signal.signalKey] ?? titleCase(signal.signalKey),
-      value: getBarValue(signal.relativeShare, signal.normalisedScore),
-    }))
+  const bars = buildCanonicalDomainBars(config, data)
 
   if (!insight) {
     return {
@@ -246,7 +302,7 @@ export function buildIndividualResultsPresentationModel(data: IndividualResultRe
         versionLabel: data.assessment.versionKey ? `Version ${data.assessment.versionKey}` : 'Version unavailable',
         completedLabel: formatDate(data.assessment.completedAt),
         statusLabel: 'Current assessment',
-        defaultExpanded: true,
+        defaultExpanded: false,
         summary: assessmentSummary,
         howToUse: {
           summary:
