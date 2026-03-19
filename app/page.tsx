@@ -17,25 +17,25 @@ export default function HomePage() {
       <PublicNav />
       <Hero />
 
-      <section id="platform-model" className="section section-tight pt-4 md:pt-8">
+      <section id="platform-model" className="section section-tight pt-3 md:pt-6">
         <SectionHeading
           eyebrow="Section 2"
           title="Three-Layer Intelligence Model"
           description="Sonartra uses a three-layer model to separate performance analysis by operating level before combining it into one system view."
         />
-        <Reveal y={8} className="-mt-6 mb-6 md:-mt-8 md:mb-8">
-          <p className="max-w-2xl text-sm leading-relaxed text-[#A9BDD8]">
+        <Reveal y={8} className="-mt-8 mb-5 md:-mt-10 md:mb-6">
+          <p className="max-w-xl text-[13px] leading-6 text-[#9FB4D1]">
             The system progresses from individual to team to organisation, so behaviour is interpreted in context, not isolation.
           </p>
         </Reveal>
-        <div className="grid items-start gap-4 lg:grid-cols-[1.05fr_1fr] lg:gap-5">
+        <div className="grid items-start gap-3 lg:grid-cols-[1fr_0.96fr] lg:gap-4">
           <Reveal y={10} className="architecture-anchor-effect">
             <ArchitectureDiagram />
           </Reveal>
-          <RevealGroup className="grid gap-4" staggerChildren={0.06} delayChildren={0.02}>
+          <RevealGroup className="grid gap-3" staggerChildren={0.06} delayChildren={0.02}>
             {layerData.map((layer) => (
               <RevealItem key={layer.title}>
-                <Card interactive className="h-full p-6">
+                <Card interactive className="h-full p-5">
                   <h3 className="text-lg font-semibold text-[#E4EBF8]">{layer.title}</h3>
                   <p className="mt-3 text-sm leading-relaxed text-[#D5E1F2]">{layer.description}</p>
                   <p className="text-muted-meta mt-3">{layer.detail}</p>
@@ -52,15 +52,15 @@ export default function HomePage() {
           title="What Sonartra Measures"
           description="Sonartra measures the performance signals that shape execution, coordination, and judgement under real operating conditions."
         />
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="grid items-start gap-5 lg:grid-cols-[1.28fr_0.72fr] lg:gap-6">
           <div>
-            <RevealGroup className="grid gap-4 sm:auto-rows-fr sm:grid-cols-2 xl:grid-cols-3" staggerChildren={0.05}>
+            <RevealGroup className="grid gap-3 sm:auto-rows-fr sm:grid-cols-2 xl:grid-cols-3" staggerChildren={0.05}>
               {measurePillars.map((pillar) => (
                 <RevealItem key={pillar.title}>
                   <Card
                     interactive
                     tabIndex={0}
-                    className="measure-card flex h-full min-h-[152px] flex-col justify-center gap-3 p-5"
+                    className="measure-card flex h-full min-h-[136px] flex-col justify-center gap-2.5 p-4"
                   >
                     <p className="measure-card-title text-base font-medium text-[#DEE7F6]">{pillar.title}</p>
                     <p className="measure-card-summary text-sm leading-relaxed text-[#B5C3DA]">{pillar.summary}</p>
@@ -68,13 +68,13 @@ export default function HomePage() {
                 </RevealItem>
               ))}
             </RevealGroup>
-            <Reveal y={8} className="mt-6">
-              <p className="max-w-xl text-sm leading-relaxed text-[#A9BDD8]">
+            <Reveal y={8} className="mt-4">
+              <p className="max-w-lg text-[13px] leading-6 text-[#93A9C6]">
                 These signals are combined into structured performance profiles.
               </p>
             </Reveal>
           </div>
-          <Reveal y={8}>
+          <Reveal y={8} className="lg:mx-auto lg:w-full lg:max-w-[420px]">
             <SignalsPreview />
           </Reveal>
         </div>
@@ -138,10 +138,10 @@ export default function HomePage() {
         <Reveal y={8}>
           <Card interactive className="p-8 text-center sm:p-10">
             <p className="eyebrow mb-4">Decision Support</p>
-            <h3 className="text-3xl font-semibold text-[#ECF2FC]">
+            <h3 className="mx-auto max-w-[18ch] text-3xl font-semibold leading-tight text-[#ECF2FC]">
               Activate <span className="headline-emphasis">performance intelligence</span> with Sonartra Signals.
             </h3>
-            <p className="prose-support mx-auto mt-4 max-w-2xl">
+            <p className="prose-support mx-auto mt-4 max-w-xl">
               Begin with Sonartra Signals, then extend analysis across individuals, teams, and organisational performance.
             </p>
             <div className="mt-8 flex justify-center">
