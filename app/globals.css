@@ -336,6 +336,45 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 28px 58px -44px rgba(0, 0, 0, 0.92);
   }
 
+  .architecture-system-flow {
+    isolation: isolate;
+  }
+
+  .architecture-flow-connector {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.75rem;
+    margin-bottom: 0.15rem;
+    pointer-events: none;
+  }
+
+  .architecture-flow-connector-line {
+    display: block;
+    width: 1px;
+    height: 2.6rem;
+    background: linear-gradient(180deg, rgba(122, 170, 235, 0.34), rgba(122, 170, 235, 0.1) 58%, rgba(122, 170, 235, 0));
+    animation: architectureFlowPulse 6.8s ease-in-out infinite;
+  }
+
+  .architecture-flow-connector-node {
+    display: block;
+    width: 0.46rem;
+    height: 0.46rem;
+    border-radius: 9999px;
+    background: radial-gradient(circle at 35% 35%, #d4e8ff 0%, #8dbdf1 48%, #4f81bd 100%);
+    box-shadow: 0 0 0 1px rgba(185, 220, 255, 0.16), 0 0 14px rgba(98, 154, 220, 0.14);
+    opacity: 0.62;
+    animation: architectureFlowPulse 6.8s ease-in-out infinite;
+  }
+
+  .architecture-layer-card {
+    --architecture-accent: rgba(118, 174, 245, 0.28);
+    --architecture-accent-soft: rgba(91, 145, 214, 0.16);
+    --architecture-dot-mid: #8cbcf0;
+    --architecture-dot-deep: #4d7fbb;
   .architecture-layer-card {
     background: linear-gradient(180deg, rgba(10, 18, 29, 0.92), rgba(7, 13, 22, 0.84));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 22px 44px -38px rgba(0, 0, 0, 0.88);
@@ -347,6 +386,7 @@
     inset: 0 auto auto 0;
     width: 100%;
     height: 1px;
+    background: linear-gradient(90deg, var(--architecture-accent), rgba(118, 174, 245, 0.04) 58%, transparent);
     background: linear-gradient(90deg, rgba(118, 174, 245, 0.28), rgba(118, 174, 245, 0.04) 58%, transparent);
     opacity: 0.9;
   }
@@ -359,6 +399,31 @@
     width: 12rem;
     height: 12rem;
     border-radius: 9999px;
+    background: radial-gradient(circle, var(--architecture-accent-soft), transparent 68%);
+    opacity: 0.42;
+  }
+
+  .architecture-layer-card-1 {
+    --architecture-accent: rgba(102, 154, 218, 0.18);
+    --architecture-accent-soft: rgba(86, 130, 190, 0.09);
+    --architecture-dot-mid: #82b0e3;
+    --architecture-dot-deep: #436c99;
+  }
+
+  .architecture-layer-card-2 {
+    --architecture-accent: rgba(116, 170, 238, 0.25);
+    --architecture-accent-soft: rgba(93, 148, 214, 0.135);
+    --architecture-dot-mid: #8cbdf0;
+    --architecture-dot-deep: #4a78ad;
+  }
+
+  .architecture-layer-card-3 {
+    --architecture-accent: rgba(136, 191, 255, 0.36);
+    --architecture-accent-soft: rgba(106, 170, 238, 0.2);
+    --architecture-dot-mid: #9dccfb;
+    --architecture-dot-deep: #5b8dc8;
+  }
+
     background: radial-gradient(circle, rgba(91, 145, 214, 0.16), transparent 68%);
     opacity: 0.42;
   }
@@ -368,12 +433,18 @@
     height: 0.625rem;
     flex: 0 0 auto;
     border-radius: 9999px;
+    background: radial-gradient(circle at 35% 35%, #d0e6ff 0%, var(--architecture-dot-mid) 45%, var(--architecture-dot-deep) 100%);
     background: radial-gradient(circle at 35% 35%, #d0e6ff 0%, #8cbcf0 45%, #4d7fbb 100%);
     box-shadow: 0 0 0 1px rgba(181, 216, 255, 0.18), 0 0 16px rgba(97, 155, 222, 0.18);
   }
 
   .architecture-layer-label {
     margin-bottom: 0;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #8499b5;
     font-size: 0.68rem;
     font-weight: 600;
     letter-spacing: 0.24em;
@@ -384,6 +455,17 @@
   .architecture-live-chip {
     display: inline-flex;
     align-items: center;
+    gap: 0.38rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(104, 153, 126, 0.16);
+    background: linear-gradient(180deg, rgba(24, 42, 31, 0.14), rgba(15, 27, 21, 0.08));
+    padding: 0.24rem 0.58rem;
+    font-size: 0.56rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(183, 215, 192, 0.82);
+    box-shadow: inset 0 1px 0 rgba(181, 223, 193, 0.03);
     gap: 0.45rem;
     border-radius: 9999px;
     border: 1px solid rgba(104, 153, 126, 0.24);
@@ -537,6 +619,18 @@
     }
     50% {
       opacity: 1;
+    }
+  }
+
+  @keyframes architectureFlowPulse {
+    0%,
+    100% {
+      opacity: 0.42;
+      filter: saturate(0.92);
+    }
+    50% {
+      opacity: 0.72;
+      filter: saturate(1.02);
     }
   }
 
