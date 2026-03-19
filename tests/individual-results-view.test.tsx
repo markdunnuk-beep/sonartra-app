@@ -8,12 +8,10 @@ import {
   IndividualIntelligenceResultView,
   ReadyIndividualResultSections,
 } from '../components/results/IndividualIntelligenceResultView'
-import { IndividualResultApiResponse } from '../lib/server/individual-results'
+import type { IndividualResultApiResponse, IndividualResultReadyData } from '../lib/server/individual-results'
 
-const readyModel: IndividualResultApiResponse = {
-  ok: true,
-  state: 'ready',
-  data: {
+function makeReadyData(overrides: Partial<IndividualResultReadyData> = {}): IndividualResultReadyData {
+  return {
     assessment: {
       assessmentId: 'assessment-1',
       versionKey: 'wplp80-v1',
@@ -39,194 +37,153 @@ const readyModel: IndividualResultApiResponse = {
         rankedSignalKeys: ['Core_Driver', 'Core_Analyst'],
       },
       {
-        layerKey: 'leadership',
+        layerKey: 'motivators',
         totalRawValue: 12,
-        signalCount: 1,
-        primarySignalKey: 'Decisive_Lead',
-        secondarySignalKey: null,
-        rankedSignalKeys: ['Decisive_Lead'],
+        signalCount: 2,
+        primarySignalKey: 'Mot_Mastery',
+        secondarySignalKey: 'Mot_Achievement',
+        rankedSignalKeys: ['Mot_Mastery', 'Mot_Achievement'],
+      },
+      {
+        layerKey: 'leadership',
+        totalRawValue: 10,
+        signalCount: 2,
+        primarySignalKey: 'Leader_Results',
+        secondarySignalKey: 'Leader_Process',
+        rankedSignalKeys: ['Leader_Results', 'Leader_Process'],
+      },
+      {
+        layerKey: 'conflict',
+        totalRawValue: 10,
+        signalCount: 2,
+        primarySignalKey: 'Conflict_Compete',
+        secondarySignalKey: 'Conflict_Collaborate',
+        rankedSignalKeys: ['Conflict_Compete', 'Conflict_Collaborate'],
+      },
+      {
+        layerKey: 'culture',
+        totalRawValue: 10,
+        signalCount: 2,
+        primarySignalKey: 'Culture_Market',
+        secondarySignalKey: 'Culture_Clan',
+        rankedSignalKeys: ['Culture_Market', 'Culture_Clan'],
+      },
+      {
+        layerKey: 'risk',
+        totalRawValue: 10,
+        signalCount: 2,
+        primarySignalKey: 'Stress_Control',
+        secondarySignalKey: 'Decision_Evidence',
+        rankedSignalKeys: ['Stress_Control', 'Decision_Evidence'],
       },
     ],
     signals: [
-      {
-        layerKey: 'behaviour_style',
-        signalKey: 'Core_Driver',
-        signalTotal: 14,
-        normalisedScore: 0.7,
-        relativeShare: 0.64,
-        rank: 1,
-        isPrimary: true,
-        isSecondary: false,
-      },
-      {
-        layerKey: 'behaviour_style',
-        signalKey: 'Core_Analyst',
-        signalTotal: 8,
-        normalisedScore: 0.4,
-        relativeShare: 0.36,
-        rank: 2,
-        isPrimary: false,
-        isSecondary: true,
-      },
-      {
-        layerKey: 'leadership',
-        signalKey: 'Decisive_Lead',
-        signalTotal: 12,
-        normalisedScore: 0.6,
-        relativeShare: 1,
-        rank: 1,
-        isPrimary: true,
-        isSecondary: false,
-      },
+      { layerKey: 'behaviour_style', signalKey: 'Core_Driver', signalTotal: 11, normalisedScore: 0.55, relativeShare: 0.52, rank: 1, isPrimary: true, isSecondary: false },
+      { layerKey: 'behaviour_style', signalKey: 'Core_Analyst', signalTotal: 10, normalisedScore: 0.5, relativeShare: 0.48, rank: 2, isPrimary: false, isSecondary: true },
+      { layerKey: 'motivators', signalKey: 'Mot_Mastery', signalTotal: 7, normalisedScore: 0.7, relativeShare: 0.58, rank: 1, isPrimary: true, isSecondary: false },
+      { layerKey: 'motivators', signalKey: 'Mot_Achievement', signalTotal: 5, normalisedScore: 0.5, relativeShare: 0.42, rank: 2, isPrimary: false, isSecondary: true },
+      { layerKey: 'leadership', signalKey: 'Leader_Results', signalTotal: 6, normalisedScore: 0.6, relativeShare: 0.6, rank: 1, isPrimary: true, isSecondary: false },
+      { layerKey: 'leadership', signalKey: 'Leader_Process', signalTotal: 4, normalisedScore: 0.4, relativeShare: 0.4, rank: 2, isPrimary: false, isSecondary: true },
+      { layerKey: 'conflict', signalKey: 'Conflict_Compete', signalTotal: 6, normalisedScore: 0.6, relativeShare: 0.6, rank: 1, isPrimary: true, isSecondary: false },
+      { layerKey: 'conflict', signalKey: 'Conflict_Collaborate', signalTotal: 4, normalisedScore: 0.4, relativeShare: 0.4, rank: 2, isPrimary: false, isSecondary: true },
+      { layerKey: 'culture', signalKey: 'Culture_Market', signalTotal: 6, normalisedScore: 0.6, relativeShare: 0.6, rank: 1, isPrimary: true, isSecondary: false },
+      { layerKey: 'culture', signalKey: 'Culture_Clan', signalTotal: 4, normalisedScore: 0.4, relativeShare: 0.4, rank: 2, isPrimary: false, isSecondary: true },
+      { layerKey: 'risk', signalKey: 'Stress_Control', signalTotal: 6, normalisedScore: 0.6, relativeShare: 0.6, rank: 1, isPrimary: true, isSecondary: false },
+      { layerKey: 'risk', signalKey: 'Decision_Evidence', signalTotal: 4, normalisedScore: 0.4, relativeShare: 0.4, rank: 2, isPrimary: false, isSecondary: true },
     ],
     summaryJson: null,
-  },
+    ...overrides,
+  }
+}
+
+const readyModel: IndividualResultApiResponse = {
+  ok: true,
+  state: 'ready',
+  data: makeReadyData(),
 }
 
 const buildPresentationModel = () => buildReadyIndividualResultViewModel(readyModel.data, 'Mark')
 
-function getArchetypeSummary() {
-  const summary = buildPresentationModel().interpretation.archetypeSummary
-  assert.ok(summary)
-  return summary
-}
-
-test('ready state renders archetype overview on the individual results page and preserves lower sections', () => {
+test('ready state renders the production scan-first results experience in the approved section order', () => {
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
 
-  assert.match(html, /Individual Intelligence/)
-  assert.match(html, /Archetype Overview/)
-  assert.match(html, /Primary Archetype: Strategic Operator/)
-  assert.match(html, /Behavioural Tilt:/)
+  assert.match(html, /Sonartra Signals — Individual Results/)
+  assert.match(html, /How to Use This Report/)
+  assert.match(html, /Sonartra Archetype Overview/)
   assert.match(html, /Behaviour Style/)
   assert.match(html, /Motivators/)
   assert.match(html, /Leadership/)
   assert.match(html, /Conflict/)
   assert.match(html, /Culture/)
   assert.match(html, /Stress/)
-  assert.match(html, /How to use this report/)
-  assert.match(html, /Interpretation by layer/)
-  assert.match(html, /Manager notes/)
-  assert.match(html, /Why this may feel familiar/)
+  assert.match(html, /Performance Implications/)
 
-  assert.match(html, /Performance profile/)
-  assert.match(html, /Where this person is likely to be most effective/)
-  assert.match(html, /Leverage points/)
-  assert.match(html, /Watchouts under pressure/)
-  assert.match(html, /Team dynamics/)
-  assert.match(html, /Manager playbook/)
-  assert.match(html, /What to do/)
-  assert.match(html, /What to avoid/)
-  assert.match(html, /Mark is likely to establish clarity before committing/)
-  assert.doesNotMatch(html, /Individual Overview/)
+  assert.ok(html.indexOf('How to Use This Report') < html.indexOf('Sonartra Archetype Overview'))
+  assert.ok(html.indexOf('Sonartra Archetype Overview') < html.indexOf('Primary profile: Driver – Analyst'))
+  assert.ok(html.indexOf('Behaviour Style') < html.indexOf('Motivators'))
+  assert.ok(html.indexOf('Motivators') < html.indexOf('Leadership'))
+  assert.ok(html.indexOf('Leadership') < html.indexOf('Conflict'))
+  assert.ok(html.indexOf('Conflict') < html.indexOf('Culture'))
+  assert.ok(html.indexOf('Culture') < html.indexOf('Stress'))
+  assert.ok(html.indexOf('Stress') < html.indexOf('Performance Implications'))
+
+  assert.doesNotMatch(html, /Interpretation by layer/)
+  assert.doesNotMatch(html, /Manager playbook/)
+  assert.doesNotMatch(html, /Manager notes/)
 })
 
-test('archetype map renders the primary archetype in the active primary state without visible state badges', () => {
+test('archetype overview renders only primary and secondary archetypes with the live quick-read summary', () => {
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
 
-  assert.match(html, /data-archetype-key="strategic_operator"[^>]*data-archetype-state="primary"/)
+  assert.match(html, /Primary archetype/)
+  assert.match(html, /Secondary archetype/)
+  assert.match(html, /Strategic Operator/)
+  assert.match(html, /Insight Explorer/)
+  assert.match(html, /Quick read/)
+  assert.doesNotMatch(html, /Balanced Operator/)
 })
 
-test('archetype map renders an optional secondary influence in the softer active state', () => {
-  const readyViewModel = buildPresentationModel()
-  readyViewModel.interpretation.archetypeSummary = {
-    ...getArchetypeSummary(),
-    secondaryKey: 'systems_architect',
-    secondaryLabel: 'Systems Architect',
-  }
-
-  const html = renderToStaticMarkup(<ReadyIndividualResultSections data={readyModel.data} readyViewModel={readyViewModel} />)
-
-  assert.match(html, /Secondary Influence: Systems Architect/)
-  assert.match(html, /data-archetype-key="systems_architect"[^>]*data-archetype-state="secondary"/)
-})
-
-test('non-selected archetypes render in the inactive state with lightweight tile content', () => {
+test('domain sections render with repeated structure, live bars, and concise guidance cards', () => {
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
 
-  assert.match(html, /data-archetype-key="growth_catalyst"[^>]*data-archetype-state="inactive"/)
-  assert.match(html, /data-archetype-key="balanced_operator"[^>]*data-archetype-state="inactive"/)
-  assert.doesNotMatch(html, /Accelerates movement through visible energy and expansion\./)
+  assert.match(html, /Primary profile: Driver – Analyst/)
+  assert.match(html, /Primary profile: Mastery – Achievement/)
+  assert.match(html, /Primary profile: Results – Process/)
+  assert.match(html, /Distribution/)
+  assert.match(html, /Highest signal: Driver/)
+  assert.match(html, /Highest signal: Mastery/)
+  assert.match(html, /Strengths/)
+  assert.match(html, /Watchouts/)
+  assert.match(html, /52%/)
+  assert.match(html, /58%/)
 })
 
-test('ready state uses neutral personalisation fallback when first name is unavailable', () => {
+test('performance implications section renders the synthesised best-fit, risk, and focus guidance', () => {
+  const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
+
+  assert.match(html, /Where performance is strongest/)
+  assert.match(html, /Where performance risk appears/)
+  assert.match(html, /Recommended focus/)
+  assert.match(html, /Where this person creates value, where risk appears, and what to tighten next/)
+})
+
+test('ready state uses neutral fallback language when first name is unavailable', () => {
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName={null} />)
-  assert.match(html, /This individual is likely to establish clarity before committing/)
+  assert.match(html, /this person is most likely to operate/i)
   assert.doesNotMatch(html, /Mark is likely to establish clarity before committing/)
 })
 
-test('ready-state sections omit the archetype overview gracefully when archetypeSummary is absent', () => {
-  const readyViewModel = buildPresentationModel() as Parameters<typeof ReadyIndividualResultSections>[0]['readyViewModel']
-  readyViewModel.interpretation = {
-    ...readyViewModel.interpretation,
-    archetypeSummary: undefined,
-  }
-
-  const html = renderToStaticMarkup(<ReadyIndividualResultSections data={readyModel.data} readyViewModel={readyViewModel} />)
-
-  assert.doesNotMatch(html, /Archetype Overview/)
-  assert.match(html, /Individual Overview/)
-  assert.match(html, /Behaviour Style/)
-})
-
-test('archetype summary content renders primary, behavioural tilt, summary, and list blocks', () => {
+test('ready sections fall back safely when an archetype or a domain is unavailable', () => {
   const readyViewModel = buildPresentationModel()
-  readyViewModel.interpretation.archetypeSummary = {
-    ...getArchetypeSummary(),
-    secondaryKey: 'systems_architect',
-    secondaryLabel: 'Systems Architect',
-  }
+  readyViewModel.presentation.assessments[0].archetype.summary = undefined
+  readyViewModel.presentation.assessments[0].archetype.personalSummary = 'Fallback summary.'
+  readyViewModel.presentation.assessments[0].domains[3].bars = []
 
   const html = renderToStaticMarkup(<ReadyIndividualResultSections data={readyModel.data} readyViewModel={readyViewModel} />)
 
-  assert.match(html, /Primary Archetype: Strategic Operator/)
-  assert.match(html, /Secondary Influence: Systems Architect/)
-  assert.match(html, /Behavioural Tilt:/)
-  assert.match(html, /The profile shows a clear directional bias\./)
-  assert.match(html, /Strengths/)
-  assert.match(html, /Watchouts/)
-  assert.match(html, /Focus Areas/)
-  assert.match(html, /Sets direction quickly once evidence is good enough/)
-  assert.match(html, /Can narrow consultation when pace is high/)
-  assert.match(html, /Make room for challenge before locking direction/)
-})
-
-test('ready state omits why-this-may-feel-familiar section when no deterministic familiar patterns are present', () => {
-  const html = renderToStaticMarkup(
-    <IndividualIntelligenceResultView
-      model={{
-        ...readyModel,
-        data: {
-          ...readyModel.data,
-          layers: [
-            {
-              layerKey: 'leadership',
-              totalRawValue: 12,
-              signalCount: 1,
-              primarySignalKey: 'Decisive_Lead',
-              secondarySignalKey: null,
-              rankedSignalKeys: ['Decisive_Lead'],
-            },
-          ],
-          signals: [
-            {
-              layerKey: 'leadership',
-              signalKey: 'Decisive_Lead',
-              signalTotal: 12,
-              normalisedScore: 0.6,
-              relativeShare: 1,
-              rank: 1,
-              isPrimary: true,
-              isSecondary: false,
-            },
-          ],
-        },
-      }}
-      firstName="Mark"
-    />,
-  )
-
-  assert.doesNotMatch(html, /Why this may feel familiar/)
+  assert.match(html, /Archetype unavailable/)
+  assert.match(html, /Fallback summary/)
+  assert.match(html, /No scored signal distribution is available yet for this domain/)
 })
 
 test('empty state renders explanation and assessment CTA', () => {
@@ -243,12 +200,7 @@ test('empty state renders explanation and assessment CTA', () => {
   assert.match(html, /No completed Individual Intelligence result is available yet/)
   assert.match(html, /No assessment found for this user/)
   assert.match(html, /Start or resume assessment/)
-  assert.doesNotMatch(html, /How to use this report/)
-  assert.doesNotMatch(html, /Performance profile/)
-  assert.doesNotMatch(html, /Manager playbook/)
-  assert.doesNotMatch(html, /Manager notes/)
-  assert.doesNotMatch(html, /Performance profile/)
-  assert.doesNotMatch(html, /Manager playbook/)
+  assert.doesNotMatch(html, /How to Use This Report/)
 })
 
 test('incomplete state renders visible progress copy and resume CTA', () => {
@@ -265,9 +217,7 @@ test('incomplete state renders visible progress copy and resume CTA', () => {
   assert.match(html, /Assessment is in progress/)
   assert.match(html, /not completed yet/)
   assert.match(html, /Resume assessment/)
-  assert.doesNotMatch(html, /How to use this report/)
-  assert.doesNotMatch(html, /Performance profile/)
-  assert.doesNotMatch(html, /Manager playbook/)
+  assert.doesNotMatch(html, /Sonartra Archetype Overview/)
 })
 
 test('error state renders a controlled failure panel', () => {
@@ -290,32 +240,4 @@ test('unexpected state renders fallback instead of blank output', () => {
 
   assert.match(html, /Results are temporarily unavailable/)
   assert.match(html, /could not interpret the latest results state/i)
-})
-
-
-test('non-ready states do not render archetype UI prematurely', () => {
-  const incompleteHtml = renderToStaticMarkup(
-    <IndividualIntelligenceResultView
-      model={{
-        ok: true,
-        state: 'incomplete',
-        message: 'Latest assessment is not completed yet.',
-      }}
-    />,
-  )
-
-  const errorHtml = renderToStaticMarkup(
-    <IndividualIntelligenceResultView
-      model={{
-        ok: false,
-        state: 'error',
-        message: 'Results are unavailable.',
-      }}
-    />,
-  )
-
-  assert.doesNotMatch(incompleteHtml, /Archetype Overview/)
-  assert.doesNotMatch(incompleteHtml, /data-archetype-key=/)
-  assert.doesNotMatch(errorHtml, /Archetype Overview/)
-  assert.doesNotMatch(errorHtml, /data-archetype-key=/)
 })
