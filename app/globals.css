@@ -337,8 +337,30 @@
   }
 
   .architecture-layer-card {
-    background: linear-gradient(180deg, rgba(10, 18, 29, 0.88), rgba(8, 14, 23, 0.8));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), 0 22px 44px -38px rgba(0, 0, 0, 0.88);
+    background: linear-gradient(180deg, rgba(10, 18, 29, 0.92), rgba(7, 13, 22, 0.84));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 22px 44px -38px rgba(0, 0, 0, 0.88);
+  }
+
+  .architecture-layer-card::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(118, 174, 245, 0.28), rgba(118, 174, 245, 0.04) 58%, transparent);
+    opacity: 0.9;
+  }
+
+  .architecture-layer-card::after {
+    content: '';
+    position: absolute;
+    right: -4rem;
+    top: -3.5rem;
+    width: 12rem;
+    height: 12rem;
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgba(91, 145, 214, 0.16), transparent 68%);
+    opacity: 0.42;
   }
 
   .architecture-layer-dot {
@@ -348,6 +370,31 @@
     border-radius: 9999px;
     background: radial-gradient(circle at 35% 35%, #d0e6ff 0%, #8cbcf0 45%, #4d7fbb 100%);
     box-shadow: 0 0 0 1px rgba(181, 216, 255, 0.18), 0 0 16px rgba(97, 155, 222, 0.18);
+  }
+
+  .architecture-layer-label {
+    margin-bottom: 0;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: #9eb4d1;
+  }
+
+  .architecture-live-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(104, 153, 126, 0.24);
+    background: linear-gradient(180deg, rgba(24, 42, 31, 0.22), rgba(15, 27, 21, 0.12));
+    padding: 0.32rem 0.72rem;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #b7d7c0;
+    box-shadow: inset 0 1px 0 rgba(181, 223, 193, 0.05);
   }
 
   .architecture-diagram-shell {
