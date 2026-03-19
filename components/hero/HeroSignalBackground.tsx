@@ -103,9 +103,12 @@ export function HeroSignalBackground() {
             <stop offset="100%" stopColor="rgba(113, 149, 191, 0)" />
           </linearGradient>
           <radialGradient id="node-halo" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="rgba(145, 191, 245, 0.24)" />
+            <stop offset="0%" stopColor="rgba(145, 191, 245, 0.18)" />
             <stop offset="100%" stopColor="rgba(145, 191, 245, 0)" />
           </radialGradient>
+          <filter id="arc-soften" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur stdDeviation="0.16" />
+          </filter>
           <radialGradient id="sweep-falloff" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="rgba(138, 197, 255, 0.22)" />
             <stop offset="45%" stopColor="rgba(138, 197, 255, 0.12)" />
@@ -113,9 +116,11 @@ export function HeroSignalBackground() {
           </radialGradient>
         </defs>
 
-        {[18, 30, 42, 54].map((radius) => (
-          <circle key={radius} cx="60" cy="54" r={radius} fill="none" stroke="rgba(138, 160, 189, 0.08)" strokeWidth="0.25" />
-        ))}
+        <g filter="url(#arc-soften)" opacity="0.76">
+          {[18, 30, 42, 54].map((radius) => (
+            <circle key={radius} cx="60" cy="54" r={radius} fill="none" stroke="rgba(138, 160, 189, 0.055)" strokeWidth="0.22" />
+          ))}
+        </g>
 
         {fieldDots.map((dot) => (
           <motion.circle
@@ -123,8 +128,8 @@ export function HeroSignalBackground() {
             cx={dot.x}
             cy={dot.y}
             r="0.34"
-            fill="rgba(164, 187, 214, 0.3)"
-            animate={reduceMotion ? undefined : { opacity: [0.2, 0.48, 0.2] }}
+            fill="rgba(164, 187, 214, 0.26)"
+            animate={reduceMotion ? undefined : { opacity: [0.16, 0.34, 0.16] }}
             transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut', delay: dot.delay }}
           />
         ))}
@@ -132,14 +137,14 @@ export function HeroSignalBackground() {
         <motion.g
           animate={reduceMotion ? undefined : { x: ['-2%', '3%', '-2%'] }}
           transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut' }}
-          opacity="0.54"
+          opacity="0.48"
         >
           <path d="M-4 34 C 12 30, 24 40, 42 36 S 70 24, 104 29" fill="none" stroke="url(#wave-stroke)" strokeWidth="1" />
           <path d="M-6 52 C 14 48, 28 58, 47 54 S 78 40, 104 46" fill="none" stroke="url(#wave-stroke)" strokeWidth="0.8" opacity="0.62" />
           <path d="M-2 69 C 18 64, 32 74, 50 70 S 79 58, 104 62" fill="none" stroke="url(#wave-stroke)" strokeWidth="0.75" opacity="0.48" />
         </motion.g>
 
-        <g opacity="0.68">
+        <g opacity="0.58">
           {vectors.map(([fromId, toId]) => {
             const from = nodeLookup.get(fromId)
             const to = nodeLookup.get(toId)
@@ -162,7 +167,7 @@ export function HeroSignalBackground() {
                 cy={node.y}
                 r={node.r * 2.8}
                 fill="url(#node-halo)"
-                animate={reduceMotion ? undefined : { opacity: [0.08, 0.2, 0.08] }}
+                animate={reduceMotion ? undefined : { opacity: [0.06, 0.16, 0.06] }}
                 transition={{ duration: 8 + (index % 3), repeat: Infinity, ease: 'easeInOut', delay: index * 0.18 }}
               />
               <motion.circle
@@ -170,7 +175,7 @@ export function HeroSignalBackground() {
                 cy={node.y}
                 r={node.r}
                 {...styles}
-                animate={reduceMotion ? undefined : { opacity: [0.48, 0.82, 0.48] }}
+                animate={reduceMotion ? undefined : { opacity: [0.42, 0.74, 0.42] }}
                 transition={{ duration: 6 + (index % 4), repeat: Infinity, ease: 'easeInOut', delay: index * 0.14 }}
               />
             </g>
@@ -181,12 +186,12 @@ export function HeroSignalBackground() {
           style={{ transformOrigin: '60% 54%' }}
           animate={reduceMotion ? undefined : { rotate: [0, 360] }}
           transition={{ duration: SWEEP_DURATION, repeat: Infinity, ease: 'linear' }}
-          opacity={reduceMotion ? 0.22 : 0.52}
+          opacity={reduceMotion ? 0.18 : 0.46}
         >
-          <path d="M60 54 L100 42 A44 44 0 0 1 97 71 Z" fill="rgba(132, 178, 233, 0.08)" />
-          <path d="M60 54 L101 49 A41 41 0 0 1 99 63 Z" fill="rgba(177, 214, 255, 0.09)" />
+          <path d="M60 54 L100 42 A44 44 0 0 1 97 71 Z" fill="rgba(132, 178, 233, 0.065)" />
+          <path d="M60 54 L101 49 A41 41 0 0 1 99 63 Z" fill="rgba(177, 214, 255, 0.075)" />
           <circle cx="60" cy="54" r="45" fill="url(#sweep-falloff)" />
-          <line x1="60" y1="54" x2="99" y2="57" stroke="rgba(183, 217, 255, 0.3)" strokeWidth="0.45" />
+          <line x1="60" y1="54" x2="99" y2="57" stroke="rgba(183, 217, 255, 0.24)" strokeWidth="0.45" />
         </motion.g>
       </svg>
 
