@@ -16,12 +16,12 @@ export function Hero() {
         <div className="relative z-10 grid items-end gap-10 lg:grid-cols-[minmax(0,1.04fr)_minmax(18rem,0.58fr)] lg:gap-12">
           <RevealGroup className="hero-copy-column max-w-[42rem] space-y-7 lg:space-y-8" staggerChildren={0.08}>
             <RevealItem>
-              <p className="eyebrow">Performance Intelligence Platform</p>
+              <p className="eyebrow">Sonartra Performance Intelligence Platform</p>
             </RevealItem>
             <RevealItem y={10}>
-              <h1 className="headline-display hero-headline max-w-[14ch] text-balance">
-                <HeadlineReveal text="Operational performance intelligence from behavioural signal data.">
-                  Operational performance intelligence from <span className="headline-emphasis hero-headline-emphasis">behavioural signal data</span>.
+              <h1 className="headline-display hero-headline max-w-[15ch] text-balance">
+                <HeadlineReveal text="Make smarter decisions with real insight into individual and team behaviour.">
+                  Make smarter decisions with real insight into <span className="headline-emphasis hero-headline-emphasis">individual and team behaviour</span>.
                 </HeadlineReveal>
               </h1>
             </RevealItem>
@@ -42,7 +42,7 @@ export function Hero() {
             </RevealItem>
           </RevealGroup>
 
-          <div className="relative z-10 flex h-full items-end lg:justify-end">
+          <div className="relative z-10 flex h-full items-center lg:justify-end">
             <div className="hero-layer-panel w-full max-w-[24rem] rounded-[1.35rem] border border-white/[0.06] bg-[#08111c]/56 p-4 backdrop-blur-md sm:p-5">
               <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#8ea6c5]">Sonartra Signals</p>
               <div className="mt-4 space-y-2.5">
