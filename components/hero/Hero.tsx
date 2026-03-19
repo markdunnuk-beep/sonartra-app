@@ -14,7 +14,7 @@ export function Hero() {
         <HeroSignalBackground />
 
         <div className="relative z-10 grid items-end gap-10 lg:grid-cols-[minmax(0,1.04fr)_minmax(18rem,0.58fr)] lg:gap-12">
-          <RevealGroup className="max-w-[42rem] space-y-7 lg:space-y-8" staggerChildren={0.08}>
+          <RevealGroup className="hero-copy-column max-w-[42rem] space-y-7 lg:space-y-8" staggerChildren={0.08}>
             <RevealItem>
               <p className="eyebrow">Performance Intelligence Platform</p>
             </RevealItem>
@@ -44,7 +44,7 @@ export function Hero() {
 
           <div className="relative z-10 flex h-full items-end lg:justify-end">
             <div className="hero-layer-panel w-full max-w-[24rem] rounded-[1.35rem] border border-white/[0.08] bg-[#08111c]/64 p-4 backdrop-blur-md sm:p-5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#8ea6c5]">Signal scan layers</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#8ea6c5]">Sonartra Signals</p>
               <div className="mt-5 space-y-3">
                 {intelligenceLayers.map((layer, index) => (
                   <div key={layer} className="flex items-center justify-between gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3.5 py-3">
@@ -56,7 +56,7 @@ export function Hero() {
                         {index === 2 && 'System-wide performance conditions across the organisation.'}
                       </p>
                     </div>
-                    <span className="hero-layer-indicator shrink-0 rounded-full border border-[#9ec4f3]/20 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-[#a8c5e8]">
+                    <span className="hero-live-pill shrink-0 rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.2em]">
                       Live
                     </span>
                   </div>

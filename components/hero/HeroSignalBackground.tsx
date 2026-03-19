@@ -80,7 +80,9 @@ export function HeroSignalBackground() {
     <div className="absolute inset-0 overflow-hidden rounded-[1.75rem] pointer-events-none" aria-hidden="true">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(85,141,212,0.16),transparent_28%),radial-gradient(circle_at_82%_16%,rgba(101,118,148,0.14),transparent_26%),linear-gradient(140deg,rgba(5,10,18,0.98),rgba(8,14,24,0.96)_40%,rgba(4,8,14,0.98))]" />
       <div className="absolute inset-0 opacity-40 bg-[linear-gradient(rgba(130,151,178,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(130,151,178,0.05)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(circle_at_center,black,transparent_92%)]" />
-      <div className="absolute inset-y-0 left-[8%] w-[34rem] max-w-[58%] bg-[radial-gradient(circle_at_center,rgba(78,124,184,0.14),transparent_70%)] blur-3xl" />
+      <div className="absolute inset-y-0 left-[8%] w-[34rem] max-w-[58%] bg-[radial-gradient(circle_at_center,rgba(78,124,184,0.11),transparent_70%)] blur-3xl" />
+      <div className="absolute inset-y-0 left-0 w-[56%] bg-[linear-gradient(90deg,rgba(4,8,14,0.88)_0%,rgba(6,11,18,0.76)_42%,rgba(6,11,18,0.18)_78%,transparent_100%)]" />
+      <div className="absolute left-[8%] top-[14%] h-[48%] w-[38%] rounded-full bg-[radial-gradient(circle_at_center,rgba(5,9,15,0.34),rgba(5,9,15,0.08)_58%,transparent_76%)] blur-2xl" />
       <motion.div
         className="absolute -inset-x-[12%] top-[26%] h-[28%] bg-[radial-gradient(ellipse_at_center,rgba(124,160,208,0.08),transparent_68%)]"
         animate={reduceMotion ? undefined : { x: ['-4%', '4%', '-4%'] }}
@@ -121,7 +123,7 @@ export function HeroSignalBackground() {
             cx={dot.x}
             cy={dot.y}
             r="0.34"
-            fill="rgba(164, 187, 214, 0.42)"
+            fill="rgba(164, 187, 214, 0.3)"
             animate={reduceMotion ? undefined : { opacity: [0.2, 0.48, 0.2] }}
             transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut', delay: dot.delay }}
           />
@@ -130,14 +132,14 @@ export function HeroSignalBackground() {
         <motion.g
           animate={reduceMotion ? undefined : { x: ['-2%', '3%', '-2%'] }}
           transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut' }}
-          opacity="0.7"
+          opacity="0.54"
         >
           <path d="M-4 34 C 12 30, 24 40, 42 36 S 70 24, 104 29" fill="none" stroke="url(#wave-stroke)" strokeWidth="1" />
           <path d="M-6 52 C 14 48, 28 58, 47 54 S 78 40, 104 46" fill="none" stroke="url(#wave-stroke)" strokeWidth="0.8" opacity="0.62" />
           <path d="M-2 69 C 18 64, 32 74, 50 70 S 79 58, 104 62" fill="none" stroke="url(#wave-stroke)" strokeWidth="0.75" opacity="0.48" />
         </motion.g>
 
-        <g opacity="0.82">
+        <g opacity="0.68">
           {vectors.map(([fromId, toId]) => {
             const from = nodeLookup.get(fromId)
             const to = nodeLookup.get(toId)
@@ -160,7 +162,7 @@ export function HeroSignalBackground() {
                 cy={node.y}
                 r={node.r * 2.8}
                 fill="url(#node-halo)"
-                animate={reduceMotion ? undefined : { opacity: [0.1, 0.28, 0.1] }}
+                animate={reduceMotion ? undefined : { opacity: [0.08, 0.2, 0.08] }}
                 transition={{ duration: 8 + (index % 3), repeat: Infinity, ease: 'easeInOut', delay: index * 0.18 }}
               />
               <motion.circle
@@ -168,7 +170,7 @@ export function HeroSignalBackground() {
                 cy={node.y}
                 r={node.r}
                 {...styles}
-                animate={reduceMotion ? undefined : { opacity: [0.58, 1, 0.58] }}
+                animate={reduceMotion ? undefined : { opacity: [0.48, 0.82, 0.48] }}
                 transition={{ duration: 6 + (index % 4), repeat: Infinity, ease: 'easeInOut', delay: index * 0.14 }}
               />
             </g>
@@ -179,12 +181,12 @@ export function HeroSignalBackground() {
           style={{ transformOrigin: '60% 54%' }}
           animate={reduceMotion ? undefined : { rotate: [0, 360] }}
           transition={{ duration: SWEEP_DURATION, repeat: Infinity, ease: 'linear' }}
-          opacity={reduceMotion ? 0.28 : 0.72}
+          opacity={reduceMotion ? 0.22 : 0.52}
         >
-          <path d="M60 54 L100 42 A44 44 0 0 1 97 71 Z" fill="rgba(132, 178, 233, 0.1)" />
-          <path d="M60 54 L101 49 A41 41 0 0 1 99 63 Z" fill="rgba(177, 214, 255, 0.12)" />
+          <path d="M60 54 L100 42 A44 44 0 0 1 97 71 Z" fill="rgba(132, 178, 233, 0.08)" />
+          <path d="M60 54 L101 49 A41 41 0 0 1 99 63 Z" fill="rgba(177, 214, 255, 0.09)" />
           <circle cx="60" cy="54" r="45" fill="url(#sweep-falloff)" />
-          <line x1="60" y1="54" x2="99" y2="57" stroke="rgba(183, 217, 255, 0.44)" strokeWidth="0.45" />
+          <line x1="60" y1="54" x2="99" y2="57" stroke="rgba(183, 217, 255, 0.3)" strokeWidth="0.45" />
         </motion.g>
       </svg>
 
