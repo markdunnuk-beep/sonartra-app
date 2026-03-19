@@ -265,6 +265,23 @@
     background: linear-gradient(120deg, rgba(121, 173, 247, 0.14), transparent 44%);
   }
 
+  .hero-premium-shell {
+    min-height: clamp(34rem, 72vh, 46rem);
+    background: linear-gradient(160deg, rgba(6, 11, 18, 0.92), rgba(5, 10, 16, 0.82));
+  }
+
+  .hero-headline {
+    text-shadow: 0 16px 40px rgba(0, 0, 0, 0.34);
+  }
+
+  .hero-layer-panel {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 32px 60px -48px rgba(0, 0, 0, 0.95);
+  }
+
+  .hero-layer-indicator {
+    background: linear-gradient(180deg, rgba(121, 170, 227, 0.12), rgba(121, 170, 227, 0.04));
+  }
+
   .platform-anchor-effect::before {
     background: linear-gradient(125deg, rgba(96, 160, 245, 0.16), transparent 50%);
   }
@@ -408,6 +425,12 @@
     to {
       transform: rotate(0deg);
     }
+  }
+}
+
+@media (max-width: 1023px) {
+  .hero-premium-shell {
+    min-height: auto;
   }
 }
 
