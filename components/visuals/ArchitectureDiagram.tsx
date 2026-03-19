@@ -1,7 +1,7 @@
 const ringLabels = [
-  { label: 'Individual Intelligence', x: 400, y: 112 },
-  { label: 'Team Intelligence', x: 400, y: 76 },
-  { label: 'Organisational Intelligence', x: 400, y: 40 },
+  { label: 'Individual Intelligence', x: 400, y: 112, textClass: 'fill-[#c3d7ef]', rectOpacity: 0.88, textSize: '11px' },
+  { label: 'Team Intelligence', x: 400, y: 76, textClass: 'fill-[#b2c7e1]', rectOpacity: 0.74, textSize: '10.5px' },
+  { label: 'Organisational Intelligence', x: 400, y: 40, textClass: 'fill-[#9fb4cf]', rectOpacity: 0.6, textSize: '10px' },
 ]
 
 const ringNodes = [
@@ -190,12 +190,13 @@ export function ArchitectureDiagram() {
 
           {ringLabels.map((ring, index) => (
             <g key={ring.label} className="hidden sm:block">
-              <rect x="312" y={ring.y - 17} width="176" height="24" rx="12" className="fill-[#0b1320]/78 stroke-white/10 architecture-label-glow" style={{ animationDelay: `${index * 1.1}s` }} />
+              <rect x="312" y={ring.y - 17} width="176" height="24" rx="12" className="fill-[#0b1320]/78 stroke-white/10 architecture-label-glow" style={{ animationDelay: `${index * 1.1}s`, opacity: ring.rectOpacity }} />
               <text
                 x={400}
                 y={ring.y}
                 textAnchor="middle"
-                className="fill-[#b5c9e4] text-[10px] font-medium uppercase tracking-[0.24em]"
+                className={`${ring.textClass} font-medium uppercase tracking-[0.24em]`}
+                style={{ fontSize: ring.textSize }}
               >
                 {ring.label}
               </text>

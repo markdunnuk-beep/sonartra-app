@@ -62,7 +62,7 @@ export default function HomePage() {
             <span className="architecture-flow-connector-node" />
           </div>
 
-          <RevealGroup className="mx-auto mt-5 flex w-full max-w-4xl flex-col gap-4 md:mt-6" staggerChildren={0.06} delayChildren={0.02}>
+          <RevealGroup className="mx-auto mt-5 flex w-full max-w-4xl flex-col gap-3.5 md:mt-6" staggerChildren={0.06} delayChildren={0.02}>
             {homepageLayerData.map((layer) => (
               <RevealItem key={layer.title} className="h-full">
                 <Card interactive className={`architecture-layer-card ${layer.toneClass} flex h-full flex-col gap-3.5 px-5 py-[1.125rem] sm:px-6 sm:py-[1.375rem]`}>
