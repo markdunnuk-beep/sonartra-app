@@ -1,7 +1,7 @@
 import { AccessQuery } from './access-query'
-import { organisationMemberships } from './mock-data'
 import { InternalAdminRole } from './roles'
 import { User, UserKind, UserStatus } from './users'
+import { AdminAccessRegistryDomainData, DEFAULT_ADMIN_ACCESS_REGISTRY_DATA } from './access-registry'
 
 export type AccessPriorityLevel =
   | 'critical'
@@ -34,10 +34,48 @@ const PRIVILEGED_INTERNAL_ROLES = new Set<InternalAdminRole>([
   InternalAdminRole.PlatformAdmin,
 ])
 
+function getUserMembershipCount(user: User, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): number {
+  return data.memberships.filter((membership) => membership.userId === user.id).length
+}
+
+export function getUserLastActivityTimestamp(user: User): number | null {
+  if (!user.recentActivity.lastActiveAt) {
+    return null
+  }
+
+  const timestamp = Date.parse(user.recentActivity.lastActiveAt)
+
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
+function getUserActivityBand(user: User, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): 'active_now' | 'recent' | 'inactive' {
+  const lastActiveTimestamp = getUserLastActivityTimestamp(user)
+
+  if (lastActiveTimestamp === null) {
+    return 'inactive'
+  }
+
+  const referenceTimestamps = data.memberships
+    .map((membership) => membership.lastActiveAt ? Date.parse(membership.lastActiveAt) : Number.NaN)
+    .filter((timestamp) => Number.isFinite(timestamp))
+  const referenceTimestamp = Math.max(...(referenceTimestamps.length ? referenceTimestamps : [lastActiveTimestamp]), lastActiveTimestamp)
+  const daysSinceActivity = Math.floor((referenceTimestamp - lastActiveTimestamp) / (24 * 60 * 60 * 1000))
+
+  if (daysSinceActivity <= 1) {
+    return 'active_now'
+  }
+
+  if (daysSinceActivity <= 21) {
+    return 'recent'
+  }
+
+  return 'inactive'
+}
+
 const PRIORITY_RULES: Array<{
   score: number
   reason: string
-  matches: (user: User) => boolean
+  matches: (user: User, data: AdminAccessRegistryDomainData) => boolean
 }> = [
   {
     score: 40,
@@ -57,7 +95,7 @@ const PRIORITY_RULES: Array<{
   {
     score: 25,
     reason: 'Cross-organisation membership',
-    matches: (user) => getUserMembershipCount(user) > 1,
+    matches: (user, data) => getUserMembershipCount(user, data) > 1,
   },
   {
     score: 20,
@@ -67,12 +105,12 @@ const PRIORITY_RULES: Array<{
   {
     score: 20,
     reason: 'No recent activity',
-    matches: (user) => getUserActivityBand(user) === 'inactive',
+    matches: (user, data) => getUserActivityBand(user, data) === 'inactive',
   },
   {
     score: 10,
     reason: 'Inactive activity band',
-    matches: (user) => getUserActivityBand(user) === 'inactive',
+    matches: (user, data) => getUserActivityBand(user, data) === 'inactive',
   },
   {
     score: 10,
@@ -86,58 +124,18 @@ const PRIORITY_RULES: Array<{
   },
 ]
 
-function getUserMembershipCount(user: User): number {
-  return organisationMemberships.filter((membership) => membership.userId === user.id).length
-}
-
-export function getUserLastActivityTimestamp(user: User): number | null {
-  if (!user.recentActivity.lastActiveAt) {
-    return null
-  }
-
-  const timestamp = Date.parse(user.recentActivity.lastActiveAt)
-
-  return Number.isFinite(timestamp) ? timestamp : null
-}
-
-function getUserActivityBand(user: User): 'active_now' | 'recent' | 'inactive' {
-  const lastActiveTimestamp = getUserLastActivityTimestamp(user)
-
-  if (lastActiveTimestamp === null) {
-    return 'inactive'
-  }
-
-  const referenceTimestamp = Math.max(
-    ...organisationMemberships
-      .map((membership) => membership.lastActiveAt ? Date.parse(membership.lastActiveAt) : Number.NaN)
-      .filter((timestamp) => Number.isFinite(timestamp)),
-    lastActiveTimestamp,
-  )
-  const daysSinceActivity = Math.floor((referenceTimestamp - lastActiveTimestamp) / (24 * 60 * 60 * 1000))
-
-  if (daysSinceActivity <= 1) {
-    return 'active_now'
-  }
-
-  if (daysSinceActivity <= 21) {
-    return 'recent'
-  }
-
-  return 'inactive'
-}
-
 function getPriorityLevel(score: number): AccessPriorityLevel {
   return PRIORITY_LEVEL_THRESHOLDS.find((threshold) => score >= threshold.minimumScore)?.level ?? 'low'
 }
 
-export function getPriorityReasons(user: User): string[] {
+export function getPriorityReasons(user: User, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): string[] {
   return PRIORITY_RULES
-    .filter((rule) => rule.matches(user))
+    .filter((rule) => rule.matches(user, data))
     .map((rule) => rule.reason)
 }
 
-export function assessUserAccessPriority(user: User): AccessPriorityAssessment {
-  const matchedRules = PRIORITY_RULES.filter((rule) => rule.matches(user))
+export function assessUserAccessPriority(user: User, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): AccessPriorityAssessment {
+  const matchedRules = PRIORITY_RULES.filter((rule) => rule.matches(user, data))
   const score = matchedRules.reduce((total, rule) => total + rule.score, 0)
 
   return {
@@ -147,8 +145,8 @@ export function assessUserAccessPriority(user: User): AccessPriorityAssessment {
   }
 }
 
-export function compareUsersByPriority(a: User, b: User): number {
-  const scoreDelta = assessUserAccessPriority(b).score - assessUserAccessPriority(a).score
+export function compareUsersByPriority(a: User, b: User, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): number {
+  const scoreDelta = assessUserAccessPriority(b, data).score - assessUserAccessPriority(a, data).score
 
   if (scoreDelta !== 0) {
     return scoreDelta
@@ -163,8 +161,8 @@ export function compareUsersByPriority(a: User, b: User): number {
   return a.profile.fullName.localeCompare(b.profile.fullName)
 }
 
-export function prioritiseUsers(users: User[]): User[] {
-  return [...users].sort(compareUsersByPriority)
+export function prioritiseUsers(users: User[], data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): User[] {
+  return [...users].sort((left, right) => compareUsersByPriority(left, right, data))
 }
 
 export function getAccessPresetViews(): AccessPresetView[] {

@@ -19,11 +19,10 @@ import {
   getAccessPresetViews,
   getUserRoleTypes,
   isElevatedAccessRole,
-  organisations,
   prioritiseUsers,
   type AccessQuery,
+  type AdminAccessRegistryDomainData,
   type User,
-  adminUsers,
 } from '@/lib/admin/domain'
 import {
   formatAdminRelativeTime,
@@ -36,6 +35,7 @@ import {
 } from '@/lib/admin/wireframe'
 
 interface AdminUsersAccessRegistryClientProps {
+  accessRegistryData: AdminAccessRegistryDomainData
   initialQuery?: AccessQuery
 }
 
@@ -271,15 +271,15 @@ function getPriorityRowClassName(level: ReturnType<typeof assessUserAccessPriori
   }
 }
 
-function buildRows(users: User[]) {
+function buildRows(users: User[], accessRegistryData: AdminAccessRegistryDomainData) {
   const rows = users.map((user) => {
-    const summary = getUserSummary(user)
-    const accessFlags = getUserAccessSignals(user)
-    const roleSummary = getUserRoleSummary(user)
-    const activityBand = getUserActivityBand(user)
-    const priority = assessUserAccessPriority(user)
+    const summary = getUserSummary(user, accessRegistryData)
+    const accessFlags = getUserAccessSignals(user, undefined, accessRegistryData)
+    const roleSummary = getUserRoleSummary(user, accessRegistryData)
+    const activityBand = getUserActivityBand(user, undefined, accessRegistryData)
+    const priority = assessUserAccessPriority(user, accessRegistryData)
     const organisationLabels = summary.memberships
-      .map((membership) => organisations.find((organisation) => organisation.id === membership.organisationId)?.name ?? membership.organisationId)
+      .map((membership) => accessRegistryData.organisations.find((organisation) => organisation.id === membership.organisationId)?.name ?? membership.organisationId)
       .join(' · ')
 
     return {
@@ -332,16 +332,18 @@ function UserTableSection({
   eyebrow,
   description,
   users,
+  accessRegistryData,
 }: {
   title: string
   eyebrow: string
   description: string
   users: User[]
+  accessRegistryData: AdminAccessRegistryDomainData
 }) {
   return (
     <SurfaceSection title={title} eyebrow={eyebrow} description={description}>
       {users.length ? (
-        <Table columns={["User", "Role", "Organisation / memberships", "Status", "Last activity", "Priority", "Flags"]} {...buildRows(users)} />
+        <Table columns={["User", "Role", "Organisation / memberships", "Status", "Last activity", "Priority", "Flags"]} {...buildRows(users, accessRegistryData)} />
       ) : (
         <EmptyState title="No users match this query" detail="Adjust the structured query filters to widen the access slice or clear one of the active constraints." />
       )}
@@ -349,12 +351,12 @@ function UserTableSection({
   )
 }
 
-export function AdminUsersAccessRegistryClient({ initialQuery = DEFAULT_ACCESS_QUERY }: AdminUsersAccessRegistryClientProps) {
+export function AdminUsersAccessRegistryClient({ accessRegistryData, initialQuery = DEFAULT_ACCESS_QUERY }: AdminUsersAccessRegistryClientProps) {
   const [query, setQuery] = useState<AccessQuery>({ ...initialQuery })
   const presetViews = useMemo(() => getAccessPresetViews(), [])
 
   const roleOptions = useMemo(() => {
-    const roleTypes = Array.from(new Set(adminUsers.flatMap((user) => getUserRoleTypes(user))))
+    const roleTypes = Array.from(new Set(accessRegistryData.users.flatMap((user) => getUserRoleTypes(user, accessRegistryData))))
 
     return roleTypes
       .sort((left, right) => {
@@ -366,10 +368,10 @@ export function AdminUsersAccessRegistryClient({ initialQuery = DEFAULT_ACCESS_Q
         return getRoleTypeLabel(left).localeCompare(getRoleTypeLabel(right))
       })
       .map((roleType) => ({ value: roleType, label: getRoleTypeLabel(roleType) }))
-  }, [])
+  }, [accessRegistryData])
 
-  const filteredUsers = useMemo(() => filterUsersByQuery(adminUsers, query), [query])
-  const prioritisedUsers = useMemo(() => prioritiseUsers(filteredUsers), [filteredUsers])
+  const filteredUsers = useMemo(() => filterUsersByQuery(accessRegistryData.users, query, accessRegistryData), [accessRegistryData, query])
+  const prioritisedUsers = useMemo(() => prioritiseUsers(filteredUsers, accessRegistryData), [accessRegistryData, filteredUsers])
   const internalUsers = useMemo(() => prioritisedUsers.filter((user) => user.kind === 'internal_admin'), [prioritisedUsers])
   const organisationUsers = useMemo(() => prioritisedUsers.filter((user) => user.kind === 'organisation_user'), [prioritisedUsers])
 
@@ -429,6 +431,7 @@ export function AdminUsersAccessRegistryClient({ initialQuery = DEFAULT_ACCESS_Q
         eyebrow="Internal access"
         description="Privileged platform operators are isolated from tenant identities so elevated access can be reviewed quickly."
         users={internalUsers}
+        accessRegistryData={accessRegistryData}
       />
 
       <UserTableSection
@@ -436,6 +439,7 @@ export function AdminUsersAccessRegistryClient({ initialQuery = DEFAULT_ACCESS_Q
         eyebrow="Tenant access"
         description="Customer identities remain tenant-scoped, with clear organisation context, membership breadth, invite posture, and dormancy signals."
         users={organisationUsers}
+        accessRegistryData={accessRegistryData}
       />
     </div>
   )

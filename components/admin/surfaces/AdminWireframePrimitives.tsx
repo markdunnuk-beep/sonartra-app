@@ -1,3 +1,4 @@
+import React from 'react'
 import { clsx } from 'clsx'
 import { ArrowRight, Filter, LayoutTemplate, Search } from 'lucide-react'
 import Link from 'next/link'
