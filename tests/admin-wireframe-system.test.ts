@@ -2,7 +2,20 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
-import { findAssessmentBySlug, findAssessmentVersion, findOrganisationBySlug, findUserById, getAssessmentTabs, getReleaseBlockers, getValidationIssues } from '../lib/admin/wireframe'
+import {
+  findAssessmentBySlug,
+  findAssessmentVersion,
+  findOrganisationBySlug,
+  findUserById,
+  formatAdminRelativeTime,
+  getAssessmentTabs,
+  getOrganisationHealthSignals,
+  getOrganisationMembershipSummary,
+  getOrganisationUtilisationBand,
+  getOrganisationVersionExposure,
+  getReleaseBlockers,
+  getValidationIssues,
+} from '../lib/admin/wireframe'
 
 test('wireframe selectors resolve typed entities for detail routes', () => {
   assert.equal(findOrganisationBySlug('northstar-logistics')?.name, 'Northstar Logistics')
@@ -34,6 +47,30 @@ test('validation and release helpers derive consistent readiness signals from ty
   assert.equal(getReleaseBlockers(validatedVersion!).length, 0)
   assert.equal(getValidationIssues(inReviewVersion!).some((issue) => issue.state === 'error'), true)
   assert.equal(getReleaseBlockers(inReviewVersion!).length > 0, true)
+})
+
+test('organisation registry helpers derive utilisation bands, intervention flags, membership counts, and version exposure', () => {
+  const suspendedOrganisation = findOrganisationBySlug('vectorforge-industrial')
+  const implementationOrganisation = findOrganisationBySlug('aurora-health-group')
+
+  assert.ok(suspendedOrganisation)
+  assert.ok(implementationOrganisation)
+
+  assert.equal(getOrganisationUtilisationBand(implementationOrganisation!), 'low')
+  assert.deepEqual(
+    getOrganisationHealthSignals(suspendedOrganisation!).map((signal) => signal.label),
+    ['Suspended', 'Dormant'],
+  )
+  assert.deepEqual(getOrganisationMembershipSummary(suspendedOrganisation!), {
+    totalUsers: 2,
+    adminUsers: 1,
+    memberUsers: 1,
+    invitedUsers: 1,
+    inactiveUsers: 1,
+  })
+  assert.deepEqual(getOrganisationVersionExposure(implementationOrganisation!), ['Sonartra Signals v2.1.0', 'Organisation Pulse v1.0.0'])
+  assert.equal(formatAdminRelativeTime('2026-03-20T04:12:00Z'), 'Today')
+  assert.equal(formatAdminRelativeTime('2026-02-07T09:48:00Z'), '1 month ago')
 })
 
 test('wireframe surface files remain server-safe and avoid client directives', async () => {

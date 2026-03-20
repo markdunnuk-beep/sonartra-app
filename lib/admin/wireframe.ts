@@ -33,6 +33,42 @@ export interface AdminValidationIssue {
   detail: string
 }
 
+export interface OrganisationHealthSignal {
+  label: string
+  tone: 'slate' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet'
+}
+
+export interface OrganisationMembershipSummary {
+  totalUsers: number
+  adminUsers: number
+  memberUsers: number
+  invitedUsers: number
+  inactiveUsers: number
+}
+
+function getAdminReferenceDate(): Date {
+  const timestamps = [
+    ...auditLogEvents.map((event) => Date.parse(event.occurredAt)),
+    ...assessmentVersions.map((version) => Date.parse(version.updatedAt)),
+    ...organisations.map((organisation) => Date.parse(organisation.updatedAt)),
+  ].filter((value) => Number.isFinite(value))
+
+  return new Date(Math.max(...timestamps))
+}
+
+function getDaysSince(value: string | null, referenceDate: Date = getAdminReferenceDate()): number | null {
+  if (!value) {
+    return null
+  }
+
+  const timestamp = Date.parse(value)
+  if (!Number.isFinite(timestamp)) {
+    return null
+  }
+
+  return Math.floor((referenceDate.getTime() - timestamp) / (24 * 60 * 60 * 1000))
+}
+
 export function formatAdminTimestamp(value: string | null): string {
   if (!value) {
     return 'Not available'
@@ -72,6 +108,34 @@ export function formatShortAdminDate(value: string | null): string {
     year: 'numeric',
     timeZone: 'UTC',
   }).format(date)
+}
+
+export function formatAdminRelativeTime(value: string | null, referenceDate: Date = getAdminReferenceDate()): string {
+  const daysSince = getDaysSince(value, referenceDate)
+
+  if (daysSince === null) {
+    return 'No activity'
+  }
+
+  if (daysSince === 0) {
+    return 'Today'
+  }
+
+  if (daysSince === 1) {
+    return '1 day ago'
+  }
+
+  if (daysSince < 7) {
+    return `${daysSince} days ago`
+  }
+
+  const weeksSince = Math.floor(daysSince / 7)
+  if (weeksSince < 5) {
+    return `${weeksSince} week${weeksSince === 1 ? '' : 's'} ago`
+  }
+
+  const monthsSince = Math.floor(daysSince / 30)
+  return `${monthsSince} month${monthsSince === 1 ? '' : 's'} ago`
 }
 
 export function findOrganisationBySlug(slug: string): Organisation | null {
@@ -148,6 +212,75 @@ export function getOrganisationSummary(organisation: Organisation) {
     enabledProducts,
     seatUtilisation: getSeatUtilisationPercent(organisation),
   }
+}
+
+export function getOrganisationUtilisationBand(organisation: Organisation): 'low' | 'medium' | 'high' {
+  const utilisation = getSeatUtilisationPercent(organisation)
+
+  if (utilisation < 60) {
+    return 'low'
+  }
+
+  if (utilisation < 85) {
+    return 'medium'
+  }
+
+  return 'high'
+}
+
+export function getOrganisationMembershipSummary(organisation: Organisation): OrganisationMembershipSummary {
+  const memberships = getOrganisationMemberships(organisation.id)
+  const users = getOrganisationUsers(organisation.id)
+
+  return {
+    totalUsers: users.length,
+    adminUsers: memberships.filter((membership) => ['owner', 'admin'].includes(membership.role)).length,
+    memberUsers: memberships.filter((membership) => ['manager', 'member', 'analyst'].includes(membership.role)).length,
+    invitedUsers: users.filter((user) => user.status === 'invited').length,
+    inactiveUsers: users.filter((user) => ['suspended', 'deactivated'].includes(user.status)).length,
+  }
+}
+
+export function getOrganisationVersionExposure(organisation: Organisation): string[] {
+  return organisation.enabledAssessmentIds.map((assessmentId) => {
+    const assessment = assessments.find((item) => item.id === assessmentId)
+
+    if (!assessment) {
+      return assessmentId
+    }
+
+    const liveVersion = getCurrentLiveAssessmentVersion(assessment, getAssessmentVersionsForAssessment(assessment.id))
+
+    return `${assessment.title}${liveVersion ? ` v${liveVersion.versionNumber}` : ''}`
+  })
+}
+
+export function getOrganisationHealthSignals(organisation: Organisation, referenceDate: Date = getAdminReferenceDate()): OrganisationHealthSignal[] {
+  const signals: OrganisationHealthSignal[] = []
+  const seatUtilisation = getSeatUtilisationPercent(organisation)
+  const daysSinceActivity = getDaysSince(organisation.lastActivityAt, referenceDate)
+
+  if (organisation.status === 'suspended') {
+    signals.push({ label: 'Suspended', tone: 'rose' })
+  }
+
+  if (organisation.status === 'implementation') {
+    signals.push({ label: 'Implementation', tone: 'amber' })
+  }
+
+  if (seatUtilisation < 60) {
+    signals.push({ label: 'Low utilisation', tone: 'amber' })
+  }
+
+  if (daysSinceActivity === null || daysSinceActivity >= 21) {
+    signals.push({ label: 'Dormant', tone: 'amber' })
+  }
+
+  if (organisation.enabledAssessmentIds.length === 0) {
+    signals.push({ label: 'No assessments', tone: 'rose' })
+  }
+
+  return signals
 }
 
 export function getUserSummary(user: User) {
