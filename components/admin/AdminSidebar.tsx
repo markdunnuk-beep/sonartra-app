@@ -1,14 +1,24 @@
 'use client'
 
 import { SonartraLogo } from '@/components/branding/SonartraLogo'
+import { LayoutDashboard, Building2, Users2, ClipboardList, Rocket, FileSearch } from 'lucide-react'
 import { AdminAccessContext } from '@/lib/admin/access'
-import { AdminNavigationItem } from '@/lib/admin/navigation'
+import { AdminNavigationIconKey, AdminNavigationItem } from '@/lib/admin/navigation'
 import { clsx } from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 function formatAccessSource(accessSource: AdminAccessContext['accessSource']) {
   return accessSource === 'email_allowlist' ? 'Email allowlist' : 'No access source'
+}
+
+const navigationIcons: Record<AdminNavigationIconKey, typeof LayoutDashboard> = {
+  dashboard: LayoutDashboard,
+  organisations: Building2,
+  users: Users2,
+  assessments: ClipboardList,
+  releases: Rocket,
+  audit: FileSearch,
 }
 
 export function AdminSidebar({
@@ -32,7 +42,8 @@ export function AdminSidebar({
 
       <div className="eyebrow mt-7 hidden lg:block">Control surface</div>
       <nav className="mt-3 grid grid-cols-1 gap-2 lg:mt-4 lg:gap-1.5">
-        {navigationItems.map(({ href, label, icon: Icon, startsWith, requiredCapabilities }) => {
+        {navigationItems.map(({ href, label, iconKey, startsWith, requiredCapabilities }) => {
+          const Icon = navigationIcons[iconKey]
           const isActive =
             href === '/admin'
               ? pathname === href || pathname.startsWith('/admin/dashboard')

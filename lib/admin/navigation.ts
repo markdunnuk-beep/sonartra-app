@@ -1,4 +1,3 @@
-import { Activity, Building2, ClipboardList, FileSearch, LayoutDashboard, Rocket, Users2 } from 'lucide-react'
 import { AdminAccessContext } from '@/lib/admin/access'
 import {
   AdminCapability,
@@ -16,11 +15,13 @@ import {
 
 export type AdminRouteKey = `${AdminModuleKey}`
 
+export type AdminNavigationIconKey = 'dashboard' | 'organisations' | 'users' | 'assessments' | 'releases' | 'audit'
+
 export interface AdminNavigationItem {
   key: AdminRouteKey
   label: string
   href: string
-  icon: typeof LayoutDashboard
+  iconKey: AdminNavigationIconKey
   description: string
   startsWith?: string
   requiredRoles: InternalAdminRole[]
@@ -33,7 +34,7 @@ export const adminNavigationItems: AdminNavigationItem[] = [
     key: AdminModuleKey.Dashboard,
     label: 'Dashboard',
     href: '/admin',
-    icon: LayoutDashboard,
+    iconKey: 'dashboard',
     description: 'Control overview for tenant posture, release readiness, and audit signals.',
     requiredRoles: Object.values(InternalAdminRole),
     compatibleProvisionalRoles: [ProvisionalAdminRole.InternalAdmin],
@@ -43,7 +44,7 @@ export const adminNavigationItems: AdminNavigationItem[] = [
     key: AdminModuleKey.Organisations,
     label: 'Organisations',
     href: '/admin/organisations',
-    icon: Building2,
+    iconKey: 'organisations',
     startsWith: '/admin/organisations',
     description: 'Manage customer tenants, seat posture, enabled assessments, and operating status.',
     requiredRoles: [
@@ -59,7 +60,7 @@ export const adminNavigationItems: AdminNavigationItem[] = [
     key: AdminModuleKey.Users,
     label: 'Users',
     href: '/admin/users',
-    icon: Users2,
+    iconKey: 'users',
     startsWith: '/admin/users',
     description: 'Oversee internal admins, customer admins, memberships, and access state.',
     requiredRoles: [
@@ -75,7 +76,7 @@ export const adminNavigationItems: AdminNavigationItem[] = [
     key: AdminModuleKey.Assessments,
     label: 'Assessments',
     href: '/admin/assessments',
-    icon: ClipboardList,
+    iconKey: 'assessments',
     startsWith: '/admin/assessments',
     description: 'Control assessment registry, version validation, and publish state.',
     requiredRoles: [InternalAdminRole.SuperAdmin, InternalAdminRole.PlatformAdmin, InternalAdminRole.AssessmentAdmin],
@@ -86,7 +87,7 @@ export const adminNavigationItems: AdminNavigationItem[] = [
     key: AdminModuleKey.Releases,
     label: 'Releases',
     href: '/admin/releases',
-    icon: Rocket,
+    iconKey: 'releases',
     startsWith: '/admin/releases',
     description: 'Drive release readiness, publish decisions, and staged rollout control.',
     requiredRoles: [InternalAdminRole.SuperAdmin, InternalAdminRole.PlatformAdmin, InternalAdminRole.AssessmentAdmin],
@@ -97,7 +98,7 @@ export const adminNavigationItems: AdminNavigationItem[] = [
     key: AdminModuleKey.Audit,
     label: 'Audit',
     href: '/admin/audit',
-    icon: FileSearch,
+    iconKey: 'audit',
     startsWith: '/admin/audit',
     description: 'Review operational history, privileged actions, and evidence trails.',
     requiredRoles: Object.values(InternalAdminRole),
@@ -120,7 +121,7 @@ export interface AdminQuickMetric {
   label: string
   value: string
   detail: string
-  icon: typeof Activity
+  iconKey: AdminNavigationIconKey | 'activity'
 }
 
 export const adminDashboardMetrics: AdminQuickMetric[] = [
@@ -128,25 +129,25 @@ export const adminDashboardMetrics: AdminQuickMetric[] = [
     label: 'Customer tenants',
     value: `${organisations.length}`.padStart(2, '0'),
     detail: 'Provisioned organisations currently attached to managed Sonartra workspaces.',
-    icon: Building2,
+    iconKey: 'organisations',
   },
   {
     label: 'Privileged operators',
     value: `${adminUsers.filter((user) => user.internalAdminRole !== null).length}`.padStart(2, '0'),
     detail: 'Internal Sonartra admins with authority to review release and audit controls.',
-    icon: Users2,
+    iconKey: 'users',
   },
   {
     label: 'Assessment lines',
     value: `${assessments.length}`.padStart(2, '0'),
     detail: 'Assessment families actively governed through versioned registry controls.',
-    icon: ClipboardList,
+    iconKey: 'assessments',
   },
   {
     label: 'Release posture',
     value: assessmentVersions.some((version) => version.validationSummary.ruleErrors > 0) ? 'Attention' : 'Stable',
     detail: 'Current posture across live and pending assessment version releases.',
-    icon: Rocket,
+    iconKey: 'releases',
   },
 ]
 
