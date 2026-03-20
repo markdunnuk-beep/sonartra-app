@@ -20,6 +20,7 @@ import type {
   AssessmentRepositoryFilterState,
   AssessmentRepositoryItem,
   AssessmentRepositoryProgressFilter,
+  AssessmentRepositoryRecommendation,
   AssessmentRepositoryScopeFilter,
   AssessmentRepositorySectionModel,
   AssessmentRepositoryStatus,
@@ -38,6 +39,16 @@ const PLAN_ORDER = {
   growth: 1,
   enterprise: 2,
 } as const
+
+const BASELINE_ASSESSMENT_ID = 'signals'
+const RECOMMENDATION_EYEBROW = 'Recommended next action'
+const RECOMMENDATION_PRIORITY_BY_KIND: Record<AssessmentRepositoryRecommendation['kind'], number> = {
+  resume_in_progress: 0,
+  review_results: 1,
+  launch_baseline: 2,
+  launch_individual_follow_up: 3,
+  launch_team_follow_up: 4,
+}
 
 function cloneRows(rows: AssessmentRepositoryDetailRow[]): AssessmentRepositoryDetailRow[] {
   return rows.map((row) => ({ ...row }))
@@ -417,6 +428,116 @@ export function getActionState(item: AssessmentRepositoryItem): AssessmentAction
     default:
       return null
   }
+}
+
+
+function isActionableLaunchCandidate(item: AssessmentRepositoryItem): boolean {
+  return item.status === 'not_started' && Boolean(item.assessmentHref)
+}
+
+function isActionableResultsCandidate(item: AssessmentRepositoryItem): boolean {
+  return item.status === 'complete' && item.resultsAvailable && Boolean(item.resultsHref)
+}
+
+function getOperationalMetadata(item: AssessmentRepositoryItem): string[] {
+  const metadata = [item.category === 'team' ? 'Team diagnostic' : 'Individual diagnostic', `${item.estimatedMinutes} min`, formatStatusLabel(item.status)]
+
+  if (item.status === 'in_progress' && typeof item.progressPercent === 'number') {
+    return [metadata[0], `${item.progressPercent}% complete`, metadata[1]]
+  }
+
+  return metadata
+}
+
+function compareRecommendationPriority(left: AssessmentRepositoryRecommendation, right: AssessmentRepositoryRecommendation): number {
+  const kindDelta = RECOMMENDATION_PRIORITY_BY_KIND[left.kind] - RECOMMENDATION_PRIORITY_BY_KIND[right.kind]
+
+  if (kindDelta !== 0) {
+    return kindDelta
+  }
+
+  return 0
+}
+
+function createRecommendationFromItem(item: AssessmentRepositoryItem, recommendation: Omit<AssessmentRepositoryRecommendation, 'itemId' | 'metadata'>): AssessmentRepositoryRecommendation {
+  return {
+    ...recommendation,
+    itemId: item.id,
+    metadata: getOperationalMetadata(item),
+  }
+}
+
+function getProgressionLaunchCandidates(items: AssessmentRepositoryItem[]): AssessmentRepositoryItem[] {
+  return sortAssessments(items.filter((item) => isActionableLaunchCandidate(item) && item.status !== 'coming_soon'))
+}
+
+export function getAssessmentRepositoryRecommendation(items: AssessmentRepositoryItem[]): AssessmentRepositoryRecommendation | null {
+  if (items.length === 0) {
+    return null
+  }
+
+  const actionableInventory = sortAssessments(items.filter((item) => item.status !== 'coming_soon'))
+
+  const inProgressCandidates = actionableInventory.filter((item) => item.status === 'in_progress' && Boolean(item.assessmentHref))
+  if (inProgressCandidates.length > 0) {
+    const item = inProgressCandidates[0]
+
+    return createRecommendationFromItem(item, {
+      kind: 'resume_in_progress',
+      eyebrow: RECOMMENDATION_EYEBROW,
+      title: `Continue ${item.title}`,
+      rationale: 'You already have an active attempt in progress. Finishing the current diagnostic preserves continuity before opening another assessment track.',
+      cta: { label: 'Resume Assessment', href: item.assessmentHref, action: 'resume' },
+    })
+  }
+
+  const baselineItem = actionableInventory.find((item) => item.id === BASELINE_ASSESSMENT_ID)
+  if (baselineItem && isActionableResultsCandidate(baselineItem)) {
+    return createRecommendationFromItem(baselineItem, {
+      kind: 'review_results',
+      eyebrow: RECOMMENDATION_EYEBROW,
+      title: `Review ${baselineItem.title} results`,
+      rationale: 'The baseline diagnostic is complete and ready for interpretation. Reviewing those results first provides the clearest reference point for any follow-on assessment.',
+      cta: { label: 'View Results', href: baselineItem.resultsHref, action: 'view_results' },
+    })
+  }
+
+  const launchCandidates = getProgressionLaunchCandidates(actionableInventory)
+  if (launchCandidates.length === 0) {
+    return null
+  }
+
+  const launchRecommendationCandidates = launchCandidates.map((item): AssessmentRepositoryRecommendation => {
+    if (item.id === BASELINE_ASSESSMENT_ID) {
+      return createRecommendationFromItem(item, {
+        kind: 'launch_baseline',
+        eyebrow: RECOMMENDATION_EYEBROW,
+        title: `Start ${item.title}`,
+        rationale: 'This is the baseline individual diagnostic for the repository. Completing it establishes the reference profile used to sequence deeper individual and team diagnostics.',
+        cta: { label: 'Start Assessment', href: item.assessmentHref, action: 'launch' },
+      })
+    }
+
+    if (item.category === 'individual') {
+      return createRecommendationFromItem(item, {
+        kind: 'launch_individual_follow_up',
+        eyebrow: RECOMMENDATION_EYEBROW,
+        title: `Start ${item.title}`,
+        rationale: 'Baseline coverage is already established, so the next best step is to deepen individual-level insight before moving into broader team conditions.',
+        cta: { label: 'Start Assessment', href: item.assessmentHref, action: 'launch' },
+      })
+    }
+
+    return createRecommendationFromItem(item, {
+      kind: 'launch_team_follow_up',
+      eyebrow: RECOMMENDATION_EYEBROW,
+      title: `Launch ${item.title}`,
+      rationale: 'Individual-level context is in place, making this the strongest next team-level diagnostic to extend visibility into shared operating conditions.',
+      cta: { label: 'Launch Assessment', href: item.assessmentHref, action: 'launch' },
+    })
+  })
+
+  return launchRecommendationCandidates.sort(compareRecommendationPriority)[0] ?? null
 }
 
 export function getAssessmentFilterGroups(): [AssessmentFilterGroup<AssessmentRepositoryScopeFilter>, AssessmentFilterGroup<AssessmentRepositoryProgressFilter>] {

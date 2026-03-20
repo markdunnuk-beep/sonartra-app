@@ -73,6 +73,23 @@ export interface AssessmentActionState {
   detail: string
 }
 
+export type AssessmentRecommendationKind =
+  | 'resume_in_progress'
+  | 'review_results'
+  | 'launch_baseline'
+  | 'launch_individual_follow_up'
+  | 'launch_team_follow_up'
+
+export interface AssessmentRepositoryRecommendation {
+  kind: AssessmentRecommendationKind
+  eyebrow: string
+  title: string
+  rationale: string
+  cta: AssessmentRepositoryAction
+  metadata: string[]
+  itemId: string
+}
+
 export interface AssessmentFilterOption<TValue extends string> {
   value: TValue
   label: string
