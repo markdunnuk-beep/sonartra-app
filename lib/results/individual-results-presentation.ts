@@ -1,6 +1,10 @@
 import type { ArchetypeSummary } from '@/lib/interpretation/archetypes'
 import { buildLiveIndividualDashboardProfile } from '@/lib/interpretation/buildLiveIndividualDashboardProfile'
 import type { LayerInsight } from '@/lib/interpretation/buildIndividualDashboardProfile'
+import {
+  deriveIndividualResultsIntelligence,
+  type IndividualResultsIntelligenceModel,
+} from '@/lib/results/individual-results-intelligence'
 import { buildIndividualResultInterpretation } from '@/lib/results-interpretation'
 import type { IndividualResultReadyData } from '@/lib/server/individual-results'
 
@@ -49,6 +53,7 @@ export type IndividualResultDomainSectionModel = {
 export type IndividualResultsPresentationModel = {
   title: string
   subtitle: string
+  intelligence: IndividualResultsIntelligenceModel
   assessments: IndividualAssessmentCardModel[]
 }
 
@@ -302,17 +307,29 @@ export function buildIndividualResultsPresentationModel(data: IndividualResultRe
 
   const archetypeSummary = interpretation.archetypeSummary
   const assessmentSummary = buildAssessmentSummary(archetypeSummary, domainSections)
+  const completedLabel = formatDate(data.assessment.completedAt)
+
+  const intelligence = deriveIndividualResultsIntelligence(data, {
+    assessmentTitle: 'Sonartra Signals',
+    assessmentSummary:
+      assessmentSummary ??
+      truncate(archetypeSummary?.summary ?? interpretation.performanceProfile.summary, 180),
+    completedLabel,
+    archetypeLabel: archetypeSummary?.primaryLabel,
+    domainsAvailable: domainSections.filter((section) => section.bars.length > 0).length,
+  })
 
   return {
     title: 'Sonartra Signals — Individual Results',
     subtitle:
       'The approved scan-first production view for reading how this person operates, what drives performance, and where practical risk appears.',
+    intelligence,
     assessments: [
       {
         id: data.snapshot.resultId,
         title: 'Sonartra Signals',
         versionLabel: data.assessment.versionKey ? `Version ${data.assessment.versionKey}` : 'Version unavailable',
-        completedLabel: formatDate(data.assessment.completedAt),
+        completedLabel,
         statusLabel: 'Current assessment',
         defaultExpanded: false,
         summary: assessmentSummary,
