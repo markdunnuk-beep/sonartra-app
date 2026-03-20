@@ -81,10 +81,10 @@ test('ready individual results view model builds the production assessment card 
   const assessment = readyViewModel.presentation.assessments[0]
 
   assert.equal(readyViewModel.presentation.title, 'Sonartra Signals — Individual Results')
-  assert.equal(readyViewModel.presentation.intelligence.summaryHeadline, 'Baseline profile completed and ready to use')
-  assert.match(readyViewModel.presentation.intelligence.summaryOverview, /Strategic Operator with Insight Explorer as the supporting pattern/i)
+  assert.equal(readyViewModel.presentation.intelligence.summaryHeadline, 'Baseline profile ready')
+  assert.match(readyViewModel.presentation.intelligence.summaryOverview, /Strategic Operator supported by Insight Explorer/i)
   assert.equal(readyViewModel.presentation.intelligence.action.kind, 'resume_in_progress')
-  assert.equal(readyViewModel.presentation.intelligence.action.cta?.label, 'Resume Assessment')
+  assert.equal(readyViewModel.presentation.intelligence.action.cta?.label, 'Resume diagnostic')
   assert.equal(readyViewModel.presentation.intelligence.action.cta?.href, '#')
   assert.equal(readyViewModel.presentation.assessments.length, 1)
   assert.equal(assessment.defaultExpanded, false)

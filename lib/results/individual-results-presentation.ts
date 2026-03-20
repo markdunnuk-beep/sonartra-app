@@ -286,12 +286,12 @@ function buildDomainSection(
 function buildAssessmentSummary(archetypeSummary: ArchetypeSummary | undefined, domainSections: IndividualResultDomainSectionModel[]) {
   if (archetypeSummary) {
     return archetypeSummary.secondaryLabel
-      ? `${archetypeSummary.primaryLabel} with ${archetypeSummary.secondaryLabel} as the supporting pattern.`
-      : `${archetypeSummary.primaryLabel} is the clearest behavioural readout in the latest result.`
+      ? `${archetypeSummary.primaryLabel} supported by ${archetypeSummary.secondaryLabel}.`
+      : `${archetypeSummary.primaryLabel} is the clearest readout in the latest result.`
   }
 
   return domainSections[0]
-    ? `${domainSections[0].title} currently leads the readout, with the remaining domains available below.`
+    ? `${domainSections[0].title} leads the readout, with the remaining domains available below.`
     : undefined
 }
 
@@ -322,7 +322,7 @@ export function buildIndividualResultsPresentationModel(data: IndividualResultRe
   return {
     title: 'Sonartra Signals — Individual Results',
     subtitle:
-      'The approved scan-first production view for reading how this person operates, what drives performance, and where practical risk appears.',
+      'Scan the baseline result, decision signals, and immediate follow-on path from one controlled briefing surface.',
     intelligence,
     assessments: [
       {
@@ -330,12 +330,12 @@ export function buildIndividualResultsPresentationModel(data: IndividualResultRe
         title: 'Sonartra Signals',
         versionLabel: data.assessment.versionKey ? `Version ${data.assessment.versionKey}` : 'Version unavailable',
         completedLabel,
-        statusLabel: 'Current assessment',
+        statusLabel: 'Current result',
         defaultExpanded: false,
         summary: assessmentSummary,
         howToUse: {
           summary:
-            'Use the archetype overview for the fastest read, then scan each domain for the strongest behavioural pattern, visible score distribution, and the few watchouts most likely to matter in practice.',
+            'Start with the archetype overview, then scan each domain for the strongest pattern, score spread, and the watchouts most likely to matter in practice.',
           sections: DEFAULT_SECTION_LABELS,
         },
         archetype: {

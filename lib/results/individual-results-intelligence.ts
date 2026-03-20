@@ -23,21 +23,21 @@ const FOLLOW_ON_RULES: FollowOnRule[] = [
     layerKey: 'leadership',
     focusLabel: 'Leadership execution',
     titlePrefix: 'Deepen leadership execution',
-    rationale: 'Leadership signal weight is strongest in the current result, so the next highest-value step is a focused read on execution, delegation, and follow-through.',
+    rationale: 'Leadership signal is carrying the most weight, so the cleanest next cut is a focused read on execution, delegation, and follow-through.',
   },
   {
     assessmentId: 'burnout-risk',
     layerKey: 'risk',
     focusLabel: 'Pressure and recovery risk',
     titlePrefix: 'Check pressure exposure',
-    rationale: 'Stress and decision-pressure signals are prominent enough to justify a tighter follow-on read before they become an operating drag.',
+    rationale: 'Pressure and decision-friction signals are elevated enough to justify a tighter read before they become an operating drag.',
   },
   {
     assessmentId: 'conflict-style',
     layerKey: 'conflict',
     focusLabel: 'Conflict response',
     titlePrefix: 'Clarify conflict response',
-    rationale: 'Conflict patterns are sufficiently visible in the current result to warrant a more specific diagnostic on escalation, negotiation, and resolution behaviour.',
+    rationale: 'Conflict patterns are visible enough to justify a narrower diagnostic on escalation, negotiation, and resolution behaviour.',
   },
 ]
 
@@ -143,8 +143,8 @@ function buildNextAction(
       kind: 'resume_in_progress',
       label: 'Next action',
       title: `Resume ${resumableItem.title}`,
-      rationale: 'Another diagnostic is already in progress. Resume the active run first so the current result can feed a complete follow-on read instead of fragmenting the sequence.',
-      cta: { label: 'Resume Assessment', href: resumableItem.assessmentHref, action: 'resume' },
+      rationale: 'Another diagnostic is already live. Resume it first to keep the follow-on sequence intact.',
+      cta: { label: 'Resume diagnostic', href: resumableItem.assessmentHref, action: 'resume' },
       metadata: buildActionMetadata(resumableItem),
     }
   }
@@ -157,7 +157,7 @@ function buildNextAction(
         label: 'Next action',
         title: `${followOnCandidate.rule.titlePrefix} with ${followOnCandidate.item.title}`,
         rationale: followOnCandidate.rule.rationale,
-        cta: { label: 'Start Assessment', href: followOnCandidate.item.assessmentHref, action: 'launch' },
+        cta: { label: 'Start diagnostic', href: followOnCandidate.item.assessmentHref, action: 'launch' },
         metadata: [...buildActionMetadata(followOnCandidate.item), followOnCandidate.rule.focusLabel],
       }
     }
@@ -168,8 +168,8 @@ function buildNextAction(
         kind: 'launch_team_follow_up',
         label: 'Next action',
         title: `Extend this baseline into ${teamCandidate.title}`,
-        rationale: 'The individual baseline is complete, so the strongest live follow-on is to expand from personal signal context into a shared team operating read.',
-        cta: { label: 'Launch Assessment', href: teamCandidate.assessmentHref, action: 'launch' },
+        rationale: 'The baseline is established, so the strongest live follow-on is to extend it into a team operating read.',
+        cta: { label: 'Open team diagnostic', href: teamCandidate.assessmentHref, action: 'launch' },
         metadata: buildActionMetadata(teamCandidate),
       }
     }
@@ -182,7 +182,7 @@ function buildNextAction(
       label: 'Next action',
       title: `Start ${genericLaunch.title}`,
       rationale: 'A live follow-on diagnostic is available if you want to extend this result into the next layer of analysis.',
-      cta: { label: genericLaunch.category === 'team' ? 'Launch Assessment' : 'Start Assessment', href: genericLaunch.assessmentHref, action: 'launch' },
+      cta: { label: genericLaunch.category === 'team' ? 'Open team diagnostic' : 'Start diagnostic', href: genericLaunch.assessmentHref, action: 'launch' },
       metadata: buildActionMetadata(genericLaunch),
     }
   }
@@ -191,7 +191,7 @@ function buildNextAction(
     kind: 'none',
     label: 'Next action',
     title: 'No further live follow-on is available right now',
-    rationale: 'Use the detailed result sections below as the current reference point. Additional diagnostics can be sequenced once another launchable instrument becomes available.',
+    rationale: 'Use the detailed result sections below as the current working reference. Additional diagnostics can be sequenced once another live instrument is available.',
     metadata: [],
   }
 }
@@ -205,26 +205,26 @@ export function deriveIndividualResultsIntelligence(
   const action = buildNextAction(data, inventory, currentItem)
   const safeSummary =
     seed.assessmentSummary?.trim() ??
-    'A completed result is now available as the current operating reference point for this individual.'
+    'A completed result is now available as the current operating reference for this individual.'
   const currentTitle = currentItem?.title ?? seed.assessmentTitle
   const isBaselineResult = currentItem?.id === BASELINE_ASSESSMENT_ID || seed.assessmentTitle === 'Sonartra Signals'
 
-  const summaryHeadline = isBaselineResult ? 'Baseline profile completed and ready to use' : `${currentTitle} completed and ready for review`
+  const summaryHeadline = isBaselineResult ? 'Baseline profile ready' : `${currentTitle} ready for review`
 
   const priorityDetail =
     action.kind === 'resume_in_progress'
-      ? 'An active follow-on assessment already exists, so preserving continuity outranks opening a new path from this result.'
+      ? 'An active follow-on diagnostic already exists, so continuity matters more than opening a new path.'
       : action.kind === 'launch_team_follow_up'
-        ? 'The current result is strong enough to act as an individual reference point for broader team-level analysis.'
+        ? 'This result is strong enough to anchor a broader team-level read.'
         : action.kind === 'launch_individual_follow_up'
-          ? 'The current result exposes a clear area where a narrower diagnostic can add depth without reopening the full baseline.'
+          ? 'This result points to a clear area where a narrower diagnostic can add depth without reopening the baseline.'
           : 'The result itself is the primary working asset for now.'
 
   const unlocksDetail =
     isBaselineResult
-      ? 'This baseline can now be used to sequence deeper individual diagnostics or frame later team-level analysis from an established reference profile.'
+      ? 'This baseline can now sequence deeper individual diagnostics or frame later team-level analysis from an established reference profile.'
       : seed.domainsAvailable > 0
-        ? 'This completed result adds another interpreted reference point that can be used in later comparison, retake, or team review flows.'
+        ? 'This completed result adds another reference point for later comparison, retake, or team review flows.'
         : undefined
 
   const metadata = [`Completed ${seed.completedLabel}`, `${seed.domainsAvailable} interpreted domains`]
