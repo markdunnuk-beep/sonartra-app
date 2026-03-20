@@ -121,7 +121,17 @@ export function MetaGrid({ items, columns = 4 }: { items: Array<{ label: string;
   )
 }
 
-export function FilterBar({ searchPlaceholder, segments, trailing }: { searchPlaceholder: string; segments: string[]; trailing?: ReactNode }) {
+export function FilterBar({
+  searchPlaceholder,
+  segments,
+  groups,
+  trailing,
+}: {
+  searchPlaceholder: string
+  segments?: string[]
+  groups?: Array<{ label: string; options: string[] }>
+  trailing?: ReactNode
+}) {
   return (
     <div className="rounded-[1.25rem] border border-white/[0.08] bg-bg/55 p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -130,23 +140,46 @@ export function FilterBar({ searchPlaceholder, segments, trailing }: { searchPla
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-textSecondary" />
             <Input placeholder={searchPlaceholder} className="pl-10" />
           </div>
-          <div className="flex flex-wrap gap-2">
-            {segments.map((segment, index) => (
-              <span
-                key={segment}
-                className={clsx(
-                  'inline-flex items-center rounded-xl border px-3.5 py-2 text-xs uppercase tracking-[0.14em]',
-                  index === 0 ? 'border-accent/30 bg-accent/10 text-accent' : 'border-white/[0.08] bg-panel/60 text-textSecondary',
-                )}
-              >
-                {segment}
+          {groups?.length ? (
+            <div className="grid flex-1 gap-2 xl:grid-cols-4">
+              {groups.map((group) => (
+                <div key={group.label} className="rounded-2xl border border-white/[0.08] bg-panel/50 px-3 py-2.5">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-textSecondary">{group.label}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {group.options.map((option, index) => (
+                      <span
+                        key={`${group.label}-${option}`}
+                        className={clsx(
+                          'inline-flex items-center rounded-lg border px-2.5 py-1.5 text-[10px] uppercase tracking-[0.14em]',
+                          index === 0 ? 'border-accent/30 bg-accent/10 text-accent' : 'border-white/[0.08] bg-bg/60 text-textSecondary',
+                        )}
+                      >
+                        {option}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : segments?.length ? (
+            <div className="flex flex-wrap gap-2">
+              {segments.map((segment, index) => (
+                <span
+                  key={segment}
+                  className={clsx(
+                    'inline-flex items-center rounded-xl border px-3.5 py-2 text-xs uppercase tracking-[0.14em]',
+                    index === 0 ? 'border-accent/30 bg-accent/10 text-accent' : 'border-white/[0.08] bg-panel/60 text-textSecondary',
+                  )}
+                >
+                  {segment}
+                </span>
+              ))}
+              <span className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-panel/60 px-3.5 py-2 text-xs uppercase tracking-[0.14em] text-textSecondary">
+                <Filter className="h-3.5 w-3.5" />
+                Filters
               </span>
-            ))}
-            <span className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-panel/60 px-3.5 py-2 text-xs uppercase tracking-[0.14em] text-textSecondary">
-              <Filter className="h-3.5 w-3.5" />
-              Filters
-            </span>
-          </div>
+            </div>
+          ) : null}
         </div>
         {trailing ? <div className="flex flex-wrap items-center gap-2">{trailing}</div> : null}
       </div>

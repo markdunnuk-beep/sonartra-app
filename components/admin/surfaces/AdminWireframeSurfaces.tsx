@@ -27,6 +27,7 @@ import { AssessmentVersionStatus, PublishStatus } from '@/lib/admin/domain/asses
 import {
   findAssessmentBySlug,
   findAssessmentVersion,
+  formatAdminRelativeTime,
   findOrganisationBySlug,
   findUserById,
   formatAdminTimestamp,
@@ -36,7 +37,11 @@ import {
   getDashboardPrimaryRelease,
   getKindLabel,
   getOrganisationAuditEvents,
+  getOrganisationHealthSignals,
+  getOrganisationMembershipSummary,
   getOrganisationSummary,
+  getOrganisationUtilisationBand,
+  getOrganisationVersionExposure,
   getReleaseBlockers,
   getUserSummary,
   getValidationIssues,
@@ -107,6 +112,20 @@ function WorkflowSummaryCards() {
   )
 }
 
+function HealthSignalBadges({ labels }: { labels: Array<{ label: string; tone: 'slate' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet' }> }) {
+  if (!labels.length) {
+    return <span className="text-xs text-textSecondary">—</span>
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {labels.map((signal) => (
+        <Badge key={`${signal.label}-${signal.tone}`} label={signal.label} tone={signal.tone} />
+      ))}
+    </div>
+  )
+}
+
 export function AdminDashboardWireframePage() {
   const releaseFocus = getDashboardPrimaryRelease()
 
@@ -144,9 +163,14 @@ export function AdminDashboardWireframePage() {
 }
 
 export function AdminOrganisationsWireframePage() {
+  const tenantSignals = organisations.flatMap((organisation) => getOrganisationHealthSignals(organisation))
+  const dormantTenants = organisations.filter((organisation) => getOrganisationHealthSignals(organisation).some((signal) => signal.label === 'Dormant'))
+  const lowUtilisationTenants = organisations.filter((organisation) => getOrganisationUtilisationBand(organisation) === 'low')
   const rows = organisations.map((organisation) => {
     const summary = getOrganisationSummary(organisation)
+    const healthSignals = getOrganisationHealthSignals(organisation)
     const enabledAssessmentLabels = summary.enabledProducts.map((product) => product.label).join(' · ')
+    const utilisationBand = getOrganisationUtilisationBand(organisation)
 
     return [
       <div key={`${organisation.id}-entity`}>
@@ -162,13 +186,32 @@ export function AdminOrganisationsWireframePage() {
           <Badge label={getStatusLabel(organisation.plan)} tone="slate" />
         </div>
       </div>,
-      <div key={`${organisation.id}-seats`}>
+      <div key={`${organisation.id}-seats`} className="space-y-1.5">
         <p className="text-sm font-medium text-textPrimary">{organisation.seatSummary.assigned}/{organisation.seatSummary.purchased}</p>
-        <p className="text-xs text-textSecondary">{summary.seatUtilisation}% utilised · {organisation.seatSummary.invited} invited</p>
+        <div className="flex items-center gap-2">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+            <div
+              className={utilisationBand === 'high' ? 'h-full rounded-full bg-emerald-300' : utilisationBand === 'medium' ? 'h-full rounded-full bg-sky-300' : 'h-full rounded-full bg-amber-300'}
+              style={{ width: `${Math.min(summary.seatUtilisation, 100)}%` }}
+            />
+          </div>
+          <span className="text-xs text-textSecondary">{summary.seatUtilisation}%</span>
+        </div>
+      </div>,
+      <div key={`${organisation.id}-utilisation`}>
+        <Badge
+          label={utilisationBand}
+          tone={utilisationBand === 'high' ? 'emerald' : utilisationBand === 'medium' ? 'sky' : 'amber'}
+        />
+        <p className="mt-2 text-xs text-textSecondary">{organisation.seatSummary.available} open · {organisation.seatSummary.invited} invited</p>
       </div>,
       <div key={`${organisation.id}-assessments`} className="text-sm text-textSecondary">{enabledAssessmentLabels || 'No enabled products'}</div>,
       <div key={`${organisation.id}-activity`}>
-        <p className="text-sm font-medium text-textPrimary">{formatAdminTimestamp(organisation.lastActivityAt)}</p>
+        <p className="text-sm font-medium text-textPrimary">{formatAdminRelativeTime(organisation.lastActivityAt)}</p>
+        <p className="text-xs text-textSecondary">{formatAdminTimestamp(organisation.lastActivityAt)}</p>
+      </div>,
+      <div key={`${organisation.id}-signals`} className="space-y-2">
+        <HealthSignalBadges labels={healthSignals} />
         <p className="text-xs text-textSecondary">Primary contact {summary.contact?.profile.fullName ?? 'Unassigned'}</p>
       </div>,
     ]
@@ -178,51 +221,33 @@ export function AdminOrganisationsWireframePage() {
     <div className="space-y-6 lg:space-y-8">
       <AdminPageHeader
         eyebrow="Organisations"
-        title="Customer tenancy operations"
-        description="Searchable operational registry for tenant posture, seat capacity, workspace state, and enabled behavioural intelligence products."
+        title="Tenant registry"
+        description="Operational registry for tenant posture, capacity, enablement, activity, and intervention signals."
         actions={<Button variant="secondary">New tenant brief</Button>}
       />
 
       <div className="grid gap-4 xl:grid-cols-4">
-        <MetricCard label="Managed tenants" value={String(organisations.length).padStart(2, '0')} detail="Tracked workspaces across active, implementation, and suspended states." />
-        <MetricCard label="Seat utilisation" value={`${Math.round(organisations.reduce((total, organisation) => total + getSeatUtilisationPercent(organisation), 0) / organisations.length)}%`} detail="Average assigned-seat utilisation across the tenant estate." />
-        <MetricCard label="Implementation queue" value={String(organisations.filter((organisation) => organisation.status === 'implementation').length).padStart(2, '0')} detail="Tenants currently in rollout, provisioning, or enablement work." />
-        <MetricCard label="Dormant risk" value={String(adminDashboardModel.tenantHealth.filter((tenant) => tenant.statusFlags.includes('Dormant tenant activity')).length).padStart(2, '0')} detail="Tenants requiring intervention due to low recency or suspended posture." />
+        <MetricCard label="Managed tenants" value={String(organisations.length).padStart(2, '0')} detail="Tracked workspaces across active, implementation, and suspended operating states." />
+        <MetricCard label="Average utilisation" value={`${Math.round(organisations.reduce((total, organisation) => total + getSeatUtilisationPercent(organisation), 0) / organisations.length)}%`} detail="Average assigned-seat utilisation across the tenant estate." />
+        <MetricCard label="Implementation" value={String(organisations.filter((organisation) => organisation.status === 'implementation').length).padStart(2, '0')} detail="Tenants in provisioning, rollout, or controlled enablement." />
+        <MetricCard label="Attention signals" value={String(tenantSignals.length).padStart(2, '0')} detail={`${dormantTenants.length} dormant · ${lowUtilisationTenants.length} low-utilisation tenants.`} />
       </div>
 
-      <SurfaceSection title="Tenant registry" eyebrow="List pattern" description="Entity-first list design with persistent search/filter controls, seat posture visibility, and status treatment aligned with the rest of the admin system.">
-        <FilterBar searchPlaceholder="Search organisation, region, contact, or product…" segments={["All tenants", "Active", "Implementation", "Attention required"]} trailing={<Button href="/admin/audit" variant="ghost">View tenant audit</Button>} />
+      <SurfaceSection title="Tenant registry" eyebrow="Operations view" description="Dense tenant list for comparison across status, plan, utilisation, enablement, activity, and intervention posture.">
+        <FilterBar
+          searchPlaceholder="Search organisation, region, contact, or assessment…"
+          groups={[
+            { label: 'Status', options: ['All', 'Active', 'Implementation', 'Suspended'] },
+            { label: 'Plan', options: ['All', 'Enterprise', 'Growth', 'Essential'] },
+            { label: 'Utilisation', options: ['All', 'Low', 'Medium', 'High'] },
+            { label: 'Activity', options: ['All', 'Active', 'Dormant'] },
+          ]}
+          trailing={<Button href="/admin/audit" variant="ghost">View tenant audit</Button>}
+        />
         <div className="mt-4">
-          <Table columns={["Organisation", "Status", "Seats", "Enabled products", "Recent activity"]} rows={rows} />
+          <Table columns={["Organisation", "Status", "Seats", "Utilisation", "Enabled assessments", "Last activity", "Health / flags"]} rows={rows} />
         </div>
       </SurfaceSection>
-
-      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <SurfaceSection title="Action-needed queue" eyebrow="Operational triage" description="Queue treatment for tenant states that require operator follow-up rather than passive observation.">
-          <div className="grid gap-3 md:grid-cols-2">
-            {adminDashboardModel.tenantHealth.slice(0, 4).map((tenant) => (
-              <QueueItem
-                key={tenant.organisationId}
-                title={tenant.organisationName}
-                detail={`${tenant.statusFlags.join(' · ') || 'No active flags'} · ${tenant.seatUsage} seats assigned.`}
-                tone={tenant.status === 'Suspended' ? 'rose' : tenant.status === 'Implementation' ? 'amber' : 'emerald'}
-                href={`/admin/organisations/${organisations.find((item) => item.id === tenant.organisationId)?.slug ?? ''}`}
-                meta={tenant.recentActivityLabel}
-                cta="Open tenant detail"
-              />
-            ))}
-          </div>
-        </SurfaceSection>
-
-        <MetaPanel
-          title="Registry standards"
-          items={[
-            { label: 'Header structure', value: 'Page title + operational framing + concise CTA cluster.' },
-            { label: 'Filter bar', value: 'Search left, status segments center, utility actions right.' },
-            { label: 'List cells', value: 'Primary line for entity identity, secondary line for role, region, or contact context.' },
-          ]}
-        />
-      </section>
     </div>
   )
 }
@@ -235,14 +260,40 @@ export function AdminOrganisationDetailWireframePage({ slug }: { slug: string })
   }
 
   const summary = getOrganisationSummary(organisation)
+  const membershipSummary = getOrganisationMembershipSummary(organisation)
+  const healthSignals = getOrganisationHealthSignals(organisation)
+  const versionExposure = getOrganisationVersionExposure(organisation)
   const tenantEvents = getOrganisationAuditEvents(organisation.id)
+  const membershipRows = summary.users.map((user) => {
+    const membership = summary.memberships.find((item) => item.userId === user.id)
+
+    return [
+      <div key={`${user.id}-identity`}>
+        <Link href={`/admin/users/${user.id}`} className="text-sm font-semibold text-textPrimary hover:text-accent">
+          {user.profile.fullName}
+        </Link>
+        <p className="mt-1 text-xs text-textSecondary">{user.email}</p>
+      </div>,
+      <div key={`${user.id}-role`} className="space-y-2">
+        {membership ? <StatusBadge status={membership.role} /> : <span className="text-xs text-textSecondary">No role</span>}
+        <StatusBadge status={user.status} />
+      </div>,
+      <div key={`${user.id}-summary`} className="text-sm text-textSecondary">
+        {membership?.isBillingContact ? 'Billing' : '—'} · {membership?.isAssessmentContact ? 'Assessment' : '—'}
+      </div>,
+      <div key={`${user.id}-activity`}>
+        <p className="text-sm font-medium text-textPrimary">{formatAdminRelativeTime(user.recentActivity.lastActiveAt)}</p>
+        <p className="text-xs text-textSecondary">{formatAdminTimestamp(user.recentActivity.lastActiveAt)}</p>
+      </div>,
+    ]
+  })
 
   return (
     <div className="space-y-6 lg:space-y-8">
       <AdminPageHeader
         eyebrow="Organisation detail"
         title={organisation.name}
-        description="Tenant overview with seat posture, memberships, enabled assessments, recent activity, and operational context in a single controlled frame."
+        description="Operational tenant control view for capacity, enablement, membership posture, activity, and intervention signals."
         actions={
           <>
             <StatusBadge status={organisation.status} />
@@ -258,62 +309,88 @@ export function AdminOrganisationDetailWireframePage({ slug }: { slug: string })
             <Badge label={getStatusLabel(organisation.plan)} tone="slate" />
             <Badge label={organisation.region} tone="slate" />
             <Badge label={organisation.sector} tone="slate" />
+            <HealthSignalBadges labels={healthSignals} />
           </div>
-          <p className="mt-4 max-w-3xl text-sm leading-6 text-textSecondary">{organisation.name} is modelled as a managed customer tenancy, not a generic account record. Workspace posture, seat usage, enablement, and internal intervention signals stay visible together.</p>
           <div className="mt-5">
             <MetaGrid
               items={[
-                { label: 'Seat usage', value: `${organisation.seatSummary.assigned}/${organisation.seatSummary.purchased}`, hint: `${summary.seatUtilisation}% utilisation · ${organisation.seatSummary.available} seats available` },
-                { label: 'Invited seats', value: `${organisation.seatSummary.invited}`, hint: 'Pending user activation' },
-                { label: 'Workspace provisioned', value: organisation.workspaceProvisionedAt ? 'Provisioned' : 'Pending', hint: formatAdminTimestamp(organisation.workspaceProvisionedAt) },
-                { label: 'Contract renewal', value: formatShortAdminDate(organisation.contractRenewalDate), hint: 'Commercial renewal checkpoint' },
+                { label: 'Status', value: getStatusLabel(organisation.status), hint: `Last activity ${formatAdminRelativeTime(organisation.lastActivityAt)}` },
+                { label: 'Plan', value: getStatusLabel(organisation.plan), hint: `${organisation.region} · ${organisation.sector}` },
+                { label: 'Workspace', value: organisation.workspaceProvisionedAt ? 'Provisioned' : 'Pending', hint: formatAdminTimestamp(organisation.workspaceProvisionedAt) },
+                { label: 'Renewal', value: formatShortAdminDate(organisation.contractRenewalDate), hint: 'Commercial checkpoint' },
               ]}
             />
           </div>
         </Card>
 
         <MetaPanel
-          title="Operational status"
+          title="Operator context"
           items={[
             { label: 'Primary contact', value: summary.contact ? `${summary.contact.profile.fullName} · ${summary.contact.email}` : 'Unassigned' },
-            { label: 'Enabled assessments', value: organisation.enabledAssessmentIds.length ? organisation.enabledAssessmentIds.map((assessmentId) => assessments.find((item) => item.id === assessmentId)?.title ?? assessmentId).join(' · ') : 'No active enablement' },
-            { label: 'Last activity', value: formatAdminTimestamp(organisation.lastActivityAt) },
+            { label: 'Enabled assessments', value: summary.enabledProducts.length ? summary.enabledProducts.map((product) => product.label).join(' · ') : 'No active enablement' },
+            { label: 'Last activity', value: `${formatAdminRelativeTime(organisation.lastActivityAt)} · ${formatAdminTimestamp(organisation.lastActivityAt)}` },
           ]}
           footer={<Button variant="secondary">Prepare intervention summary</Button>}
         />
       </div>
 
+      <section className="grid gap-4 xl:grid-cols-3">
+        <MetaPanel
+          title="Seat & usage"
+          items={[
+            { label: 'Assigned / purchased', value: `${organisation.seatSummary.assigned}/${organisation.seatSummary.purchased}` },
+            { label: 'Utilisation', value: `${summary.seatUtilisation}% · ${getStatusLabel(getOrganisationUtilisationBand(organisation))}` },
+            { label: 'Seat posture', value: `${organisation.seatSummary.available} available · ${organisation.seatSummary.invited} invited` },
+          ]}
+        />
+        <MetaPanel
+          title="Enablement"
+          items={[
+            { label: 'Products', value: summary.enabledProducts.length ? summary.enabledProducts.map((product) => product.label).join(' · ') : 'No active products' },
+            { label: 'Assessments', value: organisation.enabledAssessmentIds.length ? `${organisation.enabledAssessmentIds.length} enabled` : '0 enabled' },
+            { label: 'Version exposure', value: versionExposure.length ? versionExposure.join(' · ') : 'No live exposure' },
+          ]}
+        />
+        <MetaPanel
+          title="Health signals"
+          items={[
+            { label: 'Intervention flags', value: healthSignals.length ? <HealthSignalBadges labels={healthSignals} /> : 'No active interventions' },
+            { label: 'Dormancy posture', value: formatAdminRelativeTime(organisation.lastActivityAt) },
+            { label: 'Seat risk', value: getOrganisationUtilisationBand(organisation) === 'low' ? 'Review adoption and seat fit' : 'Within expected range' },
+          ]}
+        />
+      </section>
+
       <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <SurfaceSection title="Membership + role context" eyebrow="Access summary" description="Customer memberships remain tenant-scoped and clearly separate from internal Sonartra admin controls.">
-          <div className="space-y-3">
-            {summary.users.map((user) => {
-              const membership = summary.memberships.find((item) => item.userId === user.id)
-              return (
-                <div key={user.id} className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <Link href={`/admin/users/${user.id}`} className="text-sm font-semibold text-textPrimary hover:text-accent">
-                        {user.profile.fullName}
-                      </Link>
-                      <p className="mt-1 text-sm text-textSecondary">{user.email} · {user.profile.title ?? 'No title set'}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <StatusBadge status={user.status} />
-                      {membership ? <StatusBadge status={membership.role} /> : null}
-                    </div>
-                  </div>
-                  <div className="mt-3 grid gap-3 text-sm text-textSecondary md:grid-cols-3">
-                    <p>Billing contact: {membership?.isBillingContact ? 'Yes' : 'No'}</p>
-                    <p>Assessment contact: {membership?.isAssessmentContact ? 'Yes' : 'No'}</p>
-                    <p>Last active: {formatAdminTimestamp(user.recentActivity.lastActiveAt)}</p>
-                  </div>
-                </div>
-              )
-            })}
+        <SurfaceSection title="Membership summary" eyebrow="Access summary" description="Tenant users, roles, and access posture in one compact surface.">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-3.5">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">Total users</p>
+              <p className="mt-2 text-2xl font-semibold text-textPrimary">{membershipSummary.totalUsers}</p>
+            </div>
+            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-3.5">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">Admins</p>
+              <p className="mt-2 text-2xl font-semibold text-textPrimary">{membershipSummary.adminUsers}</p>
+            </div>
+            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-3.5">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">Members</p>
+              <p className="mt-2 text-2xl font-semibold text-textPrimary">{membershipSummary.memberUsers}</p>
+            </div>
+            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-3.5">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">Invited</p>
+              <p className="mt-2 text-2xl font-semibold text-textPrimary">{membershipSummary.invitedUsers}</p>
+            </div>
+            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-3.5">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">Inactive</p>
+              <p className="mt-2 text-2xl font-semibold text-textPrimary">{membershipSummary.inactiveUsers}</p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <Table columns={["User", "Role / status", "Contacts", "Last active"]} rows={membershipRows} />
           </div>
         </SurfaceSection>
 
-        <SurfaceSection title="Recent activity + controls" eyebrow="Timeline" description="Calm operational timeline language for changes affecting tenant posture, access, or release enablement.">
+        <SurfaceSection title="Activity / audit summary" eyebrow="Timeline" description="Recent tenant events for access, status, and enablement monitoring.">
           <div className="space-y-4">
             {tenantEvents.length ? tenantEvents.map((event) => <TimelineItem key={event.id} event={event} />) : <EmptyState title="No tenant activity yet" detail="Audit events will appear here when this organisation is touched by access, configuration, or release operations." />}
           </div>
