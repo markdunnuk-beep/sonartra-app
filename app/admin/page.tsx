@@ -3,7 +3,21 @@ import Link from 'next/link'
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
 import { Card } from '@/components/ui/Card'
 import { StatCard } from '@/components/ui/StatCard'
-import { adminDashboardMetrics, adminNavigationItems } from '@/lib/admin/navigation'
+import {
+  adminDashboardMetrics,
+  adminNavigationItems,
+  recentAuditSignalCount,
+} from '@/lib/admin/navigation'
+import {
+  assessmentVersions,
+  assessments,
+  auditLogEvents,
+  formatSeatUsageSummary,
+  getCurrentLiveAssessmentVersion,
+  getStatusLabel,
+  organisations,
+  adminUsers,
+} from '@/lib/admin/domain'
 
 const operatingLanes = [
   {
@@ -26,28 +40,50 @@ const operatingLanes = [
 const controlQueue = [
   {
     title: 'Review assessment release readiness',
-    description: 'Inspect staged versions, validation status, and publish blockers before promoting changes.',
+    description: `${assessmentVersions.filter((version) => version.status !== 'live' && version.status !== 'archived').length} version changes need staged review or publish follow-through.`,
     href: '/admin/releases',
     label: 'Open releases',
     icon: Rocket,
   },
   {
     title: 'Check audit evidence trail',
-    description: 'Verify privileged actions and release history are traceable before expanding operator access.',
+    description: `${recentAuditSignalCount} recent platform events are available for audit review and evidence checks.`,
     href: '/admin/audit',
     label: 'Open audit',
     icon: FileSearch,
   },
   {
     title: 'Inspect tenant activation posture',
-    description: 'Review organisations with enabled assessments and customer-admin dependencies before rollout activity.',
+    description: `${organisations.filter((organisation) => organisation.status !== 'active').length} organisations need implementation, suspension, or rollout attention.`,
     href: '/admin/organisations',
     label: 'Open organisations',
     icon: Activity,
   },
 ]
 
+const dashboardSnapshots = [
+  {
+    label: 'Live assessment versions',
+    value: assessments
+      .map((assessment) => getCurrentLiveAssessmentVersion(assessment, assessmentVersions))
+      .filter(Boolean).length,
+    detail: 'Stable release identities preserved separately from draft lineage.',
+  },
+  {
+    label: 'Customer admins and members',
+    value: adminUsers.filter((user) => user.kind === 'organisation_user').length,
+    detail: 'Customer-side users remain separated from Sonartra operators.',
+  },
+  {
+    label: 'Audit trail coverage',
+    value: auditLogEvents.length,
+    detail: 'Recent evidence events linked to organisations, access, and assessment releases.',
+  },
+]
+
 export default function AdminDashboardPage() {
+  const highestSeatUsage = [...organisations].sort((left, right) => right.seatSummary.assigned - left.seatSummary.assigned)[0]
+
   return (
     <div className="space-y-6 lg:space-y-8">
       <AdminPageHeader
@@ -111,6 +147,41 @@ export default function AdminDashboardPage() {
                 <p className="mt-2 text-sm leading-6 text-textSecondary">{description}</p>
               </div>
             ))}
+          </div>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <Card className="px-6 py-5 sm:px-7 sm:py-6">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">Domain snapshots</p>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-textSecondary">
+                The scaffold now reads from typed admin entities so later modules can evolve against stable platform structures rather than page-only assumptions.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            {dashboardSnapshots.map((snapshot) => (
+              <div key={snapshot.label} className="rounded-2xl border border-border/75 bg-bg/45 p-4">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">{snapshot.label}</p>
+                <p className="mt-3 text-2xl font-semibold tracking-tight text-textPrimary">{snapshot.value}</p>
+                <p className="mt-2 text-sm leading-6 text-textSecondary">{snapshot.detail}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="px-6 py-5 sm:px-7 sm:py-6">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">Operational watchpoint</p>
+          <h2 className="mt-3 text-lg font-semibold tracking-tight text-textPrimary">{highestSeatUsage.name}</h2>
+          <p className="mt-2 text-sm leading-6 text-textSecondary">
+            Highest current seat footprint with {formatSeatUsageSummary(highestSeatUsage)} and {highestSeatUsage.enabledAssessmentIds.length} enabled assessments.
+          </p>
+          <div className="mt-4 rounded-2xl border border-border/75 bg-bg/45 p-4 text-sm leading-6 text-textSecondary">
+            <p>Status: {getStatusLabel(highestSeatUsage.status)}</p>
+            <p>Plan: {getStatusLabel(highestSeatUsage.plan)}</p>
+            <p>Last activity: {highestSeatUsage.lastActivityAt ?? 'No recent activity captured'}</p>
           </div>
         </Card>
       </section>

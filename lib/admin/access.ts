@@ -1,7 +1,11 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
+import { ProvisionalAdminRole } from '@/lib/admin/domain'
 
 export type AdminAccessSource = 'email_allowlist' | 'none'
-export type ProvisionalAdminRole = 'internal_admin' | null
+export type ProvisionalAccessContext = {
+  role: ProvisionalAdminRole
+  rationale: 'bootstrap_allowlist'
+}
 
 export interface AdminAccessContext {
   isAuthenticated: boolean
@@ -9,7 +13,8 @@ export interface AdminAccessContext {
   email: string | null
   allowlist: string[]
   accessSource: AdminAccessSource
-  provisionalRole: ProvisionalAdminRole
+  provisionalRole: ProvisionalAdminRole | null
+  provisionalAccess: ProvisionalAccessContext | null
 }
 
 export function getConfiguredAdminEmails(env: Record<string, string | undefined> = process.env): string[] {
@@ -39,6 +44,7 @@ export function buildAdminAccessContext({
       allowlist,
       accessSource: 'none',
       provisionalRole: null,
+      provisionalAccess: null,
     }
   }
 
@@ -48,7 +54,13 @@ export function buildAdminAccessContext({
     email,
     allowlist,
     accessSource: matchedAllowlist ? 'email_allowlist' : 'none',
-    provisionalRole: matchedAllowlist ? 'internal_admin' : null,
+    provisionalRole: matchedAllowlist ? ProvisionalAdminRole.InternalAdmin : null,
+    provisionalAccess: matchedAllowlist
+      ? {
+          role: ProvisionalAdminRole.InternalAdmin,
+          rationale: 'bootstrap_allowlist',
+        }
+      : null,
   }
 }
 

@@ -25,6 +25,10 @@ test('buildAdminAccessContext returns provisional internal admin context when th
     allowlist: ['ops@sonartra.com'],
     accessSource: 'email_allowlist',
     provisionalRole: 'internal_admin',
+    provisionalAccess: {
+      role: 'internal_admin',
+      rationale: 'bootstrap_allowlist',
+    },
   })
 })
 
@@ -39,4 +43,5 @@ test('buildAdminAccessContext keeps authenticated but unmatched users outside th
   assert.equal(access.isAllowed, false)
   assert.equal(access.accessSource, 'none')
   assert.equal(access.provisionalRole, null)
+  assert.equal(access.provisionalAccess, null)
 })

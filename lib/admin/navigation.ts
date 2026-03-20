@@ -1,21 +1,20 @@
 import { Activity, Building2, ClipboardList, FileSearch, LayoutDashboard, Rocket, Users2 } from 'lucide-react'
-import { AdminAccessContext, ProvisionalAdminRole } from '@/lib/admin/access'
+import { AdminAccessContext } from '@/lib/admin/access'
+import {
+  AdminCapability,
+  AdminModuleKey,
+  InternalAdminRole,
+  ProvisionalAdminRole,
+  adminModuleCapabilityMap,
+  adminRoleDefinitions,
+  assessmentVersions,
+  assessments,
+  auditLogEvents,
+  organisations,
+  adminUsers,
+} from '@/lib/admin/domain'
 
-export type AdminCapability =
-  | 'dashboard:view'
-  | 'organisations:view'
-  | 'users:view'
-  | 'assessments:view'
-  | 'releases:view'
-  | 'audit:view'
-
-export type AdminRouteKey =
-  | 'dashboard'
-  | 'organisations'
-  | 'users'
-  | 'assessments'
-  | 'releases'
-  | 'audit'
+export type AdminRouteKey = `${AdminModuleKey}`
 
 export interface AdminNavigationItem {
   key: AdminRouteKey
@@ -24,69 +23,86 @@ export interface AdminNavigationItem {
   icon: typeof LayoutDashboard
   description: string
   startsWith?: string
-  requiredRoles: ProvisionalAdminRole[]
+  requiredRoles: InternalAdminRole[]
+  compatibleProvisionalRoles: ProvisionalAdminRole[]
   requiredCapabilities: AdminCapability[]
 }
 
 export const adminNavigationItems: AdminNavigationItem[] = [
   {
-    key: 'dashboard',
+    key: AdminModuleKey.Dashboard,
     label: 'Dashboard',
     href: '/admin',
     icon: LayoutDashboard,
     description: 'Control overview for tenant posture, release readiness, and audit signals.',
-    requiredRoles: ['internal_admin'],
-    requiredCapabilities: ['dashboard:view'],
+    requiredRoles: Object.values(InternalAdminRole),
+    compatibleProvisionalRoles: [ProvisionalAdminRole.InternalAdmin],
+    requiredCapabilities: [AdminCapability.DashboardView],
   },
   {
-    key: 'organisations',
+    key: AdminModuleKey.Organisations,
     label: 'Organisations',
     href: '/admin/organisations',
     icon: Building2,
     startsWith: '/admin/organisations',
     description: 'Manage customer tenants, seat posture, enabled assessments, and operating status.',
-    requiredRoles: ['internal_admin'],
-    requiredCapabilities: ['organisations:view'],
+    requiredRoles: [
+      InternalAdminRole.SuperAdmin,
+      InternalAdminRole.PlatformAdmin,
+      InternalAdminRole.CustomerSuccessAdmin,
+      InternalAdminRole.SupportAdmin,
+    ],
+    compatibleProvisionalRoles: [ProvisionalAdminRole.InternalAdmin],
+    requiredCapabilities: [AdminCapability.OrganisationsView],
   },
   {
-    key: 'users',
+    key: AdminModuleKey.Users,
     label: 'Users',
     href: '/admin/users',
     icon: Users2,
     startsWith: '/admin/users',
     description: 'Oversee internal admins, customer admins, memberships, and access state.',
-    requiredRoles: ['internal_admin'],
-    requiredCapabilities: ['users:view'],
+    requiredRoles: [
+      InternalAdminRole.SuperAdmin,
+      InternalAdminRole.PlatformAdmin,
+      InternalAdminRole.CustomerSuccessAdmin,
+      InternalAdminRole.SupportAdmin,
+    ],
+    compatibleProvisionalRoles: [ProvisionalAdminRole.InternalAdmin],
+    requiredCapabilities: [AdminCapability.UsersView],
   },
   {
-    key: 'assessments',
+    key: AdminModuleKey.Assessments,
     label: 'Assessments',
     href: '/admin/assessments',
     icon: ClipboardList,
     startsWith: '/admin/assessments',
     description: 'Control assessment registry, version validation, and publish state.',
-    requiredRoles: ['internal_admin'],
-    requiredCapabilities: ['assessments:view'],
+    requiredRoles: [InternalAdminRole.SuperAdmin, InternalAdminRole.PlatformAdmin, InternalAdminRole.AssessmentAdmin],
+    compatibleProvisionalRoles: [ProvisionalAdminRole.InternalAdmin],
+    requiredCapabilities: [AdminCapability.AssessmentsView],
   },
   {
-    key: 'releases',
+    key: AdminModuleKey.Releases,
     label: 'Releases',
     href: '/admin/releases',
     icon: Rocket,
     startsWith: '/admin/releases',
     description: 'Drive release readiness, publish decisions, and staged rollout control.',
-    requiredRoles: ['internal_admin'],
-    requiredCapabilities: ['releases:view'],
+    requiredRoles: [InternalAdminRole.SuperAdmin, InternalAdminRole.PlatformAdmin, InternalAdminRole.AssessmentAdmin],
+    compatibleProvisionalRoles: [ProvisionalAdminRole.InternalAdmin],
+    requiredCapabilities: [AdminCapability.ReleasesView],
   },
   {
-    key: 'audit',
+    key: AdminModuleKey.Audit,
     label: 'Audit',
     href: '/admin/audit',
     icon: FileSearch,
     startsWith: '/admin/audit',
     description: 'Review operational history, privileged actions, and evidence trails.',
-    requiredRoles: ['internal_admin'],
-    requiredCapabilities: ['audit:view'],
+    requiredRoles: Object.values(InternalAdminRole),
+    compatibleProvisionalRoles: [ProvisionalAdminRole.InternalAdmin],
+    requiredCapabilities: [AdminCapability.AuditView],
   },
 ]
 
@@ -96,7 +112,7 @@ export function getAdminNavigationItems(access: AdminAccessContext): AdminNaviga
       return false
     }
 
-    return item.requiredRoles.includes(access.provisionalRole)
+    return item.compatibleProvisionalRoles.includes(access.provisionalRole)
   })
 }
 
@@ -110,26 +126,34 @@ export interface AdminQuickMetric {
 export const adminDashboardMetrics: AdminQuickMetric[] = [
   {
     label: 'Customer tenants',
-    value: '24',
+    value: `${organisations.length}`.padStart(2, '0'),
     detail: 'Provisioned organisations currently attached to managed Sonartra workspaces.',
     icon: Building2,
   },
   {
     label: 'Privileged operators',
-    value: '08',
+    value: `${adminUsers.filter((user) => user.internalAdminRole !== null).length}`.padStart(2, '0'),
     detail: 'Internal Sonartra admins with authority to review release and audit controls.',
     icon: Users2,
   },
   {
     label: 'Assessment lines',
-    value: '05',
+    value: `${assessments.length}`.padStart(2, '0'),
     detail: 'Assessment families actively governed through versioned registry controls.',
     icon: ClipboardList,
   },
   {
     label: 'Release posture',
-    value: 'Stable',
-    detail: 'No blocked publish decisions or unresolved validation holds in the current cycle.',
+    value: assessmentVersions.some((version) => version.validationSummary.ruleErrors > 0) ? 'Attention' : 'Stable',
+    detail: 'Current posture across live and pending assessment version releases.',
     icon: Rocket,
   },
 ]
+
+export const adminCapabilityLabels = Object.fromEntries(
+  Object.entries(adminModuleCapabilityMap).map(([moduleKey, capability]) => [moduleKey, capability]),
+)
+
+export const internalAdminRoleSummaries = Object.values(adminRoleDefinitions)
+
+export const recentAuditSignalCount = auditLogEvents.length
