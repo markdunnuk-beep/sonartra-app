@@ -13,6 +13,7 @@ import {
   getActionState,
   getAssessmentFilterGroups,
   getAssessmentRepositoryInventory,
+  getAssessmentRepositoryRecommendation,
   getCollapsedAction,
   getExpandedActions,
   getPassiveState,
@@ -32,6 +33,16 @@ function renderRepository() {
   return renderToStaticMarkup(<AssessmentRepositoryPage inventory={inventory} />)
 }
 
+function createInventoryWithProgress(mutator: (progress: typeof snapshot.progress) => typeof snapshot.progress) {
+  const customSnapshot = {
+    definitions: snapshot.definitions,
+    availability: snapshot.availability,
+    progress: mutator(snapshot.progress.map((entry) => ({ ...entry }))),
+  }
+
+  return getAssessmentRepositoryInventory(context, customSnapshot)
+}
+
 test('assessment repository renders operational summary metrics, grouped filters, and both assessment sections', () => {
   const html = renderRepository()
 
@@ -48,6 +59,86 @@ test('assessment repository renders operational summary metrics, grouped filters
   assert.match(html, /Sonartra Signals/)
   assert.match(html, /Team Dynamics/)
   assert.doesNotMatch(html, /Advanced outputs<\/span>/)
+})
+
+test('repository renders a restrained top-level recommendation module above the repository sections', () => {
+  const html = renderRepository()
+
+  assert.match(html, /Recommended next action/)
+  assert.match(html, /Continue Burnout Risk/)
+  assert.match(html, /Resume Assessment/)
+  assert.ok(html.indexOf('Recommended next action') < html.indexOf('Individual Assessments'))
+})
+
+test('recommendation selector prioritises resuming the highest-priority in-progress assessment', () => {
+  const recommendation = getAssessmentRepositoryRecommendation(inventory)
+
+  assert.deepEqual(recommendation, {
+    kind: 'resume_in_progress',
+    eyebrow: 'Recommended next action',
+    title: 'Continue Burnout Risk',
+    rationale:
+      'You already have an active attempt in progress. Finishing the current diagnostic preserves continuity before opening another assessment track.',
+    cta: { label: 'Resume Assessment', href: '#', action: 'resume' },
+    metadata: ['Individual diagnostic', '42% complete', '8 min'],
+    itemId: 'burnout-risk',
+  })
+})
+
+test('recommendation selector prioritises reviewing baseline results when no active work is in progress', () => {
+  const noActiveAttemptInventory = createInventoryWithProgress((progress) => progress.map((entry) => (entry.assessmentId === 'burnout-risk' ? { ...entry, hasActiveAttempt: false, progressPercent: 0, startedAt: null, lastSavedAt: null } : entry)))
+  const recommendation = getAssessmentRepositoryRecommendation(noActiveAttemptInventory)
+
+  assert.deepEqual(recommendation, {
+    kind: 'review_results',
+    eyebrow: 'Recommended next action',
+    title: 'Review Sonartra Signals results',
+    rationale:
+      'The baseline diagnostic is complete and ready for interpretation. Reviewing those results first provides the clearest reference point for any follow-on assessment.',
+    cta: { label: 'View Results', href: '/results/individual', action: 'view_results' },
+    metadata: ['Individual diagnostic', '10 min', 'Complete'],
+    itemId: 'signals',
+  })
+})
+
+test('recommendation selector falls back to the best launchable next assessment when no active or review-first work exists', () => {
+  const launchInventory = createInventoryWithProgress((progress) =>
+    progress.filter((entry) => entry.assessmentId !== 'signals' && entry.assessmentId !== 'burnout-risk'),
+  )
+  const recommendation = getAssessmentRepositoryRecommendation(launchInventory)
+
+  assert.deepEqual(recommendation, {
+    kind: 'launch_baseline',
+    eyebrow: 'Recommended next action',
+    title: 'Start Sonartra Signals',
+    rationale:
+      'This is the baseline individual diagnostic for the repository. Completing it establishes the reference profile used to sequence deeper individual and team diagnostics.',
+    cta: { label: 'Start Assessment', href: '/assessment/workspace', action: 'launch' },
+    metadata: ['Individual diagnostic', '10 min', 'Not Started'],
+    itemId: 'signals',
+  })
+})
+
+test('recommendation selector does not promote release-pending assessments as the next primary action', () => {
+  const pendingOnlyInventory = inventory.filter((item) => item.status === 'coming_soon')
+
+  assert.equal(getAssessmentRepositoryRecommendation(pendingOnlyInventory), null)
+})
+
+test('recommendation CTA preserves canonical routing for Sonartra Signals launches', () => {
+  const launchInventory = createInventoryWithProgress((progress) =>
+    progress.filter((entry) => entry.assessmentId !== 'signals' && entry.assessmentId !== 'burnout-risk'),
+  )
+  const recommendation = getAssessmentRepositoryRecommendation(launchInventory)
+
+  assert.equal(recommendation?.cta.href, '/assessment/workspace')
+})
+
+test('recommendation selector stays safe when repository inventory is empty or partially unavailable', () => {
+  const noHrefInventory = inventory.map((item) => (item.id === 'signals' ? { ...item, assessmentHref: undefined, resultsHref: undefined } : item))
+
+  assert.equal(getAssessmentRepositoryRecommendation([]), null)
+  assert.equal(getAssessmentRepositoryRecommendation(noHrefInventory.filter((item) => item.id === 'signals')), null)
 })
 
 test('summary strip counts stay within one operational state model', () => {

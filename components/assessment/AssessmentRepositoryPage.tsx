@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react'
 
 import { AssessmentFilterRow } from './AssessmentFilterRow'
+import { AssessmentRecommendationCard } from './AssessmentRecommendationCard'
 import { AssessmentSection } from './AssessmentSection'
 import { AssessmentSummaryStrip } from './AssessmentSummaryStrip'
 import { RetakeAssessmentModal } from './RetakeAssessmentModal'
@@ -11,6 +12,7 @@ import {
   buildAssessmentSections,
   buildAssessmentSummaryMetrics,
   getAssessmentRepositoryInventory,
+  getAssessmentRepositoryRecommendation,
 } from '@/lib/assessment/assessment-repository-selectors'
 import type {
   AssessmentRepositoryFilterState,
@@ -32,6 +34,7 @@ export function AssessmentRepositoryPage({ inventory = getAssessmentRepositoryIn
   const [retakeTarget, setRetakeTarget] = useState<AssessmentRepositoryItem | null>(null)
 
   const metrics = useMemo(() => buildAssessmentSummaryMetrics(inventory), [inventory])
+  const recommendation = useMemo(() => getAssessmentRepositoryRecommendation(inventory), [inventory])
   const sections = useMemo(() => buildAssessmentSections(inventory, activeFilters), [inventory, activeFilters])
 
   const handleToggle = (sectionKey: AssessmentRepositorySectionModel['category'], itemId: string) => {
@@ -45,6 +48,7 @@ export function AssessmentRepositoryPage({ inventory = getAssessmentRepositoryIn
     <>
       <div className="space-y-8 lg:space-y-10">
         <AssessmentSummaryStrip metrics={metrics} />
+        {recommendation ? <AssessmentRecommendationCard recommendation={recommendation} /> : null}
         <AssessmentFilterRow activeFilters={activeFilters} onFilterChange={setActiveFilters} />
 
         <div className="space-y-10 lg:space-y-12">
