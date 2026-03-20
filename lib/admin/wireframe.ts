@@ -3,15 +3,19 @@ import {
   AssessmentVersion,
   AssessmentVersionStatus,
   AuditLogEvent,
+  InternalAdminRole,
   Organisation,
   OrganisationMembership,
+  OrganisationRole,
   PublishStatus,
   User,
   UserKind,
+  UserStatus,
   adminUsers,
   assessmentVersions,
   assessments,
   auditLogEvents,
+  getAdminRoleDefinition,
   getAssessmentVersionCounts,
   getCurrentLiveAssessmentVersion,
   getSeatUtilisationPercent,
@@ -45,6 +49,19 @@ export interface OrganisationMembershipSummary {
   invitedUsers: number
   inactiveUsers: number
 }
+
+export interface UserAccessSignal {
+  label: string
+  tone: 'slate' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet'
+}
+
+export interface UserRoleSummary {
+  label: string
+  scope: 'internal' | 'organisation'
+  tone: 'slate' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet'
+}
+
+export type UserActivityBand = 'active' | 'recent' | 'watch' | 'inactive' | 'none'
 
 function getAdminReferenceDate(): Date {
   const timestamps = [
@@ -165,7 +182,11 @@ export function getOrganisationMemberships(organisationId: string): Organisation
 }
 
 export function getOrganisationUsers(organisationId: string): User[] {
-  return adminUsers.filter((user) => user.primaryOrganisationId === organisationId)
+  const membershipUserIds = new Set(
+    organisationMemberships.filter((membership) => membership.organisationId === organisationId).map((membership) => membership.userId),
+  )
+
+  return adminUsers.filter((user) => membershipUserIds.has(user.id))
 }
 
 export function getUserMemberships(userId: string): OrganisationMembership[] {
@@ -291,6 +312,129 @@ export function getUserSummary(user: User) {
     memberships,
     primaryOrganisation,
     auditEvents: getEntityAuditEvents([user.id, ...memberships.map((membership) => membership.id)]),
+  }
+}
+
+export function getUserActivityBand(user: User, referenceDate: Date = getAdminReferenceDate()): UserActivityBand {
+  const daysSinceActivity = getDaysSince(user.recentActivity.lastActiveAt, referenceDate)
+
+  if (daysSinceActivity === null) {
+    return 'none'
+  }
+
+  if (daysSinceActivity <= 1) {
+    return 'active'
+  }
+
+  if (daysSinceActivity <= 7) {
+    return 'recent'
+  }
+
+  if (daysSinceActivity <= 21) {
+    return 'watch'
+  }
+
+  return 'inactive'
+}
+
+export function getUserRoleSummary(user: User): UserRoleSummary {
+  const memberships = getUserMemberships(user.id)
+
+  if (user.kind === UserKind.InternalAdmin && user.internalAdminRole) {
+    const definition = getAdminRoleDefinition(user.internalAdminRole)
+
+    return {
+      label: definition.label,
+      scope: 'internal',
+      tone: user.internalAdminRole === InternalAdminRole.SuperAdmin ? 'rose' : toneForInternalRole(user.internalAdminRole),
+    }
+  }
+
+  const primaryMembership = memberships.find((membership) => membership.organisationId === user.primaryOrganisationId) ?? memberships[0] ?? null
+
+  if (!primaryMembership) {
+    return { label: 'No assigned role', scope: 'organisation', tone: 'slate' }
+  }
+
+  return {
+    label: getStatusLabel(primaryMembership.role),
+    scope: 'organisation',
+    tone: toneForOrganisationRole(primaryMembership.role),
+  }
+}
+
+export function getUserAccessSignals(user: User, referenceDate: Date = getAdminReferenceDate()): UserAccessSignal[] {
+  const summary = getUserSummary(user)
+  const signals: UserAccessSignal[] = []
+  const activityBand = getUserActivityBand(user, referenceDate)
+  const roleSummary = getUserRoleSummary(user)
+
+  if (user.status === UserStatus.Invited && !user.externalAuthId) {
+    signals.push({ label: 'Invite pending', tone: 'amber' })
+  }
+
+  if (user.kind === UserKind.InternalAdmin && user.status !== UserStatus.Active) {
+    signals.push({ label: 'Internal review', tone: 'rose' })
+  }
+
+  if (activityBand === 'inactive') {
+    signals.push({ label: 'No recent activity', tone: 'amber' })
+  }
+
+  if (activityBand === 'none' && user.status !== UserStatus.Invited) {
+    signals.push({ label: 'Never active', tone: 'amber' })
+  }
+
+  if (summary.memberships.length > 1) {
+    signals.push({ label: 'Multi-org access', tone: 'violet' })
+  }
+
+  if (user.kind === UserKind.InternalAdmin && user.internalAdminRole === InternalAdminRole.SuperAdmin) {
+    signals.push({ label: 'Elevated access', tone: 'rose' })
+  }
+
+  if (user.kind === UserKind.OrganisationUser && roleSummary.label === getStatusLabel(OrganisationRole.Owner)) {
+    signals.push({ label: 'Org owner', tone: 'sky' })
+  }
+
+  return signals
+}
+
+export function getUserAccessHistory(user: User) {
+  const summary = getUserSummary(user)
+
+  return summary.auditEvents.filter((event) =>
+    ['user', 'membership', 'admin_access'].includes(event.entity.entityType),
+  )
+}
+
+function toneForInternalRole(role: InternalAdminRole): UserAccessSignal['tone'] {
+  switch (role) {
+    case InternalAdminRole.SuperAdmin:
+      return 'rose'
+    case InternalAdminRole.PlatformAdmin:
+      return 'sky'
+    case InternalAdminRole.AssessmentAdmin:
+      return 'violet'
+    case InternalAdminRole.CustomerSuccessAdmin:
+      return 'emerald'
+    case InternalAdminRole.SupportAdmin:
+      return 'amber'
+  }
+}
+
+function toneForOrganisationRole(role: OrganisationRole): UserAccessSignal['tone'] {
+  switch (role) {
+    case OrganisationRole.Owner:
+      return 'sky'
+    case OrganisationRole.Admin:
+      return 'violet'
+    case OrganisationRole.Manager:
+      return 'emerald'
+    case OrganisationRole.Analyst:
+      return 'amber'
+    case OrganisationRole.Member:
+      return 'slate'
   }
 }
 
