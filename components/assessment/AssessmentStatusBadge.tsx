@@ -14,7 +14,12 @@ const statusClasses: Record<AssessmentRepositoryStatus, string> = {
 
 export function AssessmentStatusBadge({ status }: { status: AssessmentRepositoryStatus }) {
   return (
-    <span className={clsx('inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]', statusClasses[status])}>
+    <span
+      className={clsx(
+        'inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]',
+        statusClasses[status],
+      )}
+    >
       {formatStatusLabel(status)}
     </span>
   )
