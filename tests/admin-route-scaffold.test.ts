@@ -15,7 +15,7 @@ test('admin layout redirects unauthenticated users and gates unauthorized access
 test('admin dashboard uses release, audit, and action-required framing rather than the generic governance label', async () => {
   const source = await readFile(new URL('../app/admin/page.tsx', import.meta.url), 'utf8')
 
-  assert.match(source, /AdminDashboardSurface/)
+  assert.match(source, /AdminDashboardWireframePage/)
 })
 
 test('legacy governance route redirects into the release workflow surface', async () => {
@@ -27,5 +27,5 @@ test('legacy governance route redirects into the release workflow surface', asyn
 test('admin dashboard alias route resolves to the shared dashboard surface', async () => {
   const source = await readFile(new URL('../app/admin/dashboard/page.tsx', import.meta.url), 'utf8')
 
-  assert.match(source, /AdminDashboardSurface/)
+  assert.match(source, /AdminDashboardWireframePage/)
 })
