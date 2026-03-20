@@ -4,6 +4,7 @@ import test from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
+import { AssessmentLifecycleCard } from '../app/assessment/workspace/AssessmentWorkspaceClient'
 import { AssessmentWorkspaceFramingPanel } from '../components/assessment/AssessmentWorkspaceFramingPanel'
 import {
   deriveAssessmentWorkspaceFraming,
@@ -19,6 +20,7 @@ test('workspace framing derives configured baseline context for the Signals star
   assert.equal(framing.currentActionLabel, 'Start')
   assert.match(framing.currentActionDetail, /baseline diagnostic/i)
   assert.match(framing.outputExpectation, /interpreted individual signal profile/i)
+  assert.match(framing.whyItMatters, /baseline behavioural reference profile/i)
   assert.deepEqual(framing.measurementFocus, ['Behaviour style', 'Leadership execution', 'Conflict response', 'Stress patterning'])
 })
 
@@ -29,7 +31,7 @@ test('workspace framing adapts the current action context for resume and results
   assert.equal(resumeFraming.currentActionLabel, 'Resume')
   assert.match(resumeFraming.currentActionDetail, /latest autosaved position/i)
   assert.equal(resultsFraming.currentActionLabel, 'View Results')
-  assert.match(resultsFraming.currentActionDetail, /ready for review/i)
+  assert.match(resultsFraming.currentActionDetail, /ready to review/i)
 })
 
 test('workspace framing falls back safely when bespoke framing metadata is missing', () => {
@@ -65,7 +67,7 @@ test('workspace framing exposes a subtle recommendation cue only when the curren
 
   assert.deepEqual(recommendationCue, {
     eyebrow: 'Recommended next diagnostic',
-    detail: 'Repository sequencing currently treats this assessment as the baseline next step for the user.',
+    detail: 'Repository sequencing treats this assessment as the next baseline step.',
   })
   assert.equal(unrelatedCue, null)
 })
@@ -87,10 +89,26 @@ test('workspace framing panel renders the operational briefing surface for asses
 
   assert.match(html, /Sonartra Signals Assessment/)
   assert.match(html, /Behavioural baseline diagnostic/)
+  assert.match(html, /Current state/)
+  assert.match(html, /Resume/)
   assert.match(html, /Expected time/)
   assert.match(html, /Question set/)
+  assert.match(html, /Why it matters/)
   assert.match(html, /What to do now/)
   assert.match(html, /Recommended next diagnostic/)
+})
+
+test('lifecycle card renders as a continuation of the workspace briefing system', () => {
+  const html = renderToStaticMarkup(
+    <AssessmentLifecycleCard lifecycleState="ready" startError={null} loading={false} onPrimaryAction={() => undefined} />,
+  )
+
+  assert.match(html, /Assessment complete/)
+  assert.match(html, /Results available/)
+  assert.match(html, /Next step/)
+  assert.match(html, /Open Individual Results to review your latest behavioural, leadership, and operating signal profile\./)
+  assert.match(html, /View Results/)
+  assert.match(html, /Return to Dashboard/)
 })
 
 test('lifecycle state mapping keeps workspace framing aligned with shared entry semantics', () => {
@@ -110,6 +128,7 @@ test('workspace client integrates the shared framing panel without altering the 
 
   assert.match(workspaceClientSource, /AssessmentWorkspaceFramingPanel/)
   assert.match(workspaceClientSource, /deriveAssessmentWorkspaceFraming/)
+  assert.match(workspaceClientSource, /Assessment Workspace/)
   assert.match(workspacePageSource, /canonicalAssessmentId/)
   assert.match(routingSource, /SIGNALS_ASSESSMENT_WORKSPACE_PATH = '\/assessment\/workspace'/)
 })

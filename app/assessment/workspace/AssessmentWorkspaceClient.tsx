@@ -71,32 +71,56 @@ interface AssessmentLifecycleCardProps {
   onPrimaryAction: () => void | Promise<void>
 }
 
+const WORKSPACE_PAGE_TITLE = 'Assessment Workspace'
+const WORKSPACE_PAGE_SUBTITLE = 'Structured assessment flow with autosave continuity and results handoff.'
+
 export function AssessmentLifecycleCard({ lifecycleState, startError, loading, onPrimaryAction }: AssessmentLifecycleCardProps) {
   const presentation = mapLifecyclePresentation(lifecycleState)
   const isInteractivePrimary = presentation.assessmentPrimaryActionHref === null
 
   return (
     <AssessmentShell className="max-w-[70rem] p-5 sm:p-8 lg:p-10">
-      <Card className="mx-auto w-full max-w-3xl space-y-8 border-border/75 bg-bg/40 px-6 py-8 sm:px-9 sm:py-10 lg:px-12 lg:py-12">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-textSecondary/90">{presentation.assessmentEyebrow}</p>
-        <h2 className="text-3xl font-semibold tracking-tight sm:text-[2.15rem]">{presentation.assessmentTitle}</h2>
-        <p className="max-w-2xl text-base leading-7 text-textSecondary">{presentation.assessmentBody}</p>
-        {startError ? <p className="text-sm text-rose-300">{startError}</p> : null}
-        <div className="flex flex-wrap items-center gap-3.5 pt-1 sm:gap-4">
-          {isInteractivePrimary ? (
-            <Button onClick={() => void onPrimaryAction()} className="min-w-[11rem] px-6" disabled={loading}>
-              {loading ? 'Starting…' : presentation.assessmentPrimaryActionLabel}
-            </Button>
-          ) : (
-            <Button href={presentation.assessmentPrimaryActionHref ?? undefined} className="min-w-[11rem] px-6">
-              {presentation.assessmentPrimaryActionLabel}
-            </Button>
-          )}
-          {presentation.assessmentSecondaryActionLabel && presentation.assessmentSecondaryActionHref ? (
-            <Button variant="secondary" href={presentation.assessmentSecondaryActionHref} className="min-w-[11rem] px-6" disabled={loading && isInteractivePrimary}>
-              {presentation.assessmentSecondaryActionLabel}
-            </Button>
-          ) : null}
+      <Card className="mx-auto w-full border-border/75 bg-panel/82 px-0 py-0">
+        <div className="grid gap-5 px-6 py-6 sm:px-8 sm:py-7 lg:grid-cols-[minmax(0,1fr)_220px] lg:gap-6 lg:px-10">
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-textSecondary/80">{presentation.assessmentEyebrow}</p>
+              <h2 className="text-[1.9rem] font-semibold tracking-tight text-textPrimary sm:text-[2.1rem]">{presentation.assessmentTitle}</h2>
+              <p className="max-w-2xl text-sm leading-6 text-textSecondary sm:text-[0.98rem]">{presentation.assessmentBody}</p>
+            </div>
+            {startError ? <p className="text-sm text-rose-300">{startError}</p> : null}
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              {isInteractivePrimary ? (
+                <Button onClick={() => void onPrimaryAction()} className="min-w-[11rem] px-6" disabled={loading}>
+                  {loading ? 'Starting…' : presentation.assessmentPrimaryActionLabel}
+                </Button>
+              ) : (
+                <Button href={presentation.assessmentPrimaryActionHref ?? undefined} className="min-w-[11rem] px-6">
+                  {presentation.assessmentPrimaryActionLabel}
+                </Button>
+              )}
+              {presentation.assessmentSecondaryActionLabel && presentation.assessmentSecondaryActionHref ? (
+                <Button variant="secondary" href={presentation.assessmentSecondaryActionHref} className="min-w-[11rem] px-6" disabled={loading && isInteractivePrimary}>
+                  {presentation.assessmentSecondaryActionLabel}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid gap-2.5 self-start">
+            <div className="space-y-1 rounded-xl border border-border/70 bg-bg/25 px-3.5 py-3 sm:px-4">
+              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-textSecondary/75">Status</p>
+              <p className="text-sm text-textPrimary">{presentation.dashboardStatusLabel}</p>
+            </div>
+            <div className="space-y-1 rounded-xl border border-border/70 bg-bg/25 px-3.5 py-3 sm:px-4">
+              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-textSecondary/75">Next step</p>
+              <p className="text-sm text-textPrimary">{presentation.dashboardDetailTitle}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-border/70 px-6 py-4 sm:px-8 sm:py-5 lg:px-10">
+          <p className="max-w-3xl text-sm leading-6 text-textSecondary">{presentation.dashboardDetailFootnote}</p>
         </div>
       </Card>
     </AssessmentShell>
@@ -448,7 +472,7 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
   return (
     <AppShell>
       <div className="space-y-7 lg:space-y-9">
-        <TopHeader title={workspaceFraming.title} subtitle={workspaceFraming.subtitle} />
+        <TopHeader title={WORKSPACE_PAGE_TITLE} subtitle={WORKSPACE_PAGE_SUBTITLE} />
         <AssessmentWorkspaceFramingPanel framing={workspaceFraming} />
 
         {entryPhase !== 'active' ? (

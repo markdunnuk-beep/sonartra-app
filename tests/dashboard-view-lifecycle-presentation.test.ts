@@ -28,8 +28,8 @@ test('completed_processing lifecycle maps to completed detail copy and does not 
 
   assert.equal(presentation.dashboardStatusLabel, 'Completed — results pending')
   assert.equal(presentation.dashboardDetailTitle, 'Assessment completed')
-  assert.equal(presentation.dashboardDetailBody, 'Results are being processed and will be available shortly.')
-  assert.equal(presentation.dashboardDetailFootnote, 'Results are being processed and will be available shortly.')
+  assert.equal(presentation.dashboardDetailBody, 'Results are processing and will be available shortly.')
+  assert.equal(presentation.dashboardDetailFootnote, 'Results are processing and will be available shortly.')
   assert.notEqual(presentation.dashboardDetailFootnote, 'Check back shortly while Individual Results are prepared from your completed responses.')
   assert.equal(presentation.dashboardActionLabel, null)
   assert.equal(presentation.dashboardActionHref, null)

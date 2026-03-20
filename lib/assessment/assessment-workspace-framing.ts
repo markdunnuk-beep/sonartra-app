@@ -46,23 +46,23 @@ const DEFAULT_CLASSIFICATION_BY_CATEGORY = {
 const DEFAULT_STATE_DETAILS: Record<AssessmentWorkspaceEntryState, { label: string; detail: string }> = {
   start: {
     label: 'Start',
-    detail: 'Begin the assessment to establish the next interpreted signal set.',
+    detail: 'Begin the assessment to capture the next signal baseline.',
   },
   resume: {
     label: 'Resume',
-    detail: 'Saved progress is available. Continue from the latest autosaved response set.',
+    detail: 'Saved progress is available. Continue from the latest autosaved position.',
   },
   results_ready: {
     label: 'View Results',
-    detail: 'The latest completed output is available for review in the results workspace.',
+    detail: 'The latest completed output is ready in the results workspace.',
   },
   results_processing: {
-    label: 'Results Processing',
+    label: 'Processing',
     detail: 'Submission is complete. Result generation is still being finalised.',
   },
   attention_required: {
     label: 'Attention Required',
-    detail: 'The latest assessment state could not be resolved cleanly. Review status before taking further action.',
+    detail: 'The latest assessment state could not be resolved cleanly. Review status before continuing.',
   },
 }
 
@@ -99,11 +99,11 @@ function deriveFallbackWhyItMatters(shortDescription?: string, longDescription?:
 function deriveFallbackOutputExpectation(category: 'individual' | 'team', hasAdvancedOutputs: boolean): string {
   if (category === 'team') {
     return hasAdvancedOutputs
-      ? 'Completing this assessment generates a team-level diagnostic summary with expanded reporting where plan access allows.'
-      : 'Completing this assessment generates a team-level diagnostic summary for review in the shared workspace.'
+      ? 'Completion generates a team diagnostic summary with expanded reporting where plan access allows.'
+      : 'Completion generates a team diagnostic summary for review in the shared workspace.'
   }
 
-  return 'Completing this assessment generates an interpreted individual profile with actionable output ready for review after submission.'
+  return 'Completion generates an interpreted individual profile ready for review after submission.'
 }
 
 function deriveMeasurementFocus(measures: string[], configuredFocus?: string[]): string[] {
@@ -132,27 +132,27 @@ export function deriveAssessmentWorkspaceRecommendationCue(
     case 'resume_in_progress':
       return {
         eyebrow: 'Suggested continuation',
-        detail: 'This workspace is the active assessment already in progress for the current repository context.',
+        detail: 'This is the active assessment already in progress for the current repository context.',
       }
     case 'review_results':
       return {
         eyebrow: 'Repository guidance',
-        detail: 'This diagnostic remains the primary reference point for reviewing latest completed results before opening follow-on work.',
+        detail: 'Review this completed diagnostic first before opening follow-on work.',
       }
     case 'launch_baseline':
       return {
         eyebrow: 'Recommended next diagnostic',
-        detail: 'Repository sequencing currently treats this assessment as the baseline next step for the user.',
+        detail: 'Repository sequencing treats this assessment as the next baseline step.',
       }
     case 'launch_individual_follow_up':
       return {
         eyebrow: 'Recommended follow-up',
-        detail: 'Repository sequencing currently treats this assessment as the strongest individual follow-on diagnostic.',
+        detail: 'Repository sequencing treats this assessment as the strongest individual follow-on diagnostic.',
       }
     case 'launch_team_follow_up':
       return {
         eyebrow: 'Recommended team follow-up',
-        detail: 'Repository sequencing currently treats this assessment as the next team-level extension of existing insight.',
+        detail: 'Repository sequencing treats this assessment as the next team-level extension of existing insight.',
       }
     default:
       return null
@@ -172,7 +172,7 @@ export function deriveAssessmentWorkspaceFraming(
   const subtitle =
     framing?.subtitle ??
     definition?.shortDescription ??
-    'Structured diagnostic workspace with operational context and saved-state support.'
+    'Structured diagnostic workspace with operational context and saved-state continuity.'
 
   const whyItMatters = framing?.whyItMatters ?? deriveFallbackWhyItMatters(definition?.shortDescription, definition?.longDescription)
   const outputExpectation =
