@@ -16,7 +16,7 @@ function ResultBadge({ children, tone = 'neutral' }: { children: React.ReactNode
         ? 'border-white/[0.07] bg-white/[0.04] text-textSecondary'
         : 'border-white/[0.08] bg-bg/70 text-textPrimary/88'
 
-  return <span className={`rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] ${toneClass}`}>{children}</span>
+  return <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${toneClass}`}>{children}</span>
 }
 
 function DistributionBar({ label, value }: IndividualResultDomainBarModel) {
@@ -91,31 +91,31 @@ function DomainListCard({
 
 function AssessmentHeader({ assessment, expanded, onToggle }: { assessment: IndividualAssessmentCardModel; expanded: boolean; onToggle: () => void }) {
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2.5">
+    <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between">
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <ResultBadge tone={expanded ? 'accent' : 'muted'}>{assessment.statusLabel}</ResultBadge>
           <ResultBadge>{assessment.versionLabel}</ResultBadge>
           <ResultBadge tone="muted">Completed {assessment.completedLabel}</ResultBadge>
         </div>
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold tracking-tight text-textPrimary sm:text-2xl">{assessment.title}</h2>
-            <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] uppercase tracking-[0.14em] text-textSecondary">
-              {expanded ? 'Expanded' : 'Collapsed'}
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 className="text-xl font-semibold tracking-tight text-textPrimary sm:text-[1.45rem]">{assessment.title}</h2>
+            <span className="rounded-full border border-white/[0.07] bg-white/[0.025] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-textSecondary">
+              {expanded ? 'Detail open' : 'Summary view'}
             </span>
           </div>
-          {assessment.summary ? <p className="max-w-3xl text-sm leading-6 text-textSecondary">{assessment.summary}</p> : null}
+          {assessment.summary ? <p className="max-w-3xl text-sm leading-[1.35rem] text-textSecondary">{assessment.summary}</p> : null}
         </div>
       </div>
 
       <button
         type="button"
-        className="flex min-h-11 items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-bg/60 px-4 py-3 text-left text-sm text-textSecondary transition hover:border-accent/30 hover:text-textPrimary lg:min-w-[180px]"
+        className="flex min-h-10 items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-bg/55 px-4 py-2.5 text-left text-sm text-textSecondary transition hover:border-accent/30 hover:text-textPrimary lg:min-w-[208px]"
         aria-expanded={expanded}
         onClick={onToggle}
       >
-        <span className="font-medium text-textPrimary">{expanded ? 'Hide assessment' : 'View assessment'}</span>
+        <span className="font-medium text-textPrimary">{expanded ? 'Hide full results' : 'Review full results'}</span>
         <span className="text-lg leading-none text-accent">{expanded ? '−' : '+'}</span>
       </button>
     </div>
@@ -280,7 +280,7 @@ function AssessmentResultCard({ assessment }: { assessment: IndividualAssessment
       <AssessmentHeader assessment={assessment} expanded={expanded} onToggle={() => setExpanded((current) => !current)} />
 
       {expanded ? (
-        <div className="mt-6 space-y-7 border-t border-white/[0.06] pt-6 sm:space-y-8 sm:pt-7">
+        <div className="mt-5 space-y-7 border-t border-white/[0.06] pt-5 sm:space-y-8 sm:pt-6">
           <HowToUseReportSection assessment={assessment} />
           <ArchetypeOverviewSection assessment={assessment} />
           {assessment.domains.map((section) => (
@@ -299,7 +299,7 @@ function IntelligenceMetadata({ items }: { items: string[] }) {
   if (items.length === 0) return null
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-textSecondary/78">
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px] text-textSecondary/76">
       {items.map((entry, index) => (
         <React.Fragment key={entry}>
           {index > 0 ? <span aria-hidden="true" className="text-textSecondary/28">•</span> : null}
@@ -312,19 +312,19 @@ function IntelligenceMetadata({ items }: { items: string[] }) {
 
 function ResultsIntelligenceAction({ action }: { action: IndividualResultsIntelligenceActionModel }) {
   return (
-    <div className="rounded-[1.35rem] border border-accent/14 bg-[linear-gradient(180deg,rgba(18,31,47,0.82),rgba(11,18,28,0.72))] p-5 sm:p-6">
-      <div className="space-y-4">
+    <div className="rounded-[1.2rem] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(15,24,36,0.88),rgba(11,18,28,0.72))] p-4 sm:p-5">
+      <div className="space-y-3.5">
         <div className="space-y-1.5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8FA6C5]">{action.label}</p>
-          <h3 className="text-xl font-semibold tracking-tight text-textPrimary">{action.title}</h3>
-          <p className="text-sm leading-6 text-textSecondary">{action.rationale}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8FA6C5]">{action.label}</p>
+          <h3 className="text-[1.05rem] font-semibold tracking-tight text-textPrimary sm:text-[1.12rem]">{action.title}</h3>
+          <p className="text-sm leading-[1.35rem] text-textSecondary">{action.rationale}</p>
         </div>
 
         <IntelligenceMetadata items={action.metadata} />
 
         {action.cta ? (
-          <div className="pt-1">
-            <Button href={action.cta.href} className="w-full justify-center px-5 sm:w-auto">
+          <div className="pt-0.5">
+            <Button href={action.cta.href} className="w-full justify-center px-4 sm:w-auto">
               {action.cta.label}
             </Button>
           </div>
@@ -337,27 +337,27 @@ function ResultsIntelligenceAction({ action }: { action: IndividualResultsIntell
 function ResultsIntelligencePanel({ model }: { model: IndividualResultsPresentationModel['intelligence'] }) {
   return (
     <section aria-label="Results intelligence briefing">
-      <Card className="border border-white/[0.08] bg-[linear-gradient(180deg,rgba(14,21,31,0.98),rgba(10,15,24,0.96))] px-6 py-6 sm:px-8 sm:py-7">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] xl:gap-6">
-          <div className="space-y-5">
-            <div className="space-y-2.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent/78">{model.eyebrow}</p>
-              <h2 className="text-[1.75rem] font-semibold tracking-tight text-textPrimary sm:text-[1.95rem]">{model.summaryHeadline}</h2>
-              <p className="max-w-3xl text-sm leading-7 text-textSecondary">{model.summaryOverview}</p>
+      <Card className="border border-white/[0.07] bg-[linear-gradient(180deg,rgba(14,21,31,0.98),rgba(10,15,24,0.96))] px-5 py-5 sm:px-6 sm:py-6">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(300px,0.82fr)] xl:items-start xl:gap-5">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent/78">{model.eyebrow}</p>
+              <h2 className="text-[1.45rem] font-semibold tracking-tight text-textPrimary sm:text-[1.6rem]">{model.summaryHeadline}</h2>
+              <p className="max-w-3xl text-sm leading-6 text-textSecondary">{model.summaryOverview}</p>
             </div>
 
             <IntelligenceMetadata items={model.metadata} />
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-[1.2rem] border border-white/[0.06] bg-white/[0.025] p-4 sm:p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8FA6C5]">{model.priorityLabel}</p>
-                <p className="mt-2 text-sm leading-6 text-textSecondary">{model.priorityDetail}</p>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="space-y-1.5 rounded-[1.1rem] border border-white/[0.05] bg-white/[0.02] p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8FA6C5]">{model.priorityLabel}</p>
+                <p className="text-sm leading-[1.35rem] text-textSecondary">{model.priorityDetail}</p>
               </div>
 
               {model.unlocksDetail ? (
-                <div className="rounded-[1.2rem] border border-white/[0.06] bg-white/[0.025] p-4 sm:p-5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8FA6C5]">{model.unlocksLabel}</p>
-                  <p className="mt-2 text-sm leading-6 text-textSecondary">{model.unlocksDetail}</p>
+                <div className="space-y-1.5 rounded-[1.1rem] border border-white/[0.05] bg-white/[0.02] p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8FA6C5]">{model.unlocksLabel}</p>
+                  <p className="text-sm leading-[1.35rem] text-textSecondary">{model.unlocksDetail}</p>
                 </div>
               ) : null}
             </div>
@@ -372,19 +372,18 @@ function ResultsIntelligencePanel({ model }: { model: IndividualResultsPresentat
 
 export function IndividualResultsExperience({ model }: { model: IndividualResultsPresentationModel }) {
   return (
-    <div className="pb-12 pt-4 sm:pt-6">
-      <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
-        <Card className="overflow-hidden border-white/[0.08] bg-[linear-gradient(180deg,rgba(14,20,30,0.98),rgba(10,15,24,0.96))] px-6 py-6 sm:px-8 sm:py-7">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2.5">
+    <div className="pb-12 pt-4 sm:pt-5">
+      <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
+        <Card className="overflow-hidden border-white/[0.07] bg-[linear-gradient(180deg,rgba(14,20,30,0.98),rgba(10,15,24,0.96))] px-5 py-4 sm:px-6 sm:py-5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <ResultBadge tone="accent">Live result</ResultBadge>
-                <ResultBadge tone="muted">Production integration</ResultBadge>
-                <ResultBadge tone="muted">Multi-assessment ready</ResultBadge>
+                <ResultBadge tone="muted">Decision briefing</ResultBadge>
               </div>
-              <div className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight text-textPrimary md:text-4xl">{model.title}</h1>
-                <p className="max-w-3xl text-sm leading-6 text-textSecondary">{model.subtitle}</p>
+              <div className="space-y-1.5">
+                <h1 className="text-[1.75rem] font-semibold tracking-tight text-textPrimary md:text-[2rem]">{model.title}</h1>
+                <p className="max-w-2xl text-sm leading-[1.35rem] text-textSecondary">{model.subtitle}</p>
               </div>
             </div>
           </div>

@@ -129,15 +129,15 @@ test('ready state defaults the live assessment card to collapsed while preservin
 
   assert.match(html, /Sonartra Signals — Individual Results/)
   assert.match(html, /Results intelligence/)
-  assert.match(html, /Baseline profile completed and ready to use/)
+  assert.match(html, /Baseline profile ready/)
   assert.match(html, /What matters now/)
   assert.match(html, /What this unlocks/)
   assert.match(html, /Resume Burnout Risk/)
-  assert.match(html, /Resume Assessment/)
-  assert.match(html, /Current assessment/)
-  assert.match(html, /Collapsed/)
-  assert.match(html, /View assessment/)
-  assert.match(html, /Strategic Operator with Insight Explorer as the supporting pattern/)
+  assert.match(html, /Resume diagnostic/)
+  assert.match(html, /Current result/)
+  assert.match(html, /Summary view/)
+  assert.match(html, /Review full results/)
+  assert.match(html, /Strategic Operator supported by Insight Explorer/)
   assert.doesNotMatch(html, /How to Use This Report/)
   assert.doesNotMatch(html, /Sonartra Archetype Overview/)
   assert.doesNotMatch(html, /Performance Implications/)
@@ -250,14 +250,14 @@ test('assessment card expand/collapse interaction still works', () => {
     toggle.props.onClick()
   })
 
-  assert.match(JSON.stringify(renderer.toJSON()), /Hide assessment/)
+  assert.match(JSON.stringify(renderer.toJSON()), /Hide full results/)
   assert.match(JSON.stringify(renderer.toJSON()), /How to Use This Report/)
 
   act(() => {
     toggle.props.onClick()
   })
 
-  assert.match(JSON.stringify(renderer.toJSON()), /View assessment/)
+  assert.match(JSON.stringify(renderer.toJSON()), /Review full results/)
   assert.equal((JSON.stringify(renderer.toJSON()).match(/How to Use This Report/g) ?? []).length, 0)
 })
 

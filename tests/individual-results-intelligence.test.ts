@@ -39,7 +39,7 @@ function makeReadyData(overrides: Partial<IndividualResultReadyData> = {}): Indi
 function makeSeed() {
   return {
     assessmentTitle: 'Sonartra Signals',
-    assessmentSummary: 'Strategic Operator with Insight Explorer as the supporting pattern.',
+    assessmentSummary: 'Strategic Operator supported by Insight Explorer.',
     completedLabel: '01 Jan 2026',
     archetypeLabel: 'Strategic Operator',
     domainsAvailable: 6,
@@ -49,10 +49,10 @@ function makeSeed() {
 test('results intelligence prioritises resuming another in-progress assessment before launching a new follow-on', () => {
   const intelligence = deriveIndividualResultsIntelligence(makeReadyData(), makeSeed(), getAssessmentRepositoryInventory())
 
-  assert.equal(intelligence.summaryHeadline, 'Baseline profile completed and ready to use')
+  assert.equal(intelligence.summaryHeadline, 'Baseline profile ready')
   assert.equal(intelligence.action.kind, 'resume_in_progress')
   assert.equal(intelligence.action.title, 'Resume Burnout Risk')
-  assert.equal(intelligence.action.cta?.label, 'Resume Assessment')
+  assert.equal(intelligence.action.cta?.label, 'Resume diagnostic')
   assert.equal(intelligence.action.cta?.href, '#')
 })
 
@@ -67,9 +67,9 @@ test('results intelligence recommends the strongest live individual follow-on wh
 
   assert.equal(intelligence.action.kind, 'launch_individual_follow_up')
   assert.equal(intelligence.action.title, 'Deepen leadership execution with Leadership Effectiveness')
-  assert.equal(intelligence.action.cta?.label, 'Start Assessment')
+  assert.equal(intelligence.action.cta?.label, 'Start diagnostic')
   assert.equal(intelligence.action.cta?.href, '#')
-  assert.match(intelligence.action.rationale, /Leadership signal weight is strongest/i)
+  assert.match(intelligence.action.rationale, /Leadership signal is carrying the most weight/i)
 })
 
 test('results intelligence excludes release-pending items from the primary recommendation and falls through to live team expansion', () => {
@@ -85,7 +85,7 @@ test('results intelligence excludes release-pending items from the primary recom
 
   assert.equal(intelligence.action.kind, 'launch_team_follow_up')
   assert.equal(intelligence.action.title, 'Extend this baseline into Team Dynamics')
-  assert.equal(intelligence.action.cta?.label, 'Launch Assessment')
+  assert.equal(intelligence.action.cta?.label, 'Open team diagnostic')
   assert.equal(intelligence.action.cta?.href, '#')
   assert.doesNotMatch(intelligence.action.title, /Decision Profile/)
 })
@@ -101,7 +101,7 @@ test('results intelligence keeps safe defaults when result context is partial', 
     [],
   )
 
-  assert.equal(intelligence.summaryHeadline, 'Baseline profile completed and ready to use')
+  assert.equal(intelligence.summaryHeadline, 'Baseline profile ready')
   assert.match(intelligence.summaryOverview, /completed result is now available/i)
   assert.equal(intelligence.action.kind, 'none')
   assert.equal(intelligence.metadata[1], '0 interpreted domains')
