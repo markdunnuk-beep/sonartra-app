@@ -177,7 +177,7 @@ export function matchesRisk(user: User, riskFlags?: AccessQuery['riskFlags']): b
     return true
   }
 
-  return riskFlags.every((riskFlag) => hasRiskFlag(user, riskFlag))
+  return riskFlags.some((riskFlag) => hasRiskFlag(user, riskFlag))
 }
 
 export function filterUsersByQuery(users: User[], query: AccessQuery): User[] {

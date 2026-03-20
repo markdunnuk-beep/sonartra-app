@@ -217,7 +217,7 @@ export function Tabs({ items }: { items: AdminTabItem[] }) {
   )
 }
 
-export function Table({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
+export function Table({ columns, rows, rowClassNames }: { columns: string[]; rows: ReactNode[][]; rowClassNames?: Array<string | undefined> }) {
   const templateColumns = `repeat(${columns.length}, minmax(0, 1fr))`
 
   return (
@@ -229,7 +229,7 @@ export function Table({ columns, rows }: { columns: string[]; rows: ReactNode[][
       </div>
       <div className="divide-y divide-white/[0.06]">
         {rows.map((row, index) => (
-          <div key={index} className="grid gap-3 px-5 py-4 lg:items-center" style={{ gridTemplateColumns: templateColumns }}>
+          <div key={index} className={clsx('grid gap-3 px-5 py-4 lg:items-center', rowClassNames?.[index])} style={{ gridTemplateColumns: templateColumns }}>
             {row.map((cell, cellIndex) => (
               <div key={cellIndex} className="min-w-0">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-textSecondary lg:hidden">{columns[cellIndex]}</div>

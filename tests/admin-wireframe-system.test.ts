@@ -2,7 +2,19 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
-import { DEFAULT_ACCESS_QUERY, adminUsers, filterUsersByQuery, matchesActivity, matchesRisk, matchesScope } from '../lib/admin/domain'
+import {
+  DEFAULT_ACCESS_QUERY,
+  adminUsers,
+  assessUserAccessPriority,
+  compareUsersByPriority,
+  filterUsersByQuery,
+  getAccessPresetViews,
+  getPriorityReasons,
+  matchesActivity,
+  matchesRisk,
+  matchesScope,
+  prioritiseUsers,
+} from '../lib/admin/domain'
 import {
   findAssessmentBySlug,
   findAssessmentVersion,
@@ -195,5 +207,100 @@ test('access query search matches organisation and role context for operator que
   assert.deepEqual(
     filterUsersByQuery(adminUsers, { ...DEFAULT_ACCESS_QUERY, search: 'super admin' }).map((user) => user.id),
     ['user-admin-rina'],
+  )
+})
+
+test('access priority scoring derives level thresholds and reasons from current typed user facts', () => {
+  const suspendedInternalAdmin = adminUsers.find((user) => user.id === 'user-admin-ella')
+  const invitedDormantUser = adminUsers.find((user) => user.id === 'user-org-isaac')
+  const multiOrgUser = adminUsers.find((user) => user.id === 'user-org-bianca')
+  const activeInternalUser = adminUsers.find((user) => user.id === 'user-admin-jules')
+
+  assert.ok(suspendedInternalAdmin)
+  assert.ok(invitedDormantUser)
+  assert.ok(multiOrgUser)
+  assert.ok(activeInternalUser)
+
+  assert.deepEqual(getPriorityReasons(suspendedInternalAdmin!), ['Suspended identity', 'Internal access requires review'])
+  assert.deepEqual(assessUserAccessPriority(suspendedInternalAdmin!), {
+    score: 70,
+    level: 'high',
+    reasons: ['Suspended identity', 'Internal access requires review'],
+  })
+  assert.deepEqual(assessUserAccessPriority(adminUsers.find((user) => user.id === 'user-admin-rina')!), {
+    score: 40,
+    level: 'medium',
+    reasons: ['Elevated platform access', 'Privileged internal role'],
+  })
+  assert.deepEqual(assessUserAccessPriority(invitedDormantUser!), {
+    score: 60,
+    level: 'high',
+    reasons: ['Invite pending activation', 'No recent activity', 'Inactive activity band', 'Invited status'],
+  })
+  assert.deepEqual(assessUserAccessPriority(multiOrgUser!), {
+    score: 25,
+    level: 'medium',
+    reasons: ['Cross-organisation membership'],
+  })
+  assert.deepEqual(assessUserAccessPriority(activeInternalUser!), {
+    score: 0,
+    level: 'low',
+    reasons: [],
+  })
+})
+
+test('access priority sorting raises suspended and other high-risk users before normal active users', () => {
+  assert.deepEqual(
+    prioritiseUsers(adminUsers).map((user) => user.id),
+    ['user-admin-ella', 'user-org-isaac', 'user-admin-rina', 'user-org-maya', 'user-org-bianca', 'user-admin-jules', 'user-admin-noah', 'user-org-alex'],
+  )
+  assert.ok(compareUsersByPriority(adminUsers.find((user) => user.id === 'user-admin-ella')!, adminUsers.find((user) => user.id === 'user-org-alex')!) < 0)
+})
+
+test('access priority sorting preserves stable activity and name tie-break behaviour', () => {
+  const baseUser = adminUsers.find((user) => user.id === 'user-admin-noah')
+
+  assert.ok(baseUser)
+
+  const tieUsers = [
+    {
+      ...baseUser!,
+      id: 'tie-zara',
+      profile: { ...baseUser!.profile, firstName: 'Zara', lastName: 'Quinn', fullName: 'Zara Quinn' },
+      recentActivity: { ...baseUser!.recentActivity, lastActiveAt: '2026-03-01T00:00:00Z' },
+    },
+    {
+      ...baseUser!,
+      id: 'tie-aria',
+      profile: { ...baseUser!.profile, firstName: 'Aria', lastName: 'Quinn', fullName: 'Aria Quinn' },
+      recentActivity: { ...baseUser!.recentActivity, lastActiveAt: '2026-03-01T00:00:00Z' },
+    },
+  ]
+
+  assert.deepEqual(prioritiseUsers(tieUsers).map((user) => user.profile.fullName), ['Aria Quinn', 'Zara Quinn'])
+})
+
+test('access preset views remain typed and reusable with the existing query selectors', () => {
+  const presets = getAccessPresetViews()
+
+  assert.deepEqual(
+    presets.map((preset) => preset.id),
+    ['high-risk', 'dormant-access', 'privileged-internal-access', 'cross-org-identities'],
+  )
+  assert.deepEqual(
+    filterUsersByQuery(adminUsers, presets.find((preset) => preset.id === 'high-risk')!.query).map((user) => user.id),
+    ['user-admin-rina', 'user-admin-ella', 'user-org-bianca'],
+  )
+  assert.deepEqual(
+    filterUsersByQuery(adminUsers, presets.find((preset) => preset.id === 'dormant-access')!.query).map((user) => user.id),
+    ['user-org-isaac'],
+  )
+  assert.deepEqual(
+    filterUsersByQuery(adminUsers, presets.find((preset) => preset.id === 'privileged-internal-access')!.query).map((user) => user.id),
+    ['user-admin-rina', 'user-admin-noah', 'user-admin-jules', 'user-admin-ella'],
+  )
+  assert.deepEqual(
+    filterUsersByQuery(adminUsers, presets.find((preset) => preset.id === 'cross-org-identities')!.query).map((user) => user.id),
+    ['user-org-bianca'],
   )
 })
