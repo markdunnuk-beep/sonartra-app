@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { adminDashboardModel } from '@/lib/admin/dashboard'
 import { assessmentVersions, assessments, auditLogEvents, getSeatUtilisationPercent, getStatusLabel, organisations, adminUsers } from '@/lib/admin/domain'
+import { adminRoleDefinitions } from '@/lib/admin/domain/roles'
 import { AssessmentVersionStatus, PublishStatus } from '@/lib/admin/domain/assessments'
 import {
   findAssessmentBySlug,
@@ -44,6 +45,10 @@ import {
   getOrganisationVersionExposure,
   getReleaseBlockers,
   getUserSummary,
+  getUserAccessHistory,
+  getUserAccessSignals,
+  getUserActivityBand,
+  getUserRoleSummary,
   getValidationIssues,
   getVersionAuditEvents,
 } from '@/lib/admin/wireframe'
@@ -124,6 +129,51 @@ function HealthSignalBadges({ labels }: { labels: Array<{ label: string; tone: '
       ))}
     </div>
   )
+}
+
+function AccessFlagGroup({ labels }: { labels: Array<{ label: string; tone: 'slate' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet' }> }) {
+  if (!labels.length) {
+    return <span className="text-xs text-textSecondary">No flags</span>
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {labels.map((signal) => (
+        <Badge key={`${signal.label}-${signal.tone}`} label={signal.label} tone={signal.tone} />
+      ))}
+    </div>
+  )
+}
+
+function UserRoleReferencePanel() {
+  const roleDefinitions = Object.values(adminRoleDefinitions)
+
+  return (
+    <MetaPanel
+      title="Internal role reference"
+      items={roleDefinitions.map((definition) => ({
+        label: definition.label,
+        value: definition.capabilities.map((capability) => capability.split(':')[0]).join(' · '),
+        hint: definition.description,
+      }))}
+      footer={<p className="text-xs leading-5 text-textSecondary">Reference only. Access changes and RBAC editing remain out of scope for this phase.</p>}
+    />
+  )
+}
+
+function getActivityBandLabel(activityBand: ReturnType<typeof getUserActivityBand>): string {
+  switch (activityBand) {
+    case 'active':
+      return 'Active now'
+    case 'recent':
+      return 'Recent'
+    case 'watch':
+      return 'Watch'
+    case 'inactive':
+      return 'Inactive'
+    case 'none':
+      return 'No activity'
+  }
 }
 
 export function AdminDashboardWireframePage() {
@@ -401,54 +451,86 @@ export function AdminOrganisationDetailWireframePage({ slug }: { slug: string })
 }
 
 export function AdminUsersWireframePage() {
-  const rows = adminUsers.map((user) => {
+  const internalUsers = adminUsers.filter((user) => user.kind === 'internal_admin')
+  const organisationUsers = adminUsers.filter((user) => user.kind === 'organisation_user')
+  const accessReviewUsers = adminUsers.filter((user) => getUserAccessSignals(user).length > 0)
+  const multiMembershipUsers = adminUsers.filter((user) => getUserSummary(user).memberships.length > 1)
+
+  const buildRows = (users: typeof adminUsers) => users.map((user) => {
     const summary = getUserSummary(user)
+    const accessFlags = getUserAccessSignals(user)
+    const roleSummary = getUserRoleSummary(user)
+    const activityBand = getUserActivityBand(user)
+    const organisationLabels = summary.memberships
+      .map((membership) => organisations.find((organisation) => organisation.id === membership.organisationId)?.name ?? membership.organisationId)
+      .join(' · ')
 
     return [
       <div key={`${user.id}-name`}>
-        <Link href={`/admin/users/${user.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-textPrimary hover:text-accent">
-          {user.profile.fullName}
-          <ChevronRight className="h-4 w-4" />
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={user.kind} />
+          <Link href={`/admin/users/${user.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-textPrimary hover:text-accent">
+            {user.profile.fullName}
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
         <p className="mt-1 text-sm text-textSecondary">{user.email}</p>
       </div>,
-      <div key={`${user.id}-kind`} className="space-y-2">
-        <StatusBadge status={user.kind} />
-        {user.internalAdminRole ? (
-          <div>
-            <StatusBadge status={user.internalAdminRole} />
-          </div>
-        ) : null}
+      <div key={`${user.id}-scope`} className="space-y-2">
+        <Badge label={roleSummary.label} tone={roleSummary.tone} />
+        <p className="text-xs text-textSecondary">{getKindLabel(user)}</p>
       </div>,
-      <div key={`${user.id}-status`}>
-        <StatusBadge status={user.status} />
+      <div key={`${user.id}-organisation`} className="space-y-2">
+        <p className="text-sm font-medium text-textPrimary">{summary.primaryOrganisation?.name ?? 'Internal-only access'}</p>
+        <p className="text-xs text-textSecondary">{summary.memberships.length} memberships{organisationLabels ? ` · ${organisationLabels}` : ''}</p>
       </div>,
-      <div key={`${user.id}-memberships`} className="text-sm text-textSecondary">
-        {summary.memberships.length} memberships{summary.primaryOrganisation ? ` · ${summary.primaryOrganisation.name}` : ''}
+      <div key={`${user.id}-status`} className="space-y-2">
+        <StatusBadge status={user.status === 'deactivated' ? 'inactive' : user.status} />
+        <Badge label={getActivityBandLabel(activityBand)} tone={activityBand === 'active' ? 'emerald' : activityBand === 'recent' ? 'sky' : activityBand === 'watch' ? 'amber' : 'slate'} />
       </div>,
       <div key={`${user.id}-activity`}>
-        <p className="text-sm font-medium text-textPrimary">{formatAdminTimestamp(user.recentActivity.lastActiveAt)}</p>
-        <p className="text-xs text-textSecondary">{getKindLabel(user)}</p>
+        <p className="text-sm font-medium text-textPrimary">{formatAdminRelativeTime(user.recentActivity.lastActiveAt)}</p>
+        <p className="text-xs text-textSecondary">{formatAdminTimestamp(user.recentActivity.lastActiveAt)}</p>
+      </div>,
+      <div key={`${user.id}-flags`}>
+        <AccessFlagGroup labels={accessFlags} />
       </div>,
     ]
   })
 
   return (
     <div className="space-y-6 lg:space-y-8">
-      <AdminPageHeader eyebrow="Users" title="Internal operators and customer access" description="Unified access registry with explicit separation between privileged Sonartra admins and customer-side memberships." actions={<Button variant="secondary">Initiate access review</Button>} />
+      <AdminPageHeader eyebrow="Users" title="Access control registry" description="Operator-facing registry for Sonartra admins, tenant users, invite posture, and access risk across the multi-tenant estate." actions={<Button variant="secondary">Initiate access review</Button>} />
 
       <div className="grid gap-4 xl:grid-cols-4">
-        <MetricCard label="Internal admins" value={String(adminUsers.filter((user) => user.kind === 'internal_admin').length).padStart(2, '0')} detail="Privileged Sonartra operators with governance, support, or release responsibilities." />
-        <MetricCard label="Customer users" value={String(adminUsers.filter((user) => user.kind === 'organisation_user').length).padStart(2, '0')} detail="Tenant-level admins and members attached to customer organisations." />
-        <MetricCard label="Pending access" value={String(adminUsers.filter((user) => user.status === 'invited' || user.status === 'suspended').length).padStart(2, '0')} detail="Accounts needing invite completion, review, or posture changes." />
-        <MetricCard label="Role classes" value="05" detail="Shared role-badge system across internal and tenant-scoped access patterns." />
+        <MetricCard label="Internal admins" value={String(internalUsers.length).padStart(2, '0')} detail="Privileged Sonartra operators with platform, assessment, support, or customer operations scope." />
+        <MetricCard label="Organisation users" value={String(organisationUsers.length).padStart(2, '0')} detail="Customer-side accounts with tenant-scoped access and membership-linked roles." />
+        <MetricCard label="Access review signals" value={String(accessReviewUsers.length).padStart(2, '0')} detail="Invites, suspended operators, dormant users, and other access posture signals requiring review." />
+        <MetricCard label="Multi-org identities" value={String(multiMembershipUsers.length).padStart(2, '0')} detail="Users spanning more than one organisation membership and needing explicit scope awareness." />
       </div>
 
-      <SurfaceSection title="Access registry" eyebrow="List pattern" description="Same table and filter-bar system as organisations, with role/status treatment focused on access posture rather than tenancy posture.">
-        <FilterBar searchPlaceholder="Search name, email, organisation, or role…" segments={["All users", "Internal admins", "Organisation users", "Attention required"]} trailing={<Button href="/admin/audit" variant="ghost">Access audit</Button>} />
-        <div className="mt-4">
-          <Table columns={["User", "Identity class", "Status", "Membership context", "Recent activity"]} rows={rows} />
-        </div>
+      <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
+        <SurfaceSection title="Access registry" eyebrow="Control surface" description="Dense registry patterned after Organisations, tuned for access scope, membership posture, inactivity review, and elevated permissions.">
+          <FilterBar
+            searchPlaceholder="Search name, email, organisation, or role…"
+            groups={[
+              { label: 'User type', options: ['All', 'Internal', 'Organisation'] },
+              { label: 'Role', options: ['All', 'Super admin', 'Assessment admin', 'Org admin', 'Org member'] },
+              { label: 'Status', options: ['All', 'Active', 'Invited', 'Inactive', 'Suspended'] },
+              { label: 'Activity band', options: ['All', 'Active now', 'Recent', 'Watch', 'Inactive'] },
+            ]}
+            trailing={<Button href="/admin/audit" variant="ghost">Access audit</Button>}
+          />
+        </SurfaceSection>
+        <UserRoleReferencePanel />
+      </div>
+
+      <SurfaceSection title="Internal Sonartra operators" eyebrow="Internal access" description="Privileged platform operators are isolated from tenant identities so elevated access can be reviewed quickly.">
+        <Table columns={["User", "Role", "Access scope", "Status", "Last activity", "Flags"]} rows={buildRows(internalUsers)} />
+      </SurfaceSection>
+
+      <SurfaceSection title="Organisation user registry" eyebrow="Tenant access" description="Customer identities remain tenant-scoped, with clear organisation context, membership breadth, invite posture, and dormancy signals.">
+        <Table columns={["User", "Role", "Organisation / memberships", "Status", "Last activity", "Flags"]} rows={buildRows(organisationUsers)} />
       </SurfaceSection>
     </div>
   )
@@ -462,16 +544,44 @@ export function AdminUserDetailWireframePage({ userId }: { userId: string }) {
   }
 
   const summary = getUserSummary(user)
+  const accessFlags = getUserAccessSignals(user)
+  const accessHistory = getUserAccessHistory(user)
+  const roleSummary = getUserRoleSummary(user)
+  const activityBand = getUserActivityBand(user)
+  const primaryMembership = summary.memberships.find((membership) => membership.organisationId === user.primaryOrganisationId) ?? summary.memberships[0] ?? null
+  const internalRoleDefinition = user.internalAdminRole ? adminRoleDefinitions[user.internalAdminRole] : null
+  const membershipRows = summary.memberships.map((membership) => {
+    const organisation = organisations.find((organisationItem) => organisationItem.id === membership.organisationId)
+
+    return [
+      <div key={`${membership.id}-org`}>
+        <p className="text-sm font-semibold text-textPrimary">{organisation?.name ?? membership.organisationId}</p>
+        <p className="mt-1 text-xs text-textSecondary">{organisation ? `${organisation.region} · ${organisation.status}` : 'Organisation not found'}</p>
+      </div>,
+      <div key={`${membership.id}-role`} className="space-y-2">
+        <StatusBadge status={membership.role} />
+        <p className="text-xs text-textSecondary">{membership.isAssessmentContact ? 'Assessment contact' : membership.isBillingContact ? 'Billing contact' : 'Standard member scope'}</p>
+      </div>,
+      <div key={`${membership.id}-joined`}>
+        <p className="text-sm font-medium text-textPrimary">{membership.joinedAt ? formatShortAdminDate(membership.joinedAt) : 'Invite pending'}</p>
+        <p className="text-xs text-textSecondary">Invited {formatShortAdminDate(membership.invitedAt)}</p>
+      </div>,
+      <div key={`${membership.id}-activity`}>
+        <p className="text-sm font-medium text-textPrimary">{formatAdminRelativeTime(membership.lastActiveAt)}</p>
+        <p className="text-xs text-textSecondary">{formatAdminTimestamp(membership.lastActiveAt)}</p>
+      </div>,
+    ]
+  })
 
   return (
     <div className="space-y-6 lg:space-y-8">
       <AdminPageHeader
         eyebrow="User detail"
         title={user.profile.fullName}
-        description="Profile summary, membership context, access posture, audit-linked activity, and future action area layout for admin operators."
+        description="Structured identity, role, membership, activity, and audit context for operator-led access review."
         actions={
           <>
-            <StatusBadge status={user.status} />
+            <StatusBadge status={user.status === 'deactivated' ? 'inactive' : user.status} />
             <Button href="/admin/users" variant="ghost">Back to users</Button>
           </>
         }
@@ -479,70 +589,88 @@ export function AdminUserDetailWireframePage({ userId }: { userId: string }) {
 
       <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="px-6 py-5 sm:px-7 sm:py-6">
-          <p className="eyebrow">Profile summary</p>
+          <p className="eyebrow">Identity overview</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <StatusBadge status={user.kind} />
-            {user.internalAdminRole ? <StatusBadge status={user.internalAdminRole} /> : null}
+            <Badge label={roleSummary.label} tone={roleSummary.tone} />
+            <Badge label={getActivityBandLabel(activityBand)} tone={activityBand === 'active' ? 'emerald' : activityBand === 'recent' ? 'sky' : activityBand === 'watch' ? 'amber' : 'slate'} />
           </div>
-          <MetaGrid
-            items={[
-              { label: 'Email', value: user.email },
-              { label: 'Title', value: user.profile.title ?? 'Not set' },
-              { label: 'Auth binding', value: user.externalAuthId ?? 'Invite pending / no linked auth id' },
-              { label: 'Last active', value: formatAdminTimestamp(user.recentActivity.lastActiveAt) },
-            ]}
-          />
+          <div className="mt-5">
+            <MetaGrid
+              items={[
+                { label: 'Email', value: user.email },
+                { label: 'Identity type', value: getKindLabel(user) },
+                { label: 'Auth binding', value: user.externalAuthId ?? 'Invite pending / no linked auth id' },
+                { label: 'Last active', value: formatAdminTimestamp(user.recentActivity.lastActiveAt) },
+              ]}
+            />
+          </div>
+          <div className="mt-4 rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-4">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">Access flags</p>
+            <div className="mt-3">
+              <AccessFlagGroup labels={accessFlags} />
+            </div>
+          </div>
         </Card>
 
         <MetaPanel
-          title="Access posture"
+          title="Role and permissions context"
           items={[
-            { label: 'Identity class', value: getKindLabel(user) },
+            { label: 'Resolved role', value: roleSummary.label },
             { label: 'Primary organisation', value: summary.primaryOrganisation?.name ?? 'Internal-only operator' },
             { label: 'Membership count', value: `${summary.memberships.length}` },
+            {
+              label: 'Permissions scope',
+              value: internalRoleDefinition
+                ? internalRoleDefinition.capabilities.map((capability) => capability.replace(':view', '')).join(' · ')
+                : primaryMembership
+                  ? `${getStatusLabel(primaryMembership.role)} within ${summary.memberships.length > 1 ? 'multi-organisation' : 'single-organisation'} scope`
+                  : 'No tenant membership assigned',
+            },
           ]}
-          footer={<Button variant="secondary">Prepare action set</Button>}
+          footer={<p className="text-xs leading-5 text-textSecondary">Editing flows remain intentionally absent; this surface is for review, audit, and operational decision support.</p>}
         />
       </div>
 
+      <section className="grid gap-4 xl:grid-cols-3">
+        <MetaPanel
+          title="Activity summary"
+          items={[
+            { label: 'Current posture', value: getActivityBandLabel(activityBand) },
+            { label: 'Last audit event', value: accessHistory[0]?.summary ?? 'No user-linked audit event' },
+            { label: 'Created', value: formatAdminTimestamp(user.createdAt) },
+          ]}
+        />
+        <MetaPanel
+          title="Membership posture"
+          items={[
+            { label: 'Primary tenant', value: summary.primaryOrganisation?.name ?? 'Not tenant-scoped' },
+            { label: 'Org access count', value: `${summary.memberships.length}` },
+            { label: 'Secondary scope', value: summary.memberships.length > 1 ? 'User spans multiple organisations' : 'Single-scope access' },
+          ]}
+        />
+        <MetaPanel
+          title="Audit summary"
+          items={[
+            { label: 'History entries', value: `${accessHistory.length}` },
+            { label: 'Latest event time', value: accessHistory[0] ? formatAdminTimestamp(accessHistory[0].occurredAt) : 'No event recorded' },
+            { label: 'Review note', value: accessFlags.length ? 'Signals present; include in access review queue.' : 'No immediate access review signal.' },
+          ]}
+        />
+      </section>
+
       <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <SurfaceSection title="Membership and role context" eyebrow="Context" description="Customer memberships remain visible on the same page, while future actions occupy their own control area rather than crowding the profile summary.">
-          <div className="space-y-3">
-            {summary.memberships.length ? (
-              summary.memberships.map((membership) => {
-                const organisation = organisations.find((organisationItem) => organisationItem.id === membership.organisationId)
-                return (
-                  <div key={membership.id} className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-textPrimary">{organisation?.name ?? membership.organisationId}</p>
-                        <p className="mt-1 text-sm text-textSecondary">Joined {formatAdminTimestamp(membership.joinedAt)} · Invited {formatAdminTimestamp(membership.invitedAt)}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <StatusBadge status={membership.role} />
-                        {membership.isAssessmentContact ? <Badge label="Assessment contact" tone="sky" /> : null}
-                        {membership.isBillingContact ? <Badge label="Billing contact" tone="amber" /> : null}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })
-            ) : (
-              <EmptyState title="No tenant memberships" detail="This pattern intentionally leaves clear room for future internal-only action controls without implying customer memberships that do not exist." />
-            )}
-          </div>
+        <SurfaceSection title="Memberships" eyebrow="Organisation access" description="Organisation scope remains compact and structured so operators can review tenant access without profile-heavy presentation.">
+          {membershipRows.length ? (
+            <Table columns={["Organisation", "Role / contacts", "Joined / invited", "Last active"]} rows={membershipRows} />
+          ) : (
+            <EmptyState title="No tenant memberships" detail="This identity currently has no organisation memberships attached." />
+          )}
         </SurfaceSection>
 
-        <SurfaceSection title="Admin-relevant activity" eyebrow="Audit context" description="Recent activity and a future action area share the same side-by-side pattern used elsewhere in the system.">
+        <SurfaceSection title="Access history" eyebrow="Audit context" description="User-linked audit evidence and access changes remain visible in the same structured timeline pattern used across admin.">
           <div className="space-y-4">
-            {summary.auditEvents.length ? summary.auditEvents.map((event) => <TimelineItem key={event.id} event={event} />) : <EmptyState title="No audit-linked activity" detail="Audit entries touching this user or their memberships will appear here." />}
-            <MetaPanel
-              title="Future action area"
-              items={[
-                { label: 'Planned controls', value: 'Reset invite, modify role, revoke tenant membership, suspend admin access.' },
-                { label: 'Evidence requirement', value: 'Actions should be paired with actor attribution and audit event generation.' },
-              ]}
-            />
+            {accessHistory.length ? accessHistory.map((event) => <TimelineItem key={event.id} event={event} />) : <EmptyState title="No access history" detail="Audit entries touching this user or their memberships will appear here." />}
           </div>
         </SurfaceSection>
       </section>

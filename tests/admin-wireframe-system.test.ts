@@ -11,9 +11,14 @@ import {
   getAssessmentTabs,
   getOrganisationHealthSignals,
   getOrganisationMembershipSummary,
+  getOrganisationUsers,
   getOrganisationUtilisationBand,
   getOrganisationVersionExposure,
   getReleaseBlockers,
+  getUserAccessHistory,
+  getUserAccessSignals,
+  getUserActivityBand,
+  getUserRoleSummary,
   getValidationIssues,
 } from '../lib/admin/wireframe'
 
@@ -52,9 +57,11 @@ test('validation and release helpers derive consistent readiness signals from ty
 test('organisation registry helpers derive utilisation bands, intervention flags, membership counts, and version exposure', () => {
   const suspendedOrganisation = findOrganisationBySlug('vectorforge-industrial')
   const implementationOrganisation = findOrganisationBySlug('aurora-health-group')
+  const northstarOrganisation = findOrganisationBySlug('northstar-logistics')
 
   assert.ok(suspendedOrganisation)
   assert.ok(implementationOrganisation)
+  assert.ok(northstarOrganisation)
 
   assert.equal(getOrganisationUtilisationBand(implementationOrganisation!), 'low')
   assert.deepEqual(
@@ -69,8 +76,40 @@ test('organisation registry helpers derive utilisation bands, intervention flags
     inactiveUsers: 1,
   })
   assert.deepEqual(getOrganisationVersionExposure(implementationOrganisation!), ['Sonartra Signals v2.1.0', 'Organisation Pulse v1.0.0'])
+  assert.deepEqual(
+    getOrganisationUsers(northstarOrganisation!.id).map((user) => user.id),
+    ['user-org-alex', 'user-org-bianca'],
+  )
   assert.equal(formatAdminRelativeTime('2026-03-20T04:12:00Z'), 'Today')
   assert.equal(formatAdminRelativeTime('2026-02-07T09:48:00Z'), '1 month ago')
+})
+
+test('user access helpers expose role, risk, activity, and history for operator review surfaces', () => {
+  const superAdmin = findUserById('user-admin-rina')
+  const suspendedInternalAdmin = findUserById('user-admin-ella')
+  const multiMembershipUser = findUserById('user-org-bianca')
+  const invitedUser = findUserById('user-org-isaac')
+
+  assert.ok(superAdmin)
+  assert.ok(suspendedInternalAdmin)
+  assert.ok(multiMembershipUser)
+  assert.ok(invitedUser)
+
+  assert.equal(getUserRoleSummary(superAdmin!).label, 'Super admin')
+  assert.equal(getUserActivityBand(suspendedInternalAdmin!), 'watch')
+  assert.deepEqual(
+    getUserAccessSignals(superAdmin!).map((signal) => signal.label),
+    ['Elevated access'],
+  )
+  assert.deepEqual(
+    getUserAccessSignals(multiMembershipUser!).map((signal) => signal.label),
+    ['Multi-org access'],
+  )
+  assert.deepEqual(
+    getUserAccessSignals(invitedUser!).map((signal) => signal.label),
+    ['Invite pending'],
+  )
+  assert.equal(getUserAccessHistory(suspendedInternalAdmin!).at(0)?.id, 'audit-1001')
 })
 
 test('wireframe surface files remain server-safe and avoid client directives', async () => {
