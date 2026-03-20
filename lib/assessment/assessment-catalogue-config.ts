@@ -39,15 +39,15 @@ export const assessmentCatalogueDefinitions: AssessmentCatalogueDefinition[] = [
       title: 'Sonartra Signals Assessment',
       subtitle: 'Behavioural baseline diagnostic for leadership tendencies, operating style, and signal interpretation.',
       whyItMatters:
-        'Use this diagnostic to establish the baseline behavioural reference profile that supports later interpretation, coaching context, and follow-on assessment sequencing.',
+        'Establish the baseline behavioural reference profile used to interpret later results, coaching context, and follow-on assessment sequencing.',
       outputExpectation:
-        'Completion generates an interpreted individual signal profile with narrative analysis, domain breakdowns, and a review-ready results snapshot.',
+        'Completion generates an interpreted individual signal profile with domain breakdowns and a review-ready results snapshot.',
       measurementFocus: ['Behaviour style', 'Leadership execution', 'Conflict response', 'Stress patterning'],
       classification: 'Individual baseline diagnostic',
       helperTextByState: {
         start: 'Begin the baseline diagnostic to capture the reference profile used across the Signals workspace.',
-        resume: 'Your previous responses are saved. Continue the baseline diagnostic from the latest autosaved position.',
-        results_ready: 'The latest completed baseline profile is ready for review and can be used to frame follow-on diagnostics.',
+        resume: 'Your responses are saved. Continue from the latest autosaved position.',
+        results_ready: 'The latest completed baseline profile is ready to review and frame follow-on diagnostics.',
         results_processing: 'Submission is complete. Signal scoring and interpretation are still being finalised.',
       },
     },
