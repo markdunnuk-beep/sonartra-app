@@ -1,4 +1,10 @@
-import type { AssessmentRepositoryCategory, AssessmentRepositoryDetailRow, AssessmentRepositoryItem, AssessmentRepositoryStatus } from './assessment-repository-types'
+import type {
+  AssessmentRepositoryCategory,
+  AssessmentRepositoryDetailRow,
+  AssessmentRepositoryItem,
+  AssessmentRepositoryStatus,
+} from './assessment-repository-types'
+import type { AssessmentWorkspaceFramingDefinition } from './assessment-workspace-framing'
 
 export type AssessmentReleaseState = 'live' | 'coming_soon' | 'archived'
 export type AssessmentAvailabilityScope = 'all' | 'workspace' | 'role' | 'user'
@@ -27,6 +33,7 @@ export interface AssessmentCatalogueDefinition {
   releaseState: AssessmentReleaseState
   assessmentHref?: string
   resultsHref?: string
+  workspaceFraming?: AssessmentWorkspaceFramingDefinition
 }
 
 export interface AssessmentAvailabilityConfig {

@@ -35,6 +35,22 @@ export const assessmentCatalogueDefinitions: AssessmentCatalogueDefinition[] = [
     releaseState: 'live',
     assessmentHref: individualAssessmentPath,
     resultsHref: '/results/individual',
+    workspaceFraming: {
+      title: 'Sonartra Signals Assessment',
+      subtitle: 'Behavioural baseline diagnostic for leadership tendencies, operating style, and signal interpretation.',
+      whyItMatters:
+        'Use this diagnostic to establish the baseline behavioural reference profile that supports later interpretation, coaching context, and follow-on assessment sequencing.',
+      outputExpectation:
+        'Completion generates an interpreted individual signal profile with narrative analysis, domain breakdowns, and a review-ready results snapshot.',
+      measurementFocus: ['Behaviour style', 'Leadership execution', 'Conflict response', 'Stress patterning'],
+      classification: 'Individual baseline diagnostic',
+      helperTextByState: {
+        start: 'Begin the baseline diagnostic to capture the reference profile used across the Signals workspace.',
+        resume: 'Your previous responses are saved. Continue the baseline diagnostic from the latest autosaved position.',
+        results_ready: 'The latest completed baseline profile is ready for review and can be used to frame follow-on diagnostics.',
+        results_processing: 'Submission is complete. Signal scoring and interpretation are still being finalised.',
+      },
+    },
   },
   {
     id: 'leadership-effectiveness',
