@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { AssessmentFlowTransition } from '@/components/assessment/AssessmentFlowTransition'
+import { AssessmentWorkspaceFramingPanel } from '@/components/assessment/AssessmentWorkspaceFramingPanel'
 import { AssessmentQuestionNavigator } from '@/components/assessment/AssessmentQuestionNavigator'
 import { AssessmentProgress, AssessmentProgressRail } from '@/components/assessment/AssessmentProgress'
 import { AssessmentShell } from '@/components/assessment/AssessmentShell'
@@ -10,6 +11,8 @@ import { TopHeader } from '@/components/layout/TopHeader'
 import { AssessmentQuestionCard, type AssessmentQuestionOption } from '@/components/sections/AssessmentQuestionCard'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { getAssessmentRepositoryInventory, getAssessmentRepositoryRecommendation } from '@/lib/assessment/assessment-repository-selectors'
+import { deriveAssessmentWorkspaceFraming, resolveAssessmentWorkspaceEntryState, type AssessmentWorkspaceEntryState } from '@/lib/assessment/assessment-workspace-framing'
 import { isFinalQuestionIndex, shouldClearReviewModeOnAnswer } from '@/lib/assessment-player'
 import { deriveAssessmentSessionState, getResumeQuestionIndex } from '@/lib/assessment-session'
 import { deriveAssessmentEntryPhase } from '@/lib/assessment-entry-state'
@@ -19,6 +22,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 const ACTIVE_ASSESSMENT_STORAGE_KEY = 'sonartra_active_assessment_id'
 const ASSESSMENT_VERSION_KEY = 'wplp80-v1'
+const WORKSPACE_ASSESSMENT_DEFINITION_ID = 'signals'
 
 interface LiveQuestion {
   questionNumber: number
@@ -109,6 +113,7 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
   const [viewState, setViewState] = useState<'intro' | 'starting' | 'active'>('intro')
   const [assessmentId, setAssessmentId] = useState<string | null>(canonicalAssessmentId ?? initialAssessmentId)
   const [lifecycleState, setLifecycleState] = useState<IndividualLifecycleState>(initialLifecycle.state)
+  const [workspaceEntryState, setWorkspaceEntryState] = useState<AssessmentWorkspaceEntryState>(resolveAssessmentWorkspaceEntryState(initialLifecycle.state))
   const [questions, setQuestions] = useState<LiveQuestion[]>([])
   const [answers, setAnswers] = useState<Record<number, number>>({})
   const [index, setIndex] = useState(0)
@@ -141,12 +146,23 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
   const saveStatusLabel = savingCount > 0 ? 'Saving…' : 'All changes saved'
   const entryPhase = deriveAssessmentEntryPhase(viewState, startError)
   const isFinalQuestion = isFinalQuestionIndex(index, totalQuestions)
+  const workspaceRecommendation = useMemo(() => getAssessmentRepositoryRecommendation(getAssessmentRepositoryInventory()), [])
+  const workspaceFraming = useMemo(
+    () => deriveAssessmentWorkspaceFraming(WORKSPACE_ASSESSMENT_DEFINITION_ID, workspaceEntryState, workspaceRecommendation),
+    [workspaceEntryState, workspaceRecommendation],
+  )
 
   useEffect(() => {
     if (lifecycleState !== 'in_progress') {
       window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
     }
   }, [lifecycleState])
+
+  useEffect(() => {
+    if (viewState !== 'active') {
+      setWorkspaceEntryState(resolveAssessmentWorkspaceEntryState(lifecycleState))
+    }
+  }, [lifecycleState, viewState])
 
   useEffect(() => {
     if (allAnswered) {
@@ -278,6 +294,7 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
 
       if (resumableAssessmentId) {
         try {
+          setWorkspaceEntryState('resume')
           setAssessmentId(resumableAssessmentId)
           await fetchAssessmentQuestions(resumableAssessmentId, 'resume')
           window.localStorage.setItem(ACTIVE_ASSESSMENT_STORAGE_KEY, resumableAssessmentId)
@@ -291,6 +308,8 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
           setAssessmentId(null)
         }
       }
+
+      setWorkspaceEntryState('start')
 
       const startResponse = await fetch('/api/assessments/start', {
         method: 'POST',
@@ -416,6 +435,7 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
       setIndex(0)
       setViewState('intro')
       setLifecycleState('completed_processing')
+      setWorkspaceEntryState('results_processing')
       window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
     } catch (completeError) {
       console.error(completeError)
@@ -428,7 +448,8 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
   return (
     <AppShell>
       <div className="space-y-7 lg:space-y-9">
-        <TopHeader title="Sonartra Signals Assessment" subtitle="Behavioural signal capture" />
+        <TopHeader title={workspaceFraming.title} subtitle={workspaceFraming.subtitle} />
+        <AssessmentWorkspaceFramingPanel framing={workspaceFraming} />
 
         {entryPhase !== 'active' ? (
           <AssessmentLifecycleCard lifecycleState={lifecycleState} startError={startError} loading={entryPhase === 'starting'} onPrimaryAction={startAssessment} />
