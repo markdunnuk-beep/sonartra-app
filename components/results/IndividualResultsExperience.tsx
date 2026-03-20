@@ -101,9 +101,6 @@ function AssessmentHeader({ assessment, expanded, onToggle }: { assessment: Indi
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 className="text-xl font-semibold tracking-tight text-textPrimary sm:text-[1.45rem]">{assessment.title}</h2>
-            <span className="rounded-full border border-white/[0.07] bg-white/[0.025] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-textSecondary">
-              {expanded ? 'Detail open' : 'Summary view'}
-            </span>
           </div>
           {assessment.summary ? <p className="max-w-3xl text-sm leading-[1.35rem] text-textSecondary">{assessment.summary}</p> : null}
         </div>
@@ -312,12 +309,12 @@ function IntelligenceMetadata({ items }: { items: string[] }) {
 
 function ResultsIntelligenceAction({ action }: { action: IndividualResultsIntelligenceActionModel }) {
   return (
-    <div className="rounded-[1.2rem] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(15,24,36,0.88),rgba(11,18,28,0.72))] p-4 sm:p-5">
-      <div className="space-y-3.5">
-        <div className="space-y-1.5">
+    <div className="rounded-[1.15rem] border border-white/[0.05] bg-[linear-gradient(180deg,rgba(14,22,33,0.76),rgba(11,18,28,0.62))] p-3.5 sm:p-4">
+      <div className="space-y-3">
+        <div className="space-y-1">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8FA6C5]">{action.label}</p>
-          <h3 className="text-[1.05rem] font-semibold tracking-tight text-textPrimary sm:text-[1.12rem]">{action.title}</h3>
-          <p className="text-sm leading-[1.35rem] text-textSecondary">{action.rationale}</p>
+          <h3 className="text-[1.02rem] font-semibold tracking-tight text-textPrimary sm:text-[1.08rem]">{action.title}</h3>
+          <p className="text-sm leading-5 text-textSecondary">{action.rationale}</p>
         </div>
 
         <IntelligenceMetadata items={action.metadata} />
@@ -336,7 +333,7 @@ function ResultsIntelligenceAction({ action }: { action: IndividualResultsIntell
 
 function ResultsIntelligencePanel({ model }: { model: IndividualResultsPresentationModel['intelligence'] }) {
   return (
-    <section aria-label="Results intelligence briefing">
+    <section aria-label="Results overview">
       <Card className="border border-white/[0.07] bg-[linear-gradient(180deg,rgba(14,21,31,0.98),rgba(10,15,24,0.96))] px-5 py-5 sm:px-6 sm:py-6">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(300px,0.82fr)] xl:items-start xl:gap-5">
           <div className="space-y-4">
@@ -379,7 +376,6 @@ export function IndividualResultsExperience({ model }: { model: IndividualResult
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <ResultBadge tone="accent">Live result</ResultBadge>
-                <ResultBadge tone="muted">Decision briefing</ResultBadge>
               </div>
               <div className="space-y-1.5">
                 <h1 className="text-[1.75rem] font-semibold tracking-tight text-textPrimary md:text-[2rem]">{model.title}</h1>

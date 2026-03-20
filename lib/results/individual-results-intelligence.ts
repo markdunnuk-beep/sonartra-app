@@ -23,21 +23,21 @@ const FOLLOW_ON_RULES: FollowOnRule[] = [
     layerKey: 'leadership',
     focusLabel: 'Leadership execution',
     titlePrefix: 'Deepen leadership execution',
-    rationale: 'Leadership signal is carrying the most weight, so the cleanest next cut is a focused read on execution, delegation, and follow-through.',
+    rationale: 'Leadership signal is strongest, so the clearest next step is a focused read on execution, delegation, and follow-through.',
   },
   {
     assessmentId: 'burnout-risk',
     layerKey: 'risk',
     focusLabel: 'Pressure and recovery risk',
     titlePrefix: 'Check pressure exposure',
-    rationale: 'Pressure and decision-friction signals are elevated enough to justify a tighter read before they become an operating drag.',
+    rationale: 'Pressure and decision-friction signals are elevated, so a tighter read is warranted before they become an operating drag.',
   },
   {
     assessmentId: 'conflict-style',
     layerKey: 'conflict',
     focusLabel: 'Conflict response',
     titlePrefix: 'Clarify conflict response',
-    rationale: 'Conflict patterns are visible enough to justify a narrower diagnostic on escalation, negotiation, and resolution behaviour.',
+    rationale: 'Conflict patterns are clear enough to justify a narrower diagnostic on escalation, negotiation, and resolution behaviour.',
   },
 ]
 
@@ -143,7 +143,7 @@ function buildNextAction(
       kind: 'resume_in_progress',
       label: 'Next action',
       title: `Resume ${resumableItem.title}`,
-      rationale: 'Another diagnostic is already live. Resume it first to keep the follow-on sequence intact.',
+      rationale: 'Another diagnostic is already live. Resume it first to keep the sequence intact.',
       cta: { label: 'Resume diagnostic', href: resumableItem.assessmentHref, action: 'resume' },
       metadata: buildActionMetadata(resumableItem),
     }
@@ -168,7 +168,7 @@ function buildNextAction(
         kind: 'launch_team_follow_up',
         label: 'Next action',
         title: `Extend this baseline into ${teamCandidate.title}`,
-        rationale: 'The baseline is established, so the strongest live follow-on is to extend it into a team operating read.',
+        rationale: 'The baseline is established, so the strongest live next step is a team operating read.',
         cta: { label: 'Open team diagnostic', href: teamCandidate.assessmentHref, action: 'launch' },
         metadata: buildActionMetadata(teamCandidate),
       }
@@ -181,7 +181,7 @@ function buildNextAction(
       kind: genericLaunch.category === 'team' ? 'launch_team_follow_up' : 'launch_individual_follow_up',
       label: 'Next action',
       title: `Start ${genericLaunch.title}`,
-      rationale: 'A live follow-on diagnostic is available if you want to extend this result into the next layer of analysis.',
+      rationale: 'A live follow-on diagnostic is available if you want to extend this result into the next layer.',
       cta: { label: genericLaunch.category === 'team' ? 'Open team diagnostic' : 'Start diagnostic', href: genericLaunch.assessmentHref, action: 'launch' },
       metadata: buildActionMetadata(genericLaunch),
     }
@@ -191,7 +191,7 @@ function buildNextAction(
     kind: 'none',
     label: 'Next action',
     title: 'No further live follow-on is available right now',
-    rationale: 'Use the detailed result sections below as the current working reference. Additional diagnostics can be sequenced once another live instrument is available.',
+    rationale: 'Use the detailed sections below as the working reference. Add another diagnostic when a live option is available.',
     metadata: [],
   }
 }
@@ -209,22 +209,22 @@ export function deriveIndividualResultsIntelligence(
   const currentTitle = currentItem?.title ?? seed.assessmentTitle
   const isBaselineResult = currentItem?.id === BASELINE_ASSESSMENT_ID || seed.assessmentTitle === 'Sonartra Signals'
 
-  const summaryHeadline = isBaselineResult ? 'Baseline profile ready' : `${currentTitle} ready for review`
+  const summaryHeadline = isBaselineResult ? 'Baseline ready' : `${currentTitle} ready for review`
 
   const priorityDetail =
     action.kind === 'resume_in_progress'
-      ? 'An active follow-on diagnostic already exists, so continuity matters more than opening a new path.'
+      ? 'An active follow-on already exists, so continuity matters more than opening a new path.'
       : action.kind === 'launch_team_follow_up'
-        ? 'This result is strong enough to anchor a broader team-level read.'
+        ? 'This result is strong enough to anchor a broader team read.'
         : action.kind === 'launch_individual_follow_up'
-          ? 'This result points to a clear area where a narrower diagnostic can add depth without reopening the baseline.'
-          : 'The result itself is the primary working asset for now.'
+          ? 'This result points to a clear area where a narrower diagnostic can add depth.'
+          : 'The result itself is the main working reference for now.'
 
   const unlocksDetail =
     isBaselineResult
-      ? 'This baseline can now sequence deeper individual diagnostics or frame later team-level analysis from an established reference profile.'
+      ? 'This baseline can now guide deeper individual diagnostics or frame later team analysis.'
       : seed.domainsAvailable > 0
-        ? 'This completed result adds another reference point for later comparison, retake, or team review flows.'
+        ? 'This completed result adds another reference point for later comparison, retakes, or team review.'
         : undefined
 
   const metadata = [`Completed ${seed.completedLabel}`, `${seed.domainsAvailable} interpreted domains`]
@@ -233,7 +233,7 @@ export function deriveIndividualResultsIntelligence(
   }
 
   return {
-    eyebrow: 'Results intelligence',
+    eyebrow: 'Results overview',
     summaryHeadline,
     summaryOverview: safeSummary,
     priorityLabel: 'What matters now',
