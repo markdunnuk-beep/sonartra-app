@@ -66,7 +66,7 @@ export function toneForStatus(status: string): Tone {
 
 export function Badge({ label, tone = 'slate', className }: { label: string; tone?: Tone; className?: string }) {
   return (
-    <span className={clsx('inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em]', toneClasses[tone], className)}>
+    <span className={clsx('inline-flex min-h-6 max-w-full items-center rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] leading-none whitespace-nowrap', toneClasses[tone], className)}>
       {label}
     </span>
   )
@@ -134,23 +134,23 @@ export function FilterBar({
 }) {
   return (
     <div className="rounded-[1.25rem] border border-white/[0.08] bg-bg/55 p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="relative min-w-0 flex-1 lg:max-w-md">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+        <div className="grid gap-4 lg:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)] lg:items-start">
+          <div className="relative min-w-0 lg:max-w-md">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-textSecondary" />
             <Input placeholder={searchPlaceholder} className="pl-10" />
           </div>
           {groups?.length ? (
-            <div className="grid flex-1 gap-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
               {groups.map((group) => (
-                <div key={group.label} className="rounded-2xl border border-white/[0.08] bg-panel/50 px-3 py-2.5">
+                <div key={group.label} className="flex min-w-0 flex-col gap-2 rounded-2xl border border-white/[0.08] bg-panel/50 px-3.5 py-3">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-textSecondary">{group.label}</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+                  <div className="flex min-w-0 flex-wrap content-start gap-x-2 gap-y-2">
                     {group.options.map((option, index) => (
                       <span
                         key={`${group.label}-${option}`}
                         className={clsx(
-                          'inline-flex items-center rounded-lg border px-2.5 py-1.5 text-[10px] uppercase tracking-[0.14em]',
+                          'inline-flex min-h-8 flex-none items-center rounded-lg border px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] leading-none whitespace-nowrap',
                           index === 0 ? 'border-accent/30 bg-accent/10 text-accent' : 'border-white/[0.08] bg-bg/60 text-textSecondary',
                         )}
                       >
@@ -162,26 +162,26 @@ export function FilterBar({
               ))}
             </div>
           ) : segments?.length ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {segments.map((segment, index) => (
                 <span
                   key={segment}
                   className={clsx(
-                    'inline-flex items-center rounded-xl border px-3.5 py-2 text-xs uppercase tracking-[0.14em]',
+                    'inline-flex min-h-10 items-center rounded-xl border px-3.5 py-2 text-xs uppercase tracking-[0.14em] whitespace-nowrap',
                     index === 0 ? 'border-accent/30 bg-accent/10 text-accent' : 'border-white/[0.08] bg-panel/60 text-textSecondary',
                   )}
                 >
                   {segment}
                 </span>
               ))}
-              <span className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-panel/60 px-3.5 py-2 text-xs uppercase tracking-[0.14em] text-textSecondary">
+              <span className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/[0.08] bg-panel/60 px-3.5 py-2 text-xs uppercase tracking-[0.14em] text-textSecondary whitespace-nowrap">
                 <Filter className="h-3.5 w-3.5" />
                 Filters
               </span>
             </div>
           ) : null}
         </div>
-        {trailing ? <div className="flex flex-wrap items-center gap-2">{trailing}</div> : null}
+        {trailing ? <div className="flex flex-wrap items-center gap-2 xl:justify-self-end">{trailing}</div> : null}
       </div>
     </div>
   )
