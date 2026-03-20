@@ -6,52 +6,19 @@ import {
   getAssessmentEntryRedirectTarget,
   getAssessmentEntrySignInRedirect,
   resolveAssessmentEntryRedirect,
+  SIGNALS_ASSESSMENT_WORKSPACE_PATH,
 } from '../lib/server/assessment-entry-routing'
 
-test('assessment entry routes not_started and in_progress users to the live assessment workspace', () => {
-  assert.equal(getAssessmentEntryRedirectTarget('not_started'), '/assessment/workspace')
-  assert.equal(getAssessmentEntryRedirectTarget('in_progress'), '/assessment/workspace')
+test('assessment entry route always resolves to the canonical Signals workspace route', () => {
+  assert.equal(SIGNALS_ASSESSMENT_WORKSPACE_PATH, '/assessment/workspace')
+  assert.equal(getAssessmentEntryRedirectTarget(), '/assessment/workspace')
 })
 
-test('assessment entry routes completed and non-startable states to dashboard', () => {
-  assert.equal(getAssessmentEntryRedirectTarget('completed_processing'), '/dashboard')
-  assert.equal(getAssessmentEntryRedirectTarget('ready'), '/dashboard')
-  assert.equal(getAssessmentEntryRedirectTarget('error'), '/dashboard')
-})
-
-test('assessment entry redirects unauthenticated users to sign-in and preserves the entry route as redirect_url', async () => {
-  const target = await resolveAssessmentEntryRedirect(async () => ({ authState: 'unauthenticated' }))
-
+test('assessment entry sign-in redirect preserves the canonical workspace destination', () => {
   assert.equal(ASSESSMENT_ENTRY_PATH, '/assessment-entry')
-  assert.equal(getAssessmentEntrySignInRedirect(), '/sign-in?redirect_url=%2Fassessment-entry')
-  assert.equal(target, '/sign-in?redirect_url=%2Fassessment-entry')
+  assert.equal(getAssessmentEntrySignInRedirect(), '/sign-in?redirect_url=%2Fassessment%2Fworkspace')
 })
 
-test('assessment entry uses canonical lifecycle state to choose the authenticated destination', async () => {
-  const dashboardTarget = await resolveAssessmentEntryRedirect(async () => ({
-    authState: 'authenticated',
-    userId: 'user-1',
-    lifecycle: {
-      state: 'ready',
-      latestAssessment: null,
-      latestAssessmentResult: null,
-      latestReadyResult: null,
-      message: 'ready',
-    },
-  }))
-
-  const assessmentTarget = await resolveAssessmentEntryRedirect(async () => ({
-    authState: 'authenticated',
-    userId: 'user-1',
-    lifecycle: {
-      state: 'in_progress',
-      latestAssessment: null,
-      latestAssessmentResult: null,
-      latestReadyResult: null,
-      message: 'resume',
-    },
-  }))
-
-  assert.equal(dashboardTarget, '/dashboard')
-  assert.equal(assessmentTarget, '/assessment/workspace')
+test('assessment entry redirect resolver bypasses lifecycle lookups and returns the canonical workspace path', async () => {
+  assert.equal(await resolveAssessmentEntryRedirect(), '/assessment/workspace')
 })

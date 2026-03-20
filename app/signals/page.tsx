@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { SectionHeading } from '@/components/ui/SectionHeading'
 import { measurePillars } from '@/data/mockData'
+import { SIGNALS_ASSESSMENT_WORKSPACE_PATH } from '@/lib/server/assessment-entry-routing'
 
 export default function SignalsPage() {
   return (
@@ -14,7 +15,7 @@ export default function SignalsPage() {
           eyebrow="Product"
           title="Sonartra Signals"
           description="Assessment engine for behavioural performance intelligence."
-          right={<Button href="/assessment-entry">Start Assessment</Button>}
+          right={<Button href={SIGNALS_ASSESSMENT_WORKSPACE_PATH}>Start Assessment</Button>}
         />
         <Card>
           <p className="prose-copy max-w-none">
