@@ -8,12 +8,20 @@ import { AssessmentRepositoryPage } from '../components/assessment/AssessmentRep
 import {
   buildAssessmentSections,
   buildAssessmentSummaryMetrics,
+  createAssessmentCatalogueSnapshot,
+  deriveAssessmentRepositoryItem,
   getAssessmentRepositoryInventory,
   getCollapsedAction,
   getExpandedActions,
+  getVisibleAssessmentDefinitions,
+  resolveRepositoryItemStatus,
+  resolveRepositoryVisibilityState,
 } from '../lib/assessment/assessment-repository-selectors'
+import { getCurrentAssessmentRepositoryContext } from '../lib/assessment/assessment-repository-context'
 
-const inventory = getAssessmentRepositoryInventory()
+const context = getCurrentAssessmentRepositoryContext()
+const snapshot = createAssessmentCatalogueSnapshot()
+const inventory = getAssessmentRepositoryInventory(context, snapshot)
 
 Object.assign(globalThis, { self: globalThis })
 
@@ -35,7 +43,7 @@ test('assessment repository renders the approved header content, summary metrics
   assert.doesNotMatch(html, /Available/)
 })
 
-test('summary strip counts use the locked repository metrics', () => {
+test('summary strip counts use derived config-driven repository metrics', () => {
   const metrics = buildAssessmentSummaryMetrics(inventory)
 
   assert.deepEqual(metrics.map((metric) => [metric.label, metric.value]), [
@@ -44,6 +52,55 @@ test('summary strip counts use the locked repository metrics', () => {
     ['Completed', '1'],
     ['Team Assessments', '5'],
   ])
+})
+
+test('visible catalogue items exclude hidden and archived definitions before repository derivation', () => {
+  const visibleDefinitions = getVisibleAssessmentDefinitions(context, snapshot)
+
+  assert.equal(visibleDefinitions.length, 10)
+  assert.ok(visibleDefinitions.every((definition) => definition.id !== 'shadow-hidden-role-fit'))
+  assert.ok(visibleDefinitions.every((definition) => definition.id !== 'shadow-archived-team-health'))
+})
+
+test('visibility state explicitly distinguishes visible, hidden, disabled, and archived items', () => {
+  assert.equal(
+    resolveRepositoryVisibilityState(
+      { isPublished: true, isVisibleInRepository: true, releaseState: 'live' },
+      { isEnabled: true, isHidden: false },
+    ),
+    'visible',
+  )
+
+  assert.equal(
+    resolveRepositoryVisibilityState(
+      { isPublished: true, isVisibleInRepository: true, releaseState: 'live' },
+      { isEnabled: true, isHidden: true },
+    ),
+    'hidden',
+  )
+
+  assert.equal(
+    resolveRepositoryVisibilityState(
+      { isPublished: false, isVisibleInRepository: true, releaseState: 'live' },
+      { isEnabled: true, isHidden: false },
+    ),
+    'disabled',
+  )
+
+  assert.equal(
+    resolveRepositoryVisibilityState(
+      { isPublished: true, isVisibleInRepository: true, releaseState: 'archived' },
+      { isEnabled: true, isHidden: false },
+    ),
+    'archived',
+  )
+})
+
+test('derived status precedence keeps coming soon above progress and complete states', () => {
+  assert.equal(resolveRepositoryItemStatus({ hasActiveAttempt: true, hasCompletedResult: true }, { releaseState: 'coming_soon' }), 'coming_soon')
+  assert.equal(resolveRepositoryItemStatus({ hasActiveAttempt: true, hasCompletedResult: true }, { releaseState: 'live' }), 'in_progress')
+  assert.equal(resolveRepositoryItemStatus({ hasActiveAttempt: false, hasCompletedResult: true }, { releaseState: 'live' }), 'complete')
+  assert.equal(resolveRepositoryItemStatus(null, { releaseState: 'live' }), 'not_started')
 })
 
 test('section sorting follows the locked status precedence and preserves product order within a status', () => {
@@ -87,12 +144,51 @@ test('status and CTA mapping follow the approved repository rules including comi
   const complete = inventory.find((item) => item.id === 'signals')
   const comingSoon = inventory.find((item) => item.id === 'decision-profile')
 
-  assert.equal(getCollapsedAction(notStarted!).label, 'Start')
-  assert.equal(getCollapsedAction(inProgress!).label, 'Resume')
-  assert.equal(getCollapsedAction(complete!).label, 'View Results')
+  assert.equal(getCollapsedAction(notStarted!)?.label, 'Start')
+  assert.equal(getCollapsedAction(inProgress!)?.label, 'Resume')
+  assert.equal(getCollapsedAction(complete!)?.label, 'View Results')
   assert.equal(getExpandedActions(complete!).map((action) => action.label).join(' | '), 'View Results | Retake Assessment')
   assert.equal(getCollapsedAction(comingSoon!), null)
   assert.deepEqual(getExpandedActions(comingSoon!), [])
+})
+
+test('advanced outputs remain a secondary label while primary repository status stays not started', () => {
+  const teamDynamics = inventory.find((item) => item.id === 'team-dynamics')
+
+  assert.equal(teamDynamics?.status, 'not_started')
+  assert.equal(teamDynamics?.hasAdvancedOutputs, true)
+  assert.match(teamDynamics?.outputRows[1]?.label ?? '', /Advanced outputs/)
+})
+
+test('derived repository item exposes admin-ready catalogue and availability metadata without leaking it into UI status', () => {
+  const definition = snapshot.definitions.find((item) => item.id === 'manager-effectiveness')
+  const availability = snapshot.availability.find((item) => item.assessmentId === 'manager-effectiveness')
+  const derived = deriveAssessmentRepositoryItem(definition!, availability!, null, context)
+
+  assert.equal(derived.status, 'not_started')
+  assert.equal(derived.releaseState, 'live')
+  assert.equal(derived.visibilityState, 'visible')
+  assert.equal(derived.availabilityScope, 'role')
+  assert.equal(derived.advancedOutputsPlanRequirement, 'enterprise')
+  assert.equal(derived.fullAccessPlanRequirement, 'growth')
+})
+
+test('ui still renders expected inventory from derived selectors', () => {
+  assert.deepEqual(
+    inventory.map((item) => [item.title, item.status, item.hasAdvancedOutputs]),
+    [
+      ['Sonartra Signals', 'complete', false],
+      ['Leadership Effectiveness', 'not_started', false],
+      ['Burnout Risk', 'in_progress', false],
+      ['Conflict Style', 'not_started', false],
+      ['Decision Profile', 'coming_soon', false],
+      ['Team Dynamics', 'not_started', true],
+      ['Team Alignment', 'not_started', false],
+      ['Manager Effectiveness', 'not_started', true],
+      ['Culture Risk', 'not_started', true],
+      ['Decision Friction Mapping', 'coming_soon', false],
+    ],
+  )
 })
 
 test('only one card stays expanded per section and completed retakes open the snapshot confirmation modal', () => {
