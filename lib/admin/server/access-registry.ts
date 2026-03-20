@@ -37,64 +37,137 @@ export interface AdminAccessIdentityDTO {
   authBinding?: string | null
   lastActivityAt?: string | null
   createdAt: string
-  roles: AdminAccessIdentityRoleDTO[]
-  memberships: AdminAccessMembershipDTO[]
-  auditEvents: AdminAccessAuditEventDTO[]
+  roles?: AdminAccessIdentityRoleDTO[]
+  memberships?: AdminAccessMembershipDTO[]
+  auditEvents?: AdminAccessAuditEventDTO[]
 }
 
 interface IdentityRow {
-  id: string
-  email: string
-  full_name: string
-  identity_type: 'internal' | 'organisation'
+  id: string | null
+  email: string | null
+  full_name: string | null
+  identity_type: string | null
   auth_provider: string | null
   auth_subject: string | null
-  status: 'active' | 'inactive' | 'suspended' | 'invited'
-  last_activity_at: string | null
-  created_at: string
+  status: string | null
+  last_activity_at: string | Date | null
+  created_at: string | Date | null
 }
 
 interface RoleRow {
-  identity_id: string
-  key: string
-  label: string
+  identity_id: string | null
+  key: string | null
+  label: string | null
   organisation_id: string | null
 }
 
 interface MembershipRow {
-  identity_id: string
-  organisation_id: string
-  organisation_name: string
-  organisation_slug: string
+  identity_id: string | null
+  organisation_id: string | null
+  organisation_name: string | null
+  organisation_slug: string | null
   organisation_country: string | null
-  organisation_status: string
-  organisation_created_at: string
-  membership_role: string
-  membership_status: string
-  joined_at: string | null
-  invited_at: string | null
-  last_activity_at: string | null
+  organisation_status: string | null
+  organisation_created_at: string | Date | null
+  membership_role: string | null
+  membership_status: string | null
+  joined_at: string | Date | null
+  invited_at: string | Date | null
+  last_activity_at: string | Date | null
 }
 
 interface AuditRow {
-  id: string
-  identity_id: string
-  event_type: string
-  event_summary: string
+  id: string | null
+  identity_id: string | null
+  event_type: string | null
+  event_summary: string | null
   actor_name: string | null
-  happened_at: string
+  happened_at: string | Date | null
 }
 
-function buildAuthBinding(authProvider: string | null, authSubject: string | null): string | null {
-  if (!authProvider && !authSubject) {
+const VALID_IDENTITY_TYPES = new Set<AdminAccessIdentityDTO['identityType']>(['internal', 'organisation'])
+const VALID_IDENTITY_STATUSES = new Set<AdminAccessIdentityDTO['status']>(['active', 'inactive', 'suspended', 'invited'])
+
+type TimestampInput = string | Date | null | undefined
+
+function logAccessRegistryInvariant(message: string, details?: Record<string, unknown>) {
+  console.error(`[admin-access-registry] ${message}`, details ?? {})
+}
+
+function normaliseTimestamp(value: TimestampInput): string | null {
+  if (!value) {
     return null
   }
 
-  if (authProvider && authSubject) {
-    return `${authProvider}:${authSubject}`
+  if (typeof value === 'string') {
+    const timestamp = Date.parse(value)
+    return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null
   }
 
-  return authProvider ?? authSubject
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString()
+  }
+
+  return null
+}
+
+function normaliseRequiredString(value: string | null | undefined, fieldName: string, details?: Record<string, unknown>): string | null {
+  const trimmed = value?.trim()
+
+  if (!trimmed) {
+    logAccessRegistryInvariant(`Missing required ${fieldName} while assembling admin access registry data.`, details)
+    return null
+  }
+
+  return trimmed
+}
+
+function normaliseOptionalString(value: string | null | undefined): string | null {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : null
+}
+
+function buildAuthBinding(authProvider: string | null, authSubject: string | null): string | null {
+  const provider = normaliseOptionalString(authProvider)
+  const subject = normaliseOptionalString(authSubject)
+
+  if (!provider && !subject) {
+    return null
+  }
+
+  if (provider && subject) {
+    return `${provider}:${subject}`
+  }
+
+  return provider ?? subject
+}
+
+function normaliseIdentityType(value: string | null, details: Record<string, unknown>): AdminAccessIdentityDTO['identityType'] | null {
+  if (value && VALID_IDENTITY_TYPES.has(value as AdminAccessIdentityDTO['identityType'])) {
+    return value as AdminAccessIdentityDTO['identityType']
+  }
+
+  logAccessRegistryInvariant('Unexpected admin identity_type encountered while assembling access registry DTO.', {
+    ...details,
+    identityType: value,
+  })
+  return null
+}
+
+function normaliseIdentityStatus(value: string | null, details: Record<string, unknown>): AdminAccessIdentityDTO['status'] | null {
+  if (value && VALID_IDENTITY_STATUSES.has(value as AdminAccessIdentityDTO['status'])) {
+    return value as AdminAccessIdentityDTO['status']
+  }
+
+  logAccessRegistryInvariant('Unexpected admin identity status encountered while assembling access registry DTO.', {
+    ...details,
+    status: value,
+  })
+  return null
+}
+
+function sortText(value: string | null | undefined): string {
+  return value?.toLowerCase() ?? ''
 }
 
 function assembleIdentityDtos(identities: IdentityRow[], roles: RoleRow[], memberships: MembershipRow[], auditRows: AuditRow[]): AdminAccessIdentityDTO[] {
@@ -102,59 +175,106 @@ function assembleIdentityDtos(identities: IdentityRow[], roles: RoleRow[], membe
   const membershipsByIdentity = new Map<string, AdminAccessMembershipDTO[]>()
   const auditByIdentity = new Map<string, AdminAccessAuditEventDTO[]>()
 
-  for (const role of roles) {
-    const current = rolesByIdentity.get(role.identity_id) ?? []
+  for (const role of roles ?? []) {
+    const identityId = normaliseRequiredString(role.identity_id, 'role.identity_id', { role })
+    const key = normaliseRequiredString(role.key, 'role.key', { role })
+    const label = normaliseRequiredString(role.label, 'role.label', { role })
+
+    if (!identityId || !key || !label) {
+      continue
+    }
+
+    const current = rolesByIdentity.get(identityId) ?? []
     current.push({
-      key: role.key,
-      label: role.label,
-      organisationId: role.organisation_id,
+      key,
+      label,
+      organisationId: normaliseOptionalString(role.organisation_id),
     })
-    rolesByIdentity.set(role.identity_id, current)
+    rolesByIdentity.set(identityId, current)
   }
 
-  for (const membership of memberships) {
-    const current = membershipsByIdentity.get(membership.identity_id) ?? []
+  for (const membership of memberships ?? []) {
+    const identityId = normaliseRequiredString(membership.identity_id, 'membership.identity_id', { membership })
+    const organisationId = normaliseRequiredString(membership.organisation_id, 'membership.organisation_id', { membership })
+    const organisationName = normaliseRequiredString(membership.organisation_name, 'membership.organisation.name', { membership })
+    const membershipRole = normaliseRequiredString(membership.membership_role, 'membership.membership_role', { membership })
+    const membershipStatus = normaliseRequiredString(membership.membership_status, 'membership.membership_status', { membership })
+
+    if (!identityId || !organisationId || !organisationName || !membershipRole || !membershipStatus) {
+      continue
+    }
+
+    const current = membershipsByIdentity.get(identityId) ?? []
     current.push({
-      organisationId: membership.organisation_id,
-      organisationName: membership.organisation_name,
-      organisationSlug: membership.organisation_slug,
-      organisationCountry: membership.organisation_country,
-      organisationStatus: membership.organisation_status,
-      organisationCreatedAt: membership.organisation_created_at,
-      membershipRole: membership.membership_role,
-      membershipStatus: membership.membership_status,
-      joinedAt: membership.joined_at,
-      invitedAt: membership.invited_at,
-      lastActivityAt: membership.last_activity_at,
+      organisationId,
+      organisationName,
+      organisationSlug: normaliseOptionalString(membership.organisation_slug),
+      organisationCountry: normaliseOptionalString(membership.organisation_country),
+      organisationStatus: normaliseOptionalString(membership.organisation_status),
+      organisationCreatedAt: normaliseTimestamp(membership.organisation_created_at),
+      membershipRole,
+      membershipStatus,
+      joinedAt: normaliseTimestamp(membership.joined_at),
+      invitedAt: normaliseTimestamp(membership.invited_at),
+      lastActivityAt: normaliseTimestamp(membership.last_activity_at),
     })
-    membershipsByIdentity.set(membership.identity_id, current)
+    membershipsByIdentity.set(identityId, current)
   }
 
-  for (const auditRow of auditRows) {
-    const current = auditByIdentity.get(auditRow.identity_id) ?? []
+  for (const auditRow of auditRows ?? []) {
+    const identityId = normaliseRequiredString(auditRow.identity_id, 'audit.identity_id', { auditRow })
+    const auditId = normaliseRequiredString(auditRow.id, 'audit.id', { auditRow })
+    const eventType = normaliseRequiredString(auditRow.event_type, 'audit.event_type', { auditRow })
+    const summary = normaliseRequiredString(auditRow.event_summary, 'audit.event_summary', { auditRow })
+    const happenedAt = normaliseTimestamp(auditRow.happened_at)
+
+    if (!identityId || !auditId || !eventType || !summary || !happenedAt) {
+      if (!happenedAt) {
+        logAccessRegistryInvariant('Missing or invalid audit.happened_at while assembling access registry DTO.', { auditRow })
+      }
+      continue
+    }
+
+    const current = auditByIdentity.get(identityId) ?? []
     current.push({
-      id: auditRow.id,
-      eventType: auditRow.event_type,
-      summary: auditRow.event_summary,
-      actorName: auditRow.actor_name,
-      happenedAt: auditRow.happened_at,
+      id: auditId,
+      eventType,
+      summary,
+      actorName: normaliseOptionalString(auditRow.actor_name),
+      happenedAt,
     })
-    auditByIdentity.set(auditRow.identity_id, current)
+    auditByIdentity.set(identityId, current)
   }
 
-  return identities.map((identity) => ({
-    id: identity.id,
-    fullName: identity.full_name,
-    email: identity.email,
-    identityType: identity.identity_type,
-    status: identity.status,
-    authBinding: buildAuthBinding(identity.auth_provider, identity.auth_subject),
-    lastActivityAt: identity.last_activity_at,
-    createdAt: identity.created_at,
-    roles: (rolesByIdentity.get(identity.id) ?? []).sort((left, right) => left.label.localeCompare(right.label)),
-    memberships: (membershipsByIdentity.get(identity.id) ?? []).sort((left, right) => left.organisationName.localeCompare(right.organisationName)),
-    auditEvents: (auditByIdentity.get(identity.id) ?? []).sort((left, right) => Date.parse(right.happenedAt) - Date.parse(left.happenedAt)),
-  }))
+  return (identities ?? []).flatMap((identity) => {
+    const id = normaliseRequiredString(identity.id, 'identity.id', { identity })
+    const fullName = normaliseRequiredString(identity.full_name, 'identity.full_name', { identity })
+    const email = normaliseRequiredString(identity.email, 'identity.email', { identity })
+    const identityType = normaliseIdentityType(identity.identity_type, { identityId: identity.id, identity })
+    const status = normaliseIdentityStatus(identity.status, { identityId: identity.id, identity })
+    const createdAt = normaliseTimestamp(identity.created_at)
+
+    if (!id || !fullName || !email || !identityType || !status || !createdAt) {
+      if (!createdAt) {
+        logAccessRegistryInvariant('Missing or invalid identity.created_at while assembling access registry DTO.', { identity })
+      }
+      return []
+    }
+
+    return [{
+      id,
+      fullName,
+      email,
+      identityType,
+      status,
+      authBinding: buildAuthBinding(identity.auth_provider, identity.auth_subject),
+      lastActivityAt: normaliseTimestamp(identity.last_activity_at),
+      createdAt,
+      roles: [...(rolesByIdentity.get(id) ?? [])].sort((left, right) => sortText(left.label).localeCompare(sortText(right.label))),
+      memberships: [...(membershipsByIdentity.get(id) ?? [])].sort((left, right) => sortText(left.organisationName).localeCompare(sortText(right.organisationName))),
+      auditEvents: [...(auditByIdentity.get(id) ?? [])].sort((left, right) => Date.parse(right.happenedAt) - Date.parse(left.happenedAt)),
+    }]
+  })
 }
 
 async function getIdentityRows(identityIds?: string[]): Promise<IdentityRow[]> {
@@ -178,7 +298,7 @@ async function getIdentityRows(identityIds?: string[]): Promise<IdentityRow[]> {
     hasFilter ? [identityIds] : undefined,
   )
 
-  return result.rows
+  return result.rows ?? []
 }
 
 async function getRoleRows(identityIds?: string[]): Promise<RoleRow[]> {
@@ -198,7 +318,7 @@ async function getRoleRows(identityIds?: string[]): Promise<RoleRow[]> {
     hasFilter ? [identityIds] : undefined,
   )
 
-  return result.rows
+  return result.rows ?? []
 }
 
 async function getMembershipRows(identityIds?: string[]): Promise<MembershipRow[]> {
@@ -226,7 +346,7 @@ async function getMembershipRows(identityIds?: string[]): Promise<MembershipRow[
     hasFilter ? [identityIds] : undefined,
   )
 
-  return result.rows
+  return result.rows ?? []
 }
 
 async function getAuditRows(identityIds?: string[]): Promise<AuditRow[]> {
@@ -248,39 +368,68 @@ async function getAuditRows(identityIds?: string[]): Promise<AuditRow[]> {
     hasFilter ? [identityIds] : undefined,
   )
 
-  return result.rows
+  return result.rows ?? []
 }
 
 export async function getAdminAccessRegistryData(): Promise<AdminAccessIdentityDTO[]> {
-  const [identities, roles, memberships, auditRows] = await Promise.all([
-    getIdentityRows(),
-    getRoleRows(),
-    getMembershipRows(),
-    getAuditRows(),
-  ])
+  try {
+    const [identities, roles, memberships, auditRows] = await Promise.all([
+      getIdentityRows(),
+      getRoleRows(),
+      getMembershipRows(),
+      getAuditRows(),
+    ])
 
-  return assembleIdentityDtos(identities, roles, memberships, auditRows)
+    return assembleIdentityDtos(identities ?? [], roles ?? [], memberships ?? [], auditRows ?? [])
+  } catch (error) {
+    console.error('[admin-access-registry] Failed to load admin access registry collection.', error)
+    return []
+  }
 }
 
 export async function getAdminIdentityById(id: string): Promise<AdminAccessIdentityDTO | null> {
-  const [identities, roles, memberships, auditRows] = await Promise.all([
-    getIdentityRows([id]),
-    getRoleRows([id]),
-    getMembershipRows([id]),
-    getAuditRows([id]),
-  ])
+  try {
+    const [identities, roles, memberships, auditRows] = await Promise.all([
+      getIdentityRows([id]),
+      getRoleRows([id]),
+      getMembershipRows([id]),
+      getAuditRows([id]),
+    ])
 
-  return assembleIdentityDtos(identities, roles, memberships, auditRows)[0] ?? null
+    return assembleIdentityDtos(identities ?? [], roles ?? [], memberships ?? [], auditRows ?? [])[0] ?? null
+  } catch (error) {
+    console.error('[admin-access-registry] Failed to load admin access registry identity.', { id, error })
+    return null
+  }
 }
 
 export async function getAdminIdentityAuditHistory(id: string): Promise<AdminAccessAuditEventDTO[]> {
-  const auditRows = await getAuditRows([id])
+  try {
+    const auditRows = await getAuditRows([id])
 
-  return auditRows.map((auditRow) => ({
-    id: auditRow.id,
-    eventType: auditRow.event_type,
-    summary: auditRow.event_summary,
-    actorName: auditRow.actor_name,
-    happenedAt: auditRow.happened_at,
-  }))
+    return (auditRows ?? []).flatMap((auditRow) => {
+      const auditId = normaliseRequiredString(auditRow.id, 'audit.id', { auditRow, identityId: id })
+      const eventType = normaliseRequiredString(auditRow.event_type, 'audit.event_type', { auditRow, identityId: id })
+      const summary = normaliseRequiredString(auditRow.event_summary, 'audit.event_summary', { auditRow, identityId: id })
+      const happenedAt = normaliseTimestamp(auditRow.happened_at)
+
+      if (!auditId || !eventType || !summary || !happenedAt) {
+        if (!happenedAt) {
+          logAccessRegistryInvariant('Missing or invalid audit.happened_at while loading identity audit history.', { auditRow, identityId: id })
+        }
+        return []
+      }
+
+      return [{
+        id: auditId,
+        eventType,
+        summary,
+        actorName: normaliseOptionalString(auditRow.actor_name),
+        happenedAt,
+      }]
+    })
+  } catch (error) {
+    console.error('[admin-access-registry] Failed to load admin identity audit history.', { id, error })
+    return []
+  }
 }

@@ -10,7 +10,10 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
     notFound()
   }
 
-  const auditEvents = await getAdminIdentityAuditHistory(params.id)
+  const auditEvents = await getAdminIdentityAuditHistory(params.id).catch((error) => {
+    console.error('[admin-user-detail-page] Failed to load access registry audit history.', { id: params.id, error })
+    return []
+  })
   const accessRegistryData = mapAccessRegistryDtosToDomainData([{ ...identity, auditEvents }])
 
   return <AdminUserDetailWireframePage userId={params.id} accessRegistryData={accessRegistryData} />

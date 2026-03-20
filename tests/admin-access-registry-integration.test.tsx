@@ -88,7 +88,30 @@ test('maps internal identities without memberships into the existing admin domai
   assert.equal(user.kind, 'internal_admin')
   assert.equal(user.internalAdminRole, 'super_admin')
   assert.equal(user.primaryOrganisationId, null)
-  assert.equal(user.recentActivity.lastActiveAt, '2026-03-20T07:18:00Z')
+  assert.equal(user.recentActivity.lastActiveAt, '2026-03-20T07:18:00.000Z')
+})
+
+test('defaults optional nested relation arrays to empty collections during mapping', () => {
+  const data = mapAccessRegistryDtosToDomainData([
+    {
+      id: '30000000-0000-4000-8000-000000000010',
+      fullName: 'Taylor Brooks',
+      email: 'taylor.brooks@sonartra.com',
+      identityType: 'internal',
+      status: 'active',
+      authBinding: null,
+      lastActivityAt: null,
+      createdAt: '2026-03-10T12:00:00.000Z',
+      roles: undefined,
+      memberships: undefined,
+      auditEvents: undefined,
+    },
+  ])
+
+  assert.equal(data.users.length, 1)
+  assert.deepEqual(data.organisations, [])
+  assert.deepEqual(data.memberships, [])
+  assert.deepEqual(data.auditEvents, [])
 })
 
 test('maps multi-org memberships and audit history into domain data for app-layer selectors', () => {
