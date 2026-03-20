@@ -27,6 +27,12 @@ export interface AdminTabItem {
   count?: string | number
 }
 
+export interface AdminValidationIssue {
+  label: string
+  state: 'pass' | 'warning' | 'error'
+  detail: string
+}
+
 export function formatAdminTimestamp(value: string | null): string {
   if (!value) {
     return 'Not available'
@@ -110,15 +116,23 @@ export function getAssessmentAuditEvents(assessmentId: string): AuditLogEvent[] 
   const versions = getAssessmentVersionsForAssessment(assessmentId)
   const versionIds = new Set(versions.map((version) => version.id))
 
-  return auditLogEvents.filter((event) => {
-    return event.entity.entityId === assessmentId || versionIds.has(event.entity.entityId)
-  })
+  return auditLogEvents.filter((event) => event.entity.entityId === assessmentId || versionIds.has(event.entity.entityId))
 }
 
 export function getEntityAuditEvents(entityIds: string[]): AuditLogEvent[] {
   const entityIdSet = new Set(entityIds)
 
   return auditLogEvents.filter((event) => entityIdSet.has(event.entity.entityId))
+}
+
+export function getOrganisationAuditEvents(organisationId: string): AuditLogEvent[] {
+  const membershipIds = getOrganisationMemberships(organisationId).map((membership) => membership.id)
+
+  return getEntityAuditEvents([organisationId, ...membershipIds])
+}
+
+export function getVersionAuditEvents(versionId: string): AuditLogEvent[] {
+  return getEntityAuditEvents([versionId])
 }
 
 export function getOrganisationSummary(organisation: Organisation) {
@@ -164,6 +178,40 @@ export function getAssessmentSummary(assessment: Assessment) {
   }
 }
 
+export function getValidationIssues(version: AssessmentVersion): AdminValidationIssue[] {
+  return [
+    {
+      label: 'Schema integrity',
+      state: version.validationSummary.ruleErrors > 0 ? 'error' : 'pass',
+      detail:
+        version.validationSummary.ruleErrors > 0
+          ? `${version.validationSummary.ruleErrors} structural rule issue${version.validationSummary.ruleErrors === 1 ? '' : 's'} must be remediated before release.`
+          : 'Question groups, identifiers, and scoring keys align with the expected import contract.',
+    },
+    {
+      label: 'Interpretation coverage',
+      state: version.validationSummary.ruleWarnings > 0 ? 'warning' : 'pass',
+      detail:
+        version.validationSummary.ruleWarnings > 0
+          ? `${version.validationSummary.ruleWarnings} warning-level interpretation mapping issue${version.validationSummary.ruleWarnings === 1 ? '' : 's'} require review before publish.`
+          : 'Interpretation narratives are fully covered.',
+    },
+    {
+      label: 'Preview package',
+      state: version.validationSummary.previewReady ? 'pass' : 'error',
+      detail: version.validationSummary.previewReady ? 'Preview package generated successfully.' : 'Preview package blocked until structural issues are resolved.',
+    },
+  ]
+}
+
+export function getReleaseBlockers(version: AssessmentVersion): string[] {
+  return [
+    version.validationSummary.ruleErrors > 0 ? 'Rule errors remain unresolved.' : null,
+    !version.validationSummary.previewReady ? 'Preview bundle has not been generated.' : null,
+    version.status !== AssessmentVersionStatus.Validated && version.publishStatus !== PublishStatus.Published ? 'Validation sign-off not yet complete.' : null,
+  ].filter(Boolean) as string[]
+}
+
 export function getVersionReleaseSteps(version: AssessmentVersion) {
   return [
     {
@@ -178,12 +226,22 @@ export function getVersionReleaseSteps(version: AssessmentVersion) {
     },
     {
       label: 'Preview approval',
-      state: version.validationSummary.previewReady ? (version.status === AssessmentVersionStatus.Validated || version.status === AssessmentVersionStatus.Live ? 'complete' : 'current') : 'blocked',
+      state:
+        version.validationSummary.previewReady
+          ? version.status === AssessmentVersionStatus.Validated || version.status === AssessmentVersionStatus.Live
+            ? 'complete'
+            : 'current'
+          : 'blocked',
       detail: version.validationSummary.previewReady ? 'Preview bundle available for release reviewers.' : 'Preview bundle blocked until structural issues are resolved.',
     },
     {
       label: 'Publish decision',
-      state: [AssessmentVersionStatus.Live].includes(version.status) || version.publishStatus === PublishStatus.Published ? 'complete' : version.status === AssessmentVersionStatus.Validated ? 'current' : 'pending',
+      state:
+        [AssessmentVersionStatus.Live].includes(version.status) || version.publishStatus === PublishStatus.Published
+          ? 'complete'
+          : version.status === AssessmentVersionStatus.Validated
+            ? 'current'
+            : 'pending',
       detail: getStatusLabel(version.publishStatus),
     },
   ]

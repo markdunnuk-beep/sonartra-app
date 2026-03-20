@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
-import { findAssessmentBySlug, findAssessmentVersion, findOrganisationBySlug, findUserById, getAssessmentTabs } from '../lib/admin/wireframe'
+import { findAssessmentBySlug, findAssessmentVersion, findOrganisationBySlug, findUserById, getAssessmentTabs, getReleaseBlockers, getValidationIssues } from '../lib/admin/wireframe'
 
 test('wireframe selectors resolve typed entities for detail routes', () => {
   assert.equal(findOrganisationBySlug('northstar-logistics')?.name, 'Northstar Logistics')
@@ -21,6 +21,28 @@ test('assessment tabs preserve overview, version, and new/import hierarchy', () 
     ['Overview', 'Versions', 'New / Import'],
   )
   assert.equal(tabs.find((tab) => tab.label === 'Versions')?.current, true)
+})
+
+test('validation and release helpers derive consistent readiness signals from typed versions', () => {
+  const validatedVersion = findAssessmentVersion('sonartra-signals', '2.2.0')
+  const inReviewVersion = findAssessmentVersion('team-dynamics', '1.1.0')
+
+  assert.ok(validatedVersion)
+  assert.ok(inReviewVersion)
+
+  assert.equal(getValidationIssues(validatedVersion!).some((issue) => issue.state === 'error'), false)
+  assert.equal(getReleaseBlockers(validatedVersion!).length, 0)
+  assert.equal(getValidationIssues(inReviewVersion!).some((issue) => issue.state === 'error'), true)
+  assert.equal(getReleaseBlockers(inReviewVersion!).length > 0, true)
+})
+
+test('wireframe surface files remain server-safe and avoid client directives', async () => {
+  const files = ['../components/admin/surfaces/AdminWireframePrimitives.tsx', '../components/admin/surfaces/AdminWireframeSurfaces.tsx']
+
+  for (const file of files) {
+    const source = await readFile(new URL(file, import.meta.url), 'utf8')
+    assert.doesNotMatch(source, /^['\"]use client['\"]/m)
+  }
 })
 
 test('admin routes point to the shared high-fidelity wireframe surfaces', async () => {

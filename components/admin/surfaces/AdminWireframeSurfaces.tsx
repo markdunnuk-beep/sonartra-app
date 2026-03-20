@@ -1,35 +1,30 @@
-import { clsx } from 'clsx'
-import {
-  AlertTriangle,
-  ArrowRight,
-  Building2,
-  CheckCircle2,
-  ChevronRight,
-  ClipboardList,
-  Clock3,
-  Eye,
-  FileSearch,
-  Filter,
-  GitBranch,
-  LayoutTemplate,
-  Lock,
-  Rocket,
-  Search,
-  Shield,
-  Sparkles,
-  Target,
-  UserCog,
-  Users2,
-} from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronRight, ClipboardList, Clock3, GitBranch } from 'lucide-react'
 import Link from 'next/link'
-import { ReactNode } from 'react'
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
 import { AdminDashboardSurface } from '@/components/admin/dashboard/AdminDashboardSurface'
+import {
+  Badge,
+  EmptyState,
+  FilterBar,
+  MetaGrid,
+  MetaPanel,
+  MetricCard,
+  PanelActionRow,
+  QueueItem,
+  ReleaseRail,
+  StatusBadge,
+  SurfaceSection,
+  Table,
+  Tabs,
+  TimelineItem,
+  toneForStatus,
+} from '@/components/admin/surfaces/AdminWireframePrimitives'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { Input } from '@/components/ui/Input'
+import { adminDashboardModel } from '@/lib/admin/dashboard'
+import { assessmentVersions, assessments, auditLogEvents, getSeatUtilisationPercent, getStatusLabel, organisations, adminUsers } from '@/lib/admin/domain'
+import { AssessmentVersionStatus, PublishStatus } from '@/lib/admin/domain/assessments'
 import {
-  AdminTabItem,
   findAssessmentBySlug,
   findAssessmentVersion,
   findOrganisationBySlug,
@@ -40,295 +35,74 @@ import {
   getAssessmentTabs,
   getDashboardPrimaryRelease,
   getKindLabel,
+  getOrganisationAuditEvents,
   getOrganisationSummary,
+  getReleaseBlockers,
   getUserSummary,
-  getVersionReleaseSteps,
+  getValidationIssues,
+  getVersionAuditEvents,
 } from '@/lib/admin/wireframe'
-import {
-  assessmentVersions,
-  assessments,
-  auditLogEvents,
-  getSeatUtilisationPercent,
-  getStatusLabel,
-  organisations,
-  adminUsers,
-} from '@/lib/admin/domain'
-import { adminDashboardModel } from '@/lib/admin/dashboard'
-import { AssessmentVersion, AssessmentVersionStatus, PublishStatus } from '@/lib/admin/domain/assessments'
-import { AuditLogEvent } from '@/lib/admin/domain/audit'
-import { Organisation } from '@/lib/admin/domain/organisations'
-import { User, UserKind } from '@/lib/admin/domain/users'
+import type { AdminValidationIssue } from '@/lib/admin/wireframe'
+import type { AssessmentVersion } from '@/lib/admin/domain/assessments'
 
-const statusToneMap = {
-  active: 'emerald',
-  implementation: 'amber',
-  suspended: 'rose',
-  maintenance: 'amber',
-  retired: 'slate',
-  invited: 'amber',
-  deactivated: 'slate',
-  draft: 'slate',
-  in_review: 'amber',
-  validated: 'sky',
-  live: 'emerald',
-  archived: 'slate',
-  unpublished: 'slate',
-  scheduled: 'sky',
-  published: 'emerald',
-  paused: 'amber',
-  rolled_back: 'rose',
-  super_admin: 'sky',
-  platform_admin: 'sky',
-  assessment_admin: 'violet',
-  customer_success_admin: 'emerald',
-  support_admin: 'amber',
-  internal_admin: 'sky',
-  organisation_user: 'slate',
-  owner: 'sky',
-  admin: 'violet',
-  manager: 'emerald',
-  member: 'slate',
-  analyst: 'amber',
-} as const
+function ValidationIssueCard({ issue }: { issue: AdminValidationIssue }) {
+  const tone = toneForStatus(issue.state)
+  const Icon = issue.state === 'pass' ? CheckCircle2 : issue.state === 'warning' ? AlertTriangle : Clock3
 
-type Tone = 'slate' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet'
-
-const toneClasses: Record<Tone, string> = {
-  slate: 'border-white/10 bg-white/[0.03] text-textSecondary',
-  sky: 'border-sky-400/25 bg-sky-400/[0.08] text-sky-100',
-  emerald: 'border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-100',
-  amber: 'border-amber-400/25 bg-amber-400/[0.08] text-amber-100',
-  rose: 'border-rose-400/25 bg-rose-400/[0.08] text-rose-100',
-  violet: 'border-violet-400/25 bg-violet-400/[0.08] text-violet-100',
-}
-
-function toneForStatus(status: string): Tone {
-  return statusToneMap[status as keyof typeof statusToneMap] ?? 'slate'
-}
-
-function Badge({ label, tone = 'slate' }: { label: string; tone?: Tone }) {
-  return <span className={clsx('inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em]', toneClasses[tone])}>{label}</span>
-}
-
-function StatusBadge({ status }: { status: string }) {
-  return <Badge label={getStatusLabel(status)} tone={toneForStatus(status)} />
-}
-
-function SurfaceSection({ title, eyebrow, description, actions, children }: { title: string; eyebrow?: string; description?: string; actions?: ReactNode; children: ReactNode }) {
   return (
-    <Card className="px-6 py-5 sm:px-7 sm:py-6">
-      <div className="flex flex-col gap-4 border-b border-white/[0.06] pb-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
-          {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight text-textPrimary">{title}</h2>
-            {description ? <p className="mt-2 max-w-3xl text-sm leading-6 text-textSecondary">{description}</p> : null}
-          </div>
+    <div className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-4">
+      <div className="flex items-start gap-3">
+        <div className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl border ${tone === 'emerald' ? 'border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-100' : tone === 'amber' ? 'border-amber-400/25 bg-amber-400/[0.08] text-amber-100' : 'border-rose-400/25 bg-rose-400/[0.08] text-rose-100'}`}>
+          <Icon className="h-4 w-4" />
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-      </div>
-      <div className="mt-5">{children}</div>
-    </Card>
-  )
-}
-
-function MetricCard({ label, value, detail, trend }: { label: string; value: string; detail: string; trend?: string }) {
-  return (
-    <Card className="min-h-[158px] border-white/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] px-5 py-5 sm:px-6 sm:py-6">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">{label}</p>
-      <p className="mt-3 text-[2.3rem] font-semibold tracking-[-0.04em] text-textPrimary">{value}</p>
-      {trend ? <p className="mt-2 text-xs uppercase tracking-[0.14em] text-accent">{trend}</p> : null}
-      <p className="mt-4 border-t border-white/[0.06] pt-4 text-sm leading-6 text-textSecondary">{detail}</p>
-    </Card>
-  )
-}
-
-function MetaGrid({ items, columns = 4 }: { items: Array<{ label: string; value: string; hint?: string }>; columns?: 2 | 3 | 4 }) {
-  const gridClass = columns === 2 ? 'md:grid-cols-2' : columns === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2 xl:grid-cols-4'
-
-  return (
-    <div className={clsx('grid gap-3', gridClass)}>
-      {items.map((item) => (
-        <div key={item.label} className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-3.5">
-          <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">{item.label}</p>
-          <p className="mt-2 text-sm font-medium text-textPrimary">{item.value}</p>
-          {item.hint ? <p className="mt-1 text-xs leading-5 text-textSecondary">{item.hint}</p> : null}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function FilterBar({ searchPlaceholder, segments, trailing }: { searchPlaceholder: string; segments: string[]; trailing?: ReactNode }) {
-  return (
-    <div className="rounded-[1.25rem] border border-white/[0.08] bg-bg/55 p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="relative min-w-0 flex-1 lg:max-w-md">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-textSecondary" />
-            <Input placeholder={searchPlaceholder} className="pl-10" />
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-textPrimary">{issue.label}</p>
+            <Badge label={issue.state} tone={tone} />
           </div>
-          <div className="flex flex-wrap gap-2">
-            {segments.map((segment, index) => (
-              <button
-                key={segment}
-                type="button"
-                className={clsx(
-                  'rounded-xl border px-3.5 py-2 text-xs uppercase tracking-[0.14em] transition-colors',
-                  index === 0 ? 'border-accent/30 bg-accent/10 text-accent' : 'border-white/[0.08] bg-panel/60 text-textSecondary hover:border-accent/20 hover:text-textPrimary',
-                )}
-              >
-                {segment}
-              </button>
-            ))}
-            <button type="button" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-panel/60 px-3.5 py-2 text-xs uppercase tracking-[0.14em] text-textSecondary hover:border-accent/20 hover:text-textPrimary">
-              <Filter className="h-3.5 w-3.5" />
-              Filters
-            </button>
-          </div>
+          <p className="mt-2 text-sm leading-6 text-textSecondary">{issue.detail}</p>
         </div>
-        {trailing ? <div className="flex flex-wrap items-center gap-2">{trailing}</div> : null}
       </div>
     </div>
   )
 }
 
-function Tabs({ items }: { items: AdminTabItem[] }) {
+function ReadinessBlockers({ blockers }: { blockers: string[] }) {
   return (
-    <div className="inline-flex flex-wrap gap-2 rounded-2xl border border-white/[0.08] bg-bg/60 p-1.5">
-      {items.map((item) => {
-        const content = (
-          <>
-            <span>{item.label}</span>
-            {item.count !== undefined ? <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px]">{item.count}</span> : null}
-          </>
-        )
-
-        const className = clsx(
-          'inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs uppercase tracking-[0.14em] transition-colors',
-          item.current ? 'bg-panel text-textPrimary shadow-[0_12px_24px_-20px_rgba(0,0,0,0.9)]' : 'text-textSecondary hover:bg-panel/70 hover:text-textPrimary',
-        )
-
-        return item.href ? (
-          <Link key={`${item.label}-${item.href}`} href={item.href} className={className}>
-            {content}
-          </Link>
+    <Card className="px-4 py-4">
+      <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">Blockers / dependencies</p>
+      <div className="mt-3 space-y-2 text-sm text-textSecondary">
+        {blockers.length ? (
+          blockers.map((blocker) => (
+            <div key={blocker} className="rounded-xl border border-rose-400/20 bg-rose-400/[0.06] px-3 py-2.5 text-rose-100">
+              {blocker}
+            </div>
+          ))
         ) : (
-          <div key={item.label} className={className}>
-            {content}
+          <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2.5 text-emerald-100">
+            No blockers. Release can proceed within the approved window.
           </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function Table({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
-  return (
-    <div className="overflow-hidden rounded-[1.25rem] border border-white/[0.08] bg-bg/50">
-      <div className="hidden grid-cols-[1.3fr_repeat(4,minmax(0,0.8fr))] gap-3 border-b border-white/[0.06] px-5 py-3 text-[11px] uppercase tracking-[0.16em] text-textSecondary lg:grid">
-        {columns.map((column) => (
-          <div key={column}>{column}</div>
-        ))}
+        )}
       </div>
-      <div className="divide-y divide-white/[0.06]">
-        {rows.map((row, index) => (
-          <div key={index} className="grid gap-3 px-5 py-4 lg:grid-cols-[1.3fr_repeat(4,minmax(0,0.8fr))] lg:items-center">
-            {row.map((cell, cellIndex) => (
-              <div key={cellIndex} className="min-w-0">
-                <div className="lg:hidden text-[10px] uppercase tracking-[0.16em] text-textSecondary">{columns[cellIndex]}</div>
-                <div className="mt-1 lg:mt-0">{cell}</div>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function MetaPanel({ title, items, footer }: { title: string; items: Array<{ label: string; value: ReactNode }>; footer?: ReactNode }) {
-  return (
-    <Card className="h-full px-5 py-5 sm:px-6 sm:py-6">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">{title}</p>
-      <div className="mt-4 space-y-3">
-        {items.map((item) => (
-          <div key={item.label} className="rounded-2xl border border-white/[0.07] bg-bg/55 px-4 py-3.5">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">{item.label}</p>
-            <div className="mt-2 text-sm leading-6 text-textPrimary">{item.value}</div>
-          </div>
-        ))}
-      </div>
-      {footer ? <div className="mt-4">{footer}</div> : null}
     </Card>
   )
 }
 
-function TimelineItem({ event }: { event: AuditLogEvent }) {
+function WorkflowSummaryCards() {
   return (
-    <div className="relative pl-7">
-      <div className="absolute left-2 top-2 h-full w-px bg-white/[0.08]" />
-      <div className="absolute left-0 top-1.5 h-4 w-4 rounded-full border border-accent/30 bg-accent/15 shadow-[0_0_0_4px_rgba(76,159,255,0.08)]" />
-      <div className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-3.5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-sm font-medium text-textPrimary">{event.summary}</p>
-            <p className="mt-2 text-sm leading-6 text-textSecondary">{event.actor.displayName} · {event.entity.label} · {getStatusLabel(event.action)}</p>
-          </div>
-          <div className="text-xs uppercase tracking-[0.14em] text-textSecondary">{formatAdminTimestamp(event.occurredAt)}</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function QueueItem({ title, detail, tone, href, meta }: { title: string; detail: string; tone: Tone; href: string; meta: string }) {
-  return (
-    <Link href={href} className="group rounded-2xl border border-white/[0.08] bg-bg/50 p-4 transition-colors hover:border-accent/25 hover:bg-panel/80">
-      <div className="flex items-start justify-between gap-3">
-        <Badge label={meta} tone={tone} />
-        <ArrowRight className="h-4 w-4 text-textSecondary transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />
-      </div>
-      <p className="mt-4 text-base font-semibold text-textPrimary">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-textSecondary">{detail}</p>
-    </Link>
-  )
-}
-
-function ReleaseRail({ version }: { version: AssessmentVersion }) {
-  const steps = getVersionReleaseSteps(version)
-
-  return (
-    <div className="space-y-3">
-      {steps.map((step, index) => {
-        const tone: Tone = step.state === 'complete' ? 'emerald' : step.state === 'current' ? 'sky' : step.state === 'blocked' ? 'rose' : 'slate'
-        return (
-          <div key={step.label} className="flex gap-3">
-            <div className="flex flex-col items-center">
-              <span className={clsx('mt-1 h-3.5 w-3.5 rounded-full border', toneClasses[tone])} />
-              {index < steps.length - 1 ? <span className="mt-2 h-full w-px bg-white/[0.08]" /> : null}
-            </div>
-            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-3.5 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-medium text-textPrimary">{step.label}</p>
-                <Badge label={step.state} tone={tone} />
-              </div>
-              <p className="mt-2 text-sm leading-6 text-textSecondary">{step.detail}</p>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function EmptyState({ title, detail, action }: { title: string; detail: string; action?: ReactNode }) {
-  return (
-    <div className="rounded-[1.25rem] border border-dashed border-white/[0.12] bg-bg/35 px-5 py-10 text-center">
-      <LayoutTemplate className="mx-auto h-10 w-10 text-textSecondary" />
-      <p className="mt-4 text-base font-semibold text-textPrimary">{title}</p>
-      <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-textSecondary">{detail}</p>
-      {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
+    <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <Card className="px-4 py-4">
+        <p className="text-sm font-medium text-textPrimary">Structured import bundle</p>
+        <p className="mt-2 text-sm text-textSecondary">Bring in a versioned package with schema, questions, scoring, and output definitions.</p>
+      </Card>
+      <Card className="px-4 py-4">
+        <p className="text-sm font-medium text-textPrimary">Duplicate existing asset</p>
+        <p className="mt-2 text-sm text-textSecondary">Use a current registry asset as the basis for a new controlled line.</p>
+      </Card>
+      <Card className="px-4 py-4">
+        <p className="text-sm font-medium text-textPrimary">Manual scaffold</p>
+        <p className="mt-2 text-sm text-textSecondary">Start with metadata and generate an empty governed draft for later authoring.</p>
+      </Card>
     </div>
   )
 }
@@ -342,24 +116,24 @@ export function AdminDashboardWireframePage() {
 
       {releaseFocus ? (
         <SurfaceSection
-          eyebrow="Visual standard"
-          title="Operational pattern system anchored to live dashboard density"
-          description="These companion patterns extend the dashboard into reusable page, queue, and control primitives for the broader admin platform."
+          eyebrow="System standards"
+          title="Operational pattern system anchored to the live dashboard"
+          description="These companion patterns extend the dashboard into the shared registry, detail, release, and evidence language used across the admin platform."
           actions={<Button href={`/admin/releases/${releaseFocus.version.id}/publish`} variant="secondary">Open release control</Button>}
         >
           <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
             <div className="grid gap-3 md:grid-cols-2">
-              <QueueItem title="Release progression" detail="Move from validation evidence to publish decision with the same badge, metadata, and blocker language used across the rest of admin." tone="sky" href={`/admin/releases/${releaseFocus.version.id}/validation`} meta="Validated version" />
-              <QueueItem title="Tenant operating registry" detail="Lists and detail pages share a disciplined table/filter/meta-panel structure so organisations and users feel like governed entities." tone="emerald" href="/admin/organisations" meta="Entity registry" />
-              <QueueItem title="Version lineage view" detail="Assessment detail and version pages preserve the distinction between stable product lines and mutable release candidates." tone="violet" href={`/admin/assessments/${releaseFocus.assessment.slug}`} meta="Controlled assets" />
-              <QueueItem title="Audit evidence stream" detail="Timeline items, actor metadata, and evidence-side panels are standardised for calm enterprise readability." tone="amber" href="/admin/audit" meta="Evidence model" />
+              <QueueItem title="Release progression" detail="Move from validation evidence to publish decision with the same state, blocker, and metadata language used across admin." tone="sky" href={`/admin/releases/${releaseFocus.version.id}/validation`} meta="Validated version" cta="Inspect readiness" />
+              <QueueItem title="Tenant operating registry" detail="List and detail pages share a disciplined table/filter/meta-panel structure so organisations and users feel like governed entities." tone="emerald" href="/admin/organisations" meta="Entity registry" cta="Open registry" />
+              <QueueItem title="Version lineage view" detail="Assessment detail and version pages preserve the distinction between stable product lines and mutable release candidates." tone="violet" href={`/admin/assessments/${releaseFocus.assessment.slug}`} meta="Controlled assets" cta="Review versions" />
+              <QueueItem title="Audit evidence stream" detail="Timeline items, actor metadata, and evidence side-panels are standardised for calm enterprise readability." tone="amber" href="/admin/audit" meta="Evidence model" cta="Open audit" />
             </div>
             <MetaPanel
-              title="System standards"
+              title="What was standardised"
               items={[
-                { label: 'Density', value: 'Tight but breathable spacing, 12–16px inner rhythm, restrained color accents.' },
-                { label: 'Entity hierarchy', value: 'Page headers identify stable entities first, mutable versions second, and actions last.' },
-                { label: 'State language', value: 'Badges differentiate status, role, validation, release, and access posture with shared tones.' },
+                { label: 'Density', value: 'Tight but breathable spacing, 12–16px inner rhythm, restrained accent use.' },
+                { label: 'Entity hierarchy', value: 'Page headers establish the stable entity first, mutable state second, and actions last.' },
+                { label: 'State system', value: 'Badges differentiate status, role, validation, release, and access posture with shared tones.' },
               ]}
             />
           </div>
@@ -384,7 +158,9 @@ export function AdminOrganisationsWireframePage() {
       </div>,
       <div key={`${organisation.id}-status`} className="space-y-2">
         <StatusBadge status={organisation.status} />
-        <div><Badge label={getStatusLabel(organisation.plan)} tone="slate" /></div>
+        <div>
+          <Badge label={getStatusLabel(organisation.plan)} tone="slate" />
+        </div>
       </div>,
       <div key={`${organisation.id}-seats`}>
         <p className="text-sm font-medium text-textPrimary">{organisation.seatSummary.assigned}/{organisation.seatSummary.purchased}</p>
@@ -411,7 +187,7 @@ export function AdminOrganisationsWireframePage() {
         <MetricCard label="Managed tenants" value={String(organisations.length).padStart(2, '0')} detail="Tracked workspaces across active, implementation, and suspended states." />
         <MetricCard label="Seat utilisation" value={`${Math.round(organisations.reduce((total, organisation) => total + getSeatUtilisationPercent(organisation), 0) / organisations.length)}%`} detail="Average assigned-seat utilisation across the tenant estate." />
         <MetricCard label="Implementation queue" value={String(organisations.filter((organisation) => organisation.status === 'implementation').length).padStart(2, '0')} detail="Tenants currently in rollout, provisioning, or enablement work." />
-        <MetricCard label="Dormant risk" value={String(adminDashboardModel.tenantHealth.filter((tenant: (typeof adminDashboardModel.tenantHealth)[number]) => tenant.statusFlags.includes('Dormant tenant activity')).length).padStart(2, '0')} detail="Tenants requiring intervention due to low recency or suspended posture." />
+        <MetricCard label="Dormant risk" value={String(adminDashboardModel.tenantHealth.filter((tenant) => tenant.statusFlags.includes('Dormant tenant activity')).length).padStart(2, '0')} detail="Tenants requiring intervention due to low recency or suspended posture." />
       </div>
 
       <SurfaceSection title="Tenant registry" eyebrow="List pattern" description="Entity-first list design with persistent search/filter controls, seat posture visibility, and status treatment aligned with the rest of the admin system.">
@@ -424,8 +200,16 @@ export function AdminOrganisationsWireframePage() {
       <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <SurfaceSection title="Action-needed queue" eyebrow="Operational triage" description="Queue treatment for tenant states that require operator follow-up rather than passive observation.">
           <div className="grid gap-3 md:grid-cols-2">
-            {adminDashboardModel.tenantHealth.slice(0, 4).map((tenant: (typeof adminDashboardModel.tenantHealth)[number]) => (
-              <QueueItem key={tenant.organisationId} title={tenant.organisationName} detail={`${tenant.statusFlags.join(' · ') || 'No active flags'} · ${tenant.seatUsage} seats assigned.`} tone={tenant.status === 'Suspended' ? 'rose' : tenant.status === 'Implementation' ? 'amber' : 'emerald'} href={`/admin/organisations/${organisations.find((item) => item.id === tenant.organisationId)?.slug ?? ''}`} meta={tenant.recentActivityLabel} />
+            {adminDashboardModel.tenantHealth.slice(0, 4).map((tenant) => (
+              <QueueItem
+                key={tenant.organisationId}
+                title={tenant.organisationName}
+                detail={`${tenant.statusFlags.join(' · ') || 'No active flags'} · ${tenant.seatUsage} seats assigned.`}
+                tone={tenant.status === 'Suspended' ? 'rose' : tenant.status === 'Implementation' ? 'amber' : 'emerald'}
+                href={`/admin/organisations/${organisations.find((item) => item.id === tenant.organisationId)?.slug ?? ''}`}
+                meta={tenant.recentActivityLabel}
+                cta="Open tenant detail"
+              />
             ))}
           </div>
         </SurfaceSection>
@@ -451,14 +235,14 @@ export function AdminOrganisationDetailWireframePage({ slug }: { slug: string })
   }
 
   const summary = getOrganisationSummary(organisation)
-  const tenantEvents = auditLogEvents.filter((event) => [organisation.id, ...summary.memberships.map((membership) => membership.id)].includes(event.entity.entityId))
+  const tenantEvents = getOrganisationAuditEvents(organisation.id)
 
   return (
     <div className="space-y-6 lg:space-y-8">
       <AdminPageHeader
         eyebrow="Organisation detail"
         title={organisation.name}
-        description="High-fidelity tenant detail pattern combining overview, seat posture, memberships, enabled assessments, recent activity, and operational status panels."
+        description="Tenant overview with seat posture, memberships, enabled assessments, recent activity, and operational context in a single controlled frame."
         actions={
           <>
             <StatusBadge status={organisation.status} />
@@ -475,7 +259,7 @@ export function AdminOrganisationDetailWireframePage({ slug }: { slug: string })
             <Badge label={organisation.region} tone="slate" />
             <Badge label={organisation.sector} tone="slate" />
           </div>
-          <p className="mt-4 max-w-3xl text-sm leading-6 text-textSecondary">{organisation.name} is modelled as a managed customer tenancy, not a generic account record. Operational context keeps workspace posture, seat usage, enablement, and internal intervention signals visible in a single frame.</p>
+          <p className="mt-4 max-w-3xl text-sm leading-6 text-textSecondary">{organisation.name} is modelled as a managed customer tenancy, not a generic account record. Workspace posture, seat usage, enablement, and internal intervention signals stay visible together.</p>
           <div className="mt-5">
             <MetaGrid
               items={[
@@ -500,7 +284,7 @@ export function AdminOrganisationDetailWireframePage({ slug }: { slug: string })
       </div>
 
       <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <SurfaceSection title="Membership + role context" eyebrow="Access summary" description="Customer memberships remain tenant-scoped and distinct from internal Sonartra admin controls.">
+        <SurfaceSection title="Membership + role context" eyebrow="Access summary" description="Customer memberships remain tenant-scoped and clearly separate from internal Sonartra admin controls.">
           <div className="space-y-3">
             {summary.users.map((user) => {
               const membership = summary.memberships.find((item) => item.userId === user.id)
@@ -508,7 +292,9 @@ export function AdminOrganisationDetailWireframePage({ slug }: { slug: string })
                 <div key={user.id} className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
-                      <Link href={`/admin/users/${user.id}`} className="text-sm font-semibold text-textPrimary hover:text-accent">{user.profile.fullName}</Link>
+                      <Link href={`/admin/users/${user.id}`} className="text-sm font-semibold text-textPrimary hover:text-accent">
+                        {user.profile.fullName}
+                      </Link>
                       <p className="mt-1 text-sm text-textSecondary">{user.email} · {user.profile.title ?? 'No title set'}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -516,7 +302,7 @@ export function AdminOrganisationDetailWireframePage({ slug }: { slug: string })
                       {membership ? <StatusBadge status={membership.role} /> : null}
                     </div>
                   </div>
-                  <div className="mt-3 grid gap-3 md:grid-cols-3 text-sm text-textSecondary">
+                  <div className="mt-3 grid gap-3 text-sm text-textSecondary md:grid-cols-3">
                     <p>Billing contact: {membership?.isBillingContact ? 'Yes' : 'No'}</p>
                     <p>Assessment contact: {membership?.isAssessmentContact ? 'Yes' : 'No'}</p>
                     <p>Last active: {formatAdminTimestamp(user.recentActivity.lastActiveAt)}</p>
@@ -540,17 +326,29 @@ export function AdminOrganisationDetailWireframePage({ slug }: { slug: string })
 export function AdminUsersWireframePage() {
   const rows = adminUsers.map((user) => {
     const summary = getUserSummary(user)
+
     return [
       <div key={`${user.id}-name`}>
-        <Link href={`/admin/users/${user.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-textPrimary hover:text-accent">{user.profile.fullName}<ChevronRight className="h-4 w-4" /></Link>
+        <Link href={`/admin/users/${user.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-textPrimary hover:text-accent">
+          {user.profile.fullName}
+          <ChevronRight className="h-4 w-4" />
+        </Link>
         <p className="mt-1 text-sm text-textSecondary">{user.email}</p>
       </div>,
       <div key={`${user.id}-kind`} className="space-y-2">
         <StatusBadge status={user.kind} />
-        {user.internalAdminRole ? <div><StatusBadge status={user.internalAdminRole} /></div> : null}
+        {user.internalAdminRole ? (
+          <div>
+            <StatusBadge status={user.internalAdminRole} />
+          </div>
+        ) : null}
       </div>,
-      <div key={`${user.id}-status`}><StatusBadge status={user.status} /></div>,
-      <div key={`${user.id}-memberships`} className="text-sm text-textSecondary">{summary.memberships.length} memberships{summary.primaryOrganisation ? ` · ${summary.primaryOrganisation.name}` : ''}</div>,
+      <div key={`${user.id}-status`}>
+        <StatusBadge status={user.status} />
+      </div>,
+      <div key={`${user.id}-memberships`} className="text-sm text-textSecondary">
+        {summary.memberships.length} memberships{summary.primaryOrganisation ? ` · ${summary.primaryOrganisation.name}` : ''}
+      </div>,
       <div key={`${user.id}-activity`}>
         <p className="text-sm font-medium text-textPrimary">{formatAdminTimestamp(user.recentActivity.lastActiveAt)}</p>
         <p className="text-xs text-textSecondary">{getKindLabel(user)}</p>
@@ -563,13 +361,13 @@ export function AdminUsersWireframePage() {
       <AdminPageHeader eyebrow="Users" title="Internal operators and customer access" description="Unified access registry with explicit separation between privileged Sonartra admins and customer-side memberships." actions={<Button variant="secondary">Initiate access review</Button>} />
 
       <div className="grid gap-4 xl:grid-cols-4">
-        <MetricCard label="Internal admins" value={String(adminUsers.filter((user) => user.kind === UserKind.InternalAdmin).length).padStart(2, '0')} detail="Privileged Sonartra operators with governance, support, or release responsibilities." />
-        <MetricCard label="Customer users" value={String(adminUsers.filter((user) => user.kind === UserKind.OrganisationUser).length).padStart(2, '0')} detail="Tenant-level admins and members attached to customer organisations." />
+        <MetricCard label="Internal admins" value={String(adminUsers.filter((user) => user.kind === 'internal_admin').length).padStart(2, '0')} detail="Privileged Sonartra operators with governance, support, or release responsibilities." />
+        <MetricCard label="Customer users" value={String(adminUsers.filter((user) => user.kind === 'organisation_user').length).padStart(2, '0')} detail="Tenant-level admins and members attached to customer organisations." />
         <MetricCard label="Pending access" value={String(adminUsers.filter((user) => user.status === 'invited' || user.status === 'suspended').length).padStart(2, '0')} detail="Accounts needing invite completion, review, or posture changes." />
         <MetricCard label="Role classes" value="05" detail="Shared role-badge system across internal and tenant-scoped access patterns." />
       </div>
 
-      <SurfaceSection title="Access registry" eyebrow="List pattern" description="Same table and filter-bar system as organisations, with role/status treatment focused on access posture instead of tenancy posture.">
+      <SurfaceSection title="Access registry" eyebrow="List pattern" description="Same table and filter-bar system as organisations, with role/status treatment focused on access posture rather than tenancy posture.">
         <FilterBar searchPlaceholder="Search name, email, organisation, or role…" segments={["All users", "Internal admins", "Organisation users", "Attention required"]} trailing={<Button href="/admin/audit" variant="ghost">Access audit</Button>} />
         <div className="mt-4">
           <Table columns={["User", "Identity class", "Status", "Membership context", "Recent activity"]} rows={rows} />
@@ -633,24 +431,28 @@ export function AdminUserDetailWireframePage({ userId }: { userId: string }) {
       <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <SurfaceSection title="Membership and role context" eyebrow="Context" description="Customer memberships remain visible on the same page, while future actions occupy their own control area rather than crowding the profile summary.">
           <div className="space-y-3">
-            {summary.memberships.length ? summary.memberships.map((membership) => {
-              const organisation = organisations.find((organisationItem) => organisationItem.id === membership.organisationId)
-              return (
-                <div key={membership.id} className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-textPrimary">{organisation?.name ?? membership.organisationId}</p>
-                      <p className="mt-1 text-sm text-textSecondary">Joined {formatAdminTimestamp(membership.joinedAt)} · Invited {formatAdminTimestamp(membership.invitedAt)}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <StatusBadge status={membership.role} />
-                      {membership.isAssessmentContact ? <Badge label="Assessment contact" tone="sky" /> : null}
-                      {membership.isBillingContact ? <Badge label="Billing contact" tone="amber" /> : null}
+            {summary.memberships.length ? (
+              summary.memberships.map((membership) => {
+                const organisation = organisations.find((organisationItem) => organisationItem.id === membership.organisationId)
+                return (
+                  <div key={membership.id} className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-textPrimary">{organisation?.name ?? membership.organisationId}</p>
+                        <p className="mt-1 text-sm text-textSecondary">Joined {formatAdminTimestamp(membership.joinedAt)} · Invited {formatAdminTimestamp(membership.invitedAt)}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <StatusBadge status={membership.role} />
+                        {membership.isAssessmentContact ? <Badge label="Assessment contact" tone="sky" /> : null}
+                        {membership.isBillingContact ? <Badge label="Billing contact" tone="amber" /> : null}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )
-            }) : <EmptyState title="No tenant memberships" detail="This pattern intentionally leaves clear room for future internal-only action controls without implying customer memberships that do not exist." />}
+                )
+              })
+            ) : (
+              <EmptyState title="No tenant memberships" detail="This pattern intentionally leaves clear room for future internal-only action controls without implying customer memberships that do not exist." />
+            )}
           </div>
         </SurfaceSection>
 
@@ -674,14 +476,20 @@ export function AdminUserDetailWireframePage({ userId }: { userId: string }) {
 export function AdminAssessmentsWireframePage() {
   const rows = assessments.map((assessment) => {
     const summary = getAssessmentSummary(assessment)
+
     return [
       <div key={`${assessment.id}-title`}>
-        <Link href={`/admin/assessments/${assessment.slug}`} className="inline-flex items-center gap-2 text-sm font-semibold text-textPrimary hover:text-accent">{assessment.title}<ChevronRight className="h-4 w-4" /></Link>
+        <Link href={`/admin/assessments/${assessment.slug}`} className="inline-flex items-center gap-2 text-sm font-semibold text-textPrimary hover:text-accent">
+          {assessment.title}
+          <ChevronRight className="h-4 w-4" />
+        </Link>
         <p className="mt-1 text-sm text-textSecondary">{assessment.description}</p>
       </div>,
       <div key={`${assessment.id}-category`} className="space-y-2">
         <Badge label={getStatusLabel(assessment.category)} tone="violet" />
-        <div><StatusBadge status={assessment.status} /></div>
+        <div>
+          <StatusBadge status={assessment.status} />
+        </div>
       </div>,
       <div key={`${assessment.id}-live`}>
         <p className="text-sm font-medium text-textPrimary">{summary.liveVersion?.versionNumber ?? 'Not live'}</p>
@@ -802,7 +610,7 @@ export function AdminAssessmentVersionDetailWireframePage({ slug, versionNumber 
     return <EmptyState title="Assessment version not found" detail="The requested assessment/version combination is not present in the typed Sonartra admin domain model." action={<Button href="/admin/assessments" variant="secondary">Back to assessments</Button>} />
   }
 
-  const events = auditLogEvents.filter((event) => event.entity.entityId === version.id)
+  const events = getVersionAuditEvents(version.id)
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -811,14 +619,7 @@ export function AdminAssessmentVersionDetailWireframePage({ slug, versionNumber 
 
       <div className="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
         <SurfaceSection title="Version metadata" eyebrow="Version frame" description="Metadata hierarchy keeps the immutable version snapshot distinct from the parent assessment line.">
-          <MetaGrid
-            items={[
-              { label: 'Question count', value: `${version.questionCount}` },
-              { label: 'Scoring model', value: version.scoringModelVersion },
-              { label: 'Output model', value: version.outputModelVersion },
-              { label: 'Updated', value: formatAdminTimestamp(version.updatedAt) },
-            ]}
-          />
+          <MetaGrid items={[{ label: 'Question count', value: `${version.questionCount}` }, { label: 'Scoring model', value: version.scoringModelVersion }, { label: 'Output model', value: version.outputModelVersion }, { label: 'Updated', value: formatAdminTimestamp(version.updatedAt) }]} />
           <div className="mt-4 rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
             <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">Changelog summary</p>
             <p className="mt-2 text-sm leading-6 text-textSecondary">{version.changelogSummary}</p>
@@ -833,7 +634,7 @@ export function AdminAssessmentVersionDetailWireframePage({ slug, versionNumber 
             { label: 'Preview ready', value: version.validationSummary.previewReady ? 'Yes' : 'No' },
             { label: 'Publish target', value: version.publishTarget.description },
           ]}
-          footer={<div className="flex gap-2"><Button href={`/admin/releases/${version.id}/validation`} variant="secondary">Validation + preview</Button><Button href={`/admin/releases/${version.id}/publish`} variant="ghost">Release control</Button></div>}
+          footer={<PanelActionRow primaryHref={`/admin/releases/${version.id}/validation`} primaryLabel="Validation + preview" secondaryHref={`/admin/releases/${version.id}/publish`} secondaryLabel="Release control" />}
         />
       </div>
 
@@ -864,31 +665,19 @@ export function AdminAssessmentNewWorkflowWireframePage() {
       <AdminPageHeader eyebrow="New assessment" title="Governed assessment creation + import" description="Deliberate entry flow for creating a new assessment line or importing a controlled version bundle — not a casual file-upload screen." actions={<Button variant="secondary">Save draft brief</Button>} />
 
       <div className="grid gap-4 xl:grid-cols-[0.88fr_1.12fr]">
-        <MetaPanel
-          title="Workflow steps"
-          items={steps.map((step) => ({ label: step.label, value: step.detail }))}
-          footer={<Badge label="Governed flow" tone="sky" />}
-        />
+        <MetaPanel title="Workflow steps" items={steps.map((step) => ({ label: step.label, value: step.detail }))} footer={<Badge label="Governed flow" tone="sky" />} />
 
         <SurfaceSection title="Step 1 · Assessment metadata" eyebrow="Entry point" description="The first surface establishes stable asset identity before any version content is introduced.">
           <div className="grid gap-3 md:grid-cols-2">
             <MetaPanel title="Core identity" items={[{ label: 'Title', value: 'Organisation Resilience Index' }, { label: 'Registry key', value: 'organisation_resilience_index' }, { label: 'Category', value: 'Organisational Performance' }]} />
             <MetaPanel title="Governance context" items={[{ label: 'Owner', value: 'Rina Patel · Platform Operations' }, { label: 'Planned release class', value: 'Staged enterprise rollout' }, { label: 'Intended evidence pack', value: 'Validation report + preview baseline + release sign-off' }]} />
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <Card className="px-4 py-4"><p className="text-sm font-medium text-textPrimary">Structured import bundle</p><p className="mt-2 text-sm text-textSecondary">Bring in a versioned package with schema, questions, scoring, and output definitions.</p></Card>
-            <Card className="px-4 py-4"><p className="text-sm font-medium text-textPrimary">Duplicate existing asset</p><p className="mt-2 text-sm text-textSecondary">Use a current registry asset as the basis for a new controlled line.</p></Card>
-            <Card className="px-4 py-4"><p className="text-sm font-medium text-textPrimary">Manual scaffold</p><p className="mt-2 text-sm text-textSecondary">Start with metadata and generate an empty governed draft for later authoring.</p></Card>
-          </div>
+          <WorkflowSummaryCards />
         </SurfaceSection>
       </div>
 
       <SurfaceSection title="Import review summary" eyebrow="Step 3" description="Review state prioritises governance and release readiness language over upload convenience.">
-        <MetaGrid columns={3} items={[
-          { label: 'Source package', value: 'signals-v3-import.json', hint: 'Signed by Assessment Ops' },
-          { label: 'Structural integrity', value: 'Passed initial schema checks', hint: 'No blocking parse issues' },
-          { label: 'Generated outcome', value: 'Draft version v0.1.0 prepared', hint: 'Requires validation before preview / release' },
-        ]} />
+        <MetaGrid columns={3} items={[{ label: 'Source package', value: 'signals-v3-import.json', hint: 'Signed by Assessment Ops' }, { label: 'Structural integrity', value: 'Passed initial schema checks', hint: 'No blocking parse issues' }, { label: 'Generated outcome', value: 'Draft version v0.1.0 prepared', hint: 'Requires validation before preview / release' }]} />
       </SurfaceSection>
     </div>
   )
@@ -902,11 +691,7 @@ export function AdminValidationPreviewWireframePage({ versionId }: { versionId: 
     return <EmptyState title="Validation surface unavailable" detail="The requested version id is not present in the typed Sonartra admin domain model." action={<Button href="/admin/releases" variant="secondary">Back to releases</Button>} />
   }
 
-  const issues = [
-    { label: 'Schema integrity', state: 'pass', detail: 'Question groups, identifiers, and scoring keys align with the expected import contract.' },
-    { label: 'Interpretation coverage', state: version.validationSummary.ruleWarnings > 0 ? 'warning' : 'pass', detail: version.validationSummary.ruleWarnings > 0 ? 'Two warning-level narrative mappings require review before publish.' : 'Interpretation narratives are fully covered.' },
-    { label: 'Preview package', state: version.validationSummary.previewReady ? 'pass' : 'error', detail: version.validationSummary.previewReady ? 'Preview package generated successfully.' : 'Preview package blocked until structural issues are resolved.' },
-  ]
+  const issues = getValidationIssues(version)
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -915,21 +700,7 @@ export function AdminValidationPreviewWireframePage({ versionId }: { versionId: 
       <section className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
         <SurfaceSection title="Validation outcomes" eyebrow="Readiness" description="Validation state indicators separate blocking issues from reviewable warnings and keep release consequences obvious.">
           <div className="space-y-3">
-            {issues.map((issue) => {
-              const tone = issue.state === 'pass' ? 'emerald' : issue.state === 'warning' ? 'amber' : 'rose'
-              const Icon = issue.state === 'pass' ? CheckCircle2 : issue.state === 'warning' ? AlertTriangle : Clock3
-              return (
-                <div key={issue.label} className="rounded-2xl border border-white/[0.07] bg-bg/50 px-4 py-4">
-                  <div className="flex items-start gap-3">
-                    <div className={clsx('mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl border', toneClasses[tone])}><Icon className="h-4 w-4" /></div>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-textPrimary">{issue.label}</p><Badge label={issue.state} tone={tone} /></div>
-                      <p className="mt-2 text-sm leading-6 text-textSecondary">{issue.detail}</p>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+            {issues.map((issue) => <ValidationIssueCard key={issue.label} issue={issue} />)}
           </div>
         </SurfaceSection>
 
@@ -952,11 +723,7 @@ export function AdminPublishControlWireframePage({ versionId }: { versionId: str
     return <EmptyState title="Release control unavailable" detail="The requested version id is not present in the typed Sonartra admin domain model." action={<Button href="/admin/releases" variant="secondary">Back to releases</Button>} />
   }
 
-  const blockers = [
-    version.validationSummary.ruleErrors > 0 ? 'Rule errors remain unresolved.' : null,
-    !version.validationSummary.previewReady ? 'Preview bundle has not been generated.' : null,
-    version.status !== AssessmentVersionStatus.Validated && version.publishStatus !== PublishStatus.Published ? 'Validation sign-off not yet complete.' : null,
-  ].filter(Boolean) as string[]
+  const blockers = getReleaseBlockers(version)
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -973,16 +740,15 @@ export function AdminPublishControlWireframePage({ versionId }: { versionId: str
             <MetaPanel title="Evidence areas" items={[{ label: 'Validation report', value: version.validationSummary.ruleErrors === 0 ? 'Attached' : 'Requires remediation' }, { label: 'Preview pack', value: version.validationSummary.previewReady ? 'Attached' : 'Unavailable' }, { label: 'Audit trail', value: 'Ready to capture actor and decision metadata' }]} />
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <Card className="px-4 py-4">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">Blockers / dependencies</p>
-              <div className="mt-3 space-y-2 text-sm text-textSecondary">
-                {blockers.length ? blockers.map((blocker) => <div key={blocker} className="rounded-xl border border-rose-400/20 bg-rose-400/[0.06] px-3 py-2.5 text-rose-100">{blocker}</div>) : <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2.5 text-emerald-100">No blockers. Release can proceed within the approved window.</div>}
-              </div>
-            </Card>
+            <ReadinessBlockers blockers={blockers} />
             <Card className="px-4 py-4">
               <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">Publish summary</p>
               <p className="mt-3 text-sm leading-6 text-textSecondary">This screen deliberately slows the operator down: target scope, readiness evidence, and blocker visibility all precede the publish controls.</p>
-              <div className="mt-4 flex flex-wrap gap-2"><Button disabled={blockers.length > 0}>Publish version</Button><Button variant="secondary">Schedule window</Button><Button variant="ghost">Pause / rollback plan</Button></div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button disabled={blockers.length > 0}>Publish version</Button>
+                <Button variant="secondary">Schedule window</Button>
+                <Button variant="ghost">Pause / rollback plan</Button>
+              </div>
             </Card>
           </div>
         </SurfaceSection>
