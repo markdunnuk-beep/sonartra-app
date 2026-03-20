@@ -2,8 +2,10 @@
 
 import React from 'react'
 
+import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ARCHETYPE_META } from '@/components/results/archetypeMeta'
+import type { IndividualResultsIntelligenceActionModel } from '@/lib/results/individual-results-intelligence'
 import type { IndividualAssessmentCardModel, IndividualResultDomainBarModel, IndividualResultDomainSectionModel, IndividualResultsPresentationModel } from '@/lib/results/individual-results-presentation'
 
 function ResultBadge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'accent' | 'muted' }) {
@@ -293,6 +295,81 @@ function AssessmentResultCard({ assessment }: { assessment: IndividualAssessment
   )
 }
 
+function IntelligenceMetadata({ items }: { items: string[] }) {
+  if (items.length === 0) return null
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-textSecondary/78">
+      {items.map((entry, index) => (
+        <React.Fragment key={entry}>
+          {index > 0 ? <span aria-hidden="true" className="text-textSecondary/28">•</span> : null}
+          <span>{entry}</span>
+        </React.Fragment>
+      ))}
+    </div>
+  )
+}
+
+function ResultsIntelligenceAction({ action }: { action: IndividualResultsIntelligenceActionModel }) {
+  return (
+    <div className="rounded-[1.35rem] border border-accent/14 bg-[linear-gradient(180deg,rgba(18,31,47,0.82),rgba(11,18,28,0.72))] p-5 sm:p-6">
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8FA6C5]">{action.label}</p>
+          <h3 className="text-xl font-semibold tracking-tight text-textPrimary">{action.title}</h3>
+          <p className="text-sm leading-6 text-textSecondary">{action.rationale}</p>
+        </div>
+
+        <IntelligenceMetadata items={action.metadata} />
+
+        {action.cta ? (
+          <div className="pt-1">
+            <Button href={action.cta.href} className="w-full justify-center px-5 sm:w-auto">
+              {action.cta.label}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function ResultsIntelligencePanel({ model }: { model: IndividualResultsPresentationModel['intelligence'] }) {
+  return (
+    <section aria-label="Results intelligence briefing">
+      <Card className="border border-white/[0.08] bg-[linear-gradient(180deg,rgba(14,21,31,0.98),rgba(10,15,24,0.96))] px-6 py-6 sm:px-8 sm:py-7">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] xl:gap-6">
+          <div className="space-y-5">
+            <div className="space-y-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent/78">{model.eyebrow}</p>
+              <h2 className="text-[1.75rem] font-semibold tracking-tight text-textPrimary sm:text-[1.95rem]">{model.summaryHeadline}</h2>
+              <p className="max-w-3xl text-sm leading-7 text-textSecondary">{model.summaryOverview}</p>
+            </div>
+
+            <IntelligenceMetadata items={model.metadata} />
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-[1.2rem] border border-white/[0.06] bg-white/[0.025] p-4 sm:p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8FA6C5]">{model.priorityLabel}</p>
+                <p className="mt-2 text-sm leading-6 text-textSecondary">{model.priorityDetail}</p>
+              </div>
+
+              {model.unlocksDetail ? (
+                <div className="rounded-[1.2rem] border border-white/[0.06] bg-white/[0.025] p-4 sm:p-5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8FA6C5]">{model.unlocksLabel}</p>
+                  <p className="mt-2 text-sm leading-6 text-textSecondary">{model.unlocksDetail}</p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <ResultsIntelligenceAction action={model.action} />
+        </div>
+      </Card>
+    </section>
+  )
+}
+
 export function IndividualResultsExperience({ model }: { model: IndividualResultsPresentationModel }) {
   return (
     <div className="pb-12 pt-4 sm:pt-6">
@@ -312,6 +389,8 @@ export function IndividualResultsExperience({ model }: { model: IndividualResult
             </div>
           </div>
         </Card>
+
+        <ResultsIntelligencePanel model={model.intelligence} />
 
         <div className="space-y-5">
           {model.assessments.map((assessment) => (

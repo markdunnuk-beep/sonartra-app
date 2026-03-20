@@ -105,6 +105,8 @@ const readyModel: IndividualResultApiResponse = {
   data: readyData,
 }
 
+Object.assign(globalThis, { self: globalThis })
+
 const buildPresentationModel = () => buildReadyIndividualResultViewModel(readyData, 'Mark')
 
 function assertSortedDistribution(distribution: Array<{ label: string; value: number }>) {
@@ -126,6 +128,12 @@ test('ready state defaults the live assessment card to collapsed while preservin
   const html = renderToStaticMarkup(<IndividualIntelligenceResultView model={readyModel} firstName="Mark" />)
 
   assert.match(html, /Sonartra Signals — Individual Results/)
+  assert.match(html, /Results intelligence/)
+  assert.match(html, /Baseline profile completed and ready to use/)
+  assert.match(html, /What matters now/)
+  assert.match(html, /What this unlocks/)
+  assert.match(html, /Resume Burnout Risk/)
+  assert.match(html, /Resume Assessment/)
   assert.match(html, /Current assessment/)
   assert.match(html, /Collapsed/)
   assert.match(html, /View assessment/)
@@ -138,6 +146,7 @@ test('ready state defaults the live assessment card to collapsed while preservin
 test('expanded ready state renders the production scan-first results experience in the approved section order', () => {
   const html = renderExpandedReadySections()
 
+  assert.ok(html.indexOf('Results intelligence') < html.indexOf('How to Use This Report'))
   assert.match(html, /How to Use This Report/)
   assert.match(html, /Sonartra Archetype Overview/)
   assert.match(html, /Behaviour Style/)
