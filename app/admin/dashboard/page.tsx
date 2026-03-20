@@ -1,5 +1,5 @@
-import { AdminDashboardSurface } from '@/components/admin/dashboard/AdminDashboardSurface'
+import { AdminDashboardWireframePage } from '@/components/admin/surfaces/AdminWireframeSurfaces'
 
 export default function AdminDashboardRoutePage() {
-  return <AdminDashboardSurface />
+  return <AdminDashboardWireframePage />
 }
