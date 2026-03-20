@@ -12,10 +12,15 @@ import {
 import { getCurrentAssessmentRepositoryContext } from './assessment-repository-context'
 import { assessmentProgressState } from './assessment-progress-state'
 import type {
+  AssessmentActionState,
+  AssessmentFilterGroup,
+  AssessmentPassiveState,
   AssessmentRepositoryAction,
   AssessmentRepositoryDetailRow,
-  AssessmentRepositoryFilter,
+  AssessmentRepositoryFilterState,
   AssessmentRepositoryItem,
+  AssessmentRepositoryProgressFilter,
+  AssessmentRepositoryScopeFilter,
   AssessmentRepositorySectionModel,
   AssessmentRepositoryStatus,
   AssessmentSummaryMetric,
@@ -220,41 +225,49 @@ export function sortAssessments(items: AssessmentRepositoryItem[]): AssessmentRe
 }
 
 export function buildAssessmentSummaryMetrics(items: AssessmentRepositoryItem[]): AssessmentSummaryMetric[] {
-  const totalAssessments = items.length
+  const readyToStart = items.filter((item) => item.status === 'not_started').length
   const inProgress = items.filter((item) => item.status === 'in_progress').length
-  const completed = items.filter((item) => item.status === 'complete').length
-  const teamAssessments = items.filter((item) => item.category === 'team').length
+  const resultsReady = items.filter((item) => item.status === 'complete').length
+  const releasePending = items.filter((item) => item.status === 'coming_soon').length
 
   return [
     {
-      label: 'Total Assessments',
-      value: String(totalAssessments),
-      detail: 'Combined repository across individual and team workflows.',
+      label: 'Ready to Start',
+      value: String(readyToStart),
+      detail: 'Live assessments with launch access and no active attempt.',
     },
     {
       label: 'In Progress',
       value: String(inProgress),
-      detail: 'Active attempts currently underway.',
+      detail: 'Active attempts with saved progress available to resume.',
     },
     {
-      label: 'Completed',
-      value: String(completed),
-      detail: 'Assessments with a completed latest state.',
+      label: 'Results Ready',
+      value: String(resultsReady),
+      detail: 'Latest completed assessments with results available now.',
     },
     {
-      label: 'Team Assessments',
-      value: String(teamAssessments),
-      detail: 'Shared diagnostics for managers and teams.',
+      label: 'Release Pending',
+      value: String(releasePending),
+      detail: 'Configured diagnostics that are visible in the repository but not launchable yet.',
     },
   ]
 }
 
-export function matchesFilter(item: AssessmentRepositoryItem, filter: AssessmentRepositoryFilter): boolean {
+export function matchesScopeFilter(item: AssessmentRepositoryItem, filter: AssessmentRepositoryScopeFilter): boolean {
   switch (filter) {
     case 'individual':
       return item.category === 'individual'
     case 'team':
       return item.category === 'team'
+    case 'all':
+    default:
+      return true
+  }
+}
+
+export function matchesProgressFilter(item: AssessmentRepositoryItem, filter: AssessmentRepositoryProgressFilter): boolean {
+  switch (filter) {
     case 'in_progress':
       return item.status === 'in_progress'
     case 'completed':
@@ -265,11 +278,15 @@ export function matchesFilter(item: AssessmentRepositoryItem, filter: Assessment
   }
 }
 
+export function matchesFilter(item: AssessmentRepositoryItem, filter: AssessmentRepositoryFilterState): boolean {
+  return matchesScopeFilter(item, filter.scope) && matchesProgressFilter(item, filter.progress)
+}
+
 export function getRepositoryItemsByCategory(items: AssessmentRepositoryItem[], category: AssessmentRepositorySectionModel['category']): AssessmentRepositoryItem[] {
   return sortAssessments(items.filter((item) => item.category === category))
 }
 
-export function buildAssessmentSections(items: AssessmentRepositoryItem[], filter: AssessmentRepositoryFilter): AssessmentRepositorySectionModel[] {
+export function buildAssessmentSections(items: AssessmentRepositoryItem[], filter: AssessmentRepositoryFilterState): AssessmentRepositorySectionModel[] {
   const individualItems = getRepositoryItemsByCategory(items, 'individual').filter((item) => matchesFilter(item, filter))
   const teamItems = getRepositoryItemsByCategory(items, 'team').filter((item) => matchesFilter(item, filter))
 
@@ -284,7 +301,7 @@ export function buildAssessmentSections(items: AssessmentRepositoryItem[], filte
       category: 'team' as const,
       title: 'Team Assessments',
       description: 'Shared diagnostics for team conditions, management dynamics, and organizational signals.',
-      note: 'Includes advanced organizational outputs on eligible plans.',
+      note: 'Eligible team diagnostics include advanced organizational reporting on supported plans.',
       items: teamItems,
     },
   ].filter((section) => section.items.length > 0)
@@ -305,14 +322,14 @@ export function formatStatusLabel(status: AssessmentRepositoryStatus): string {
 }
 
 export function getCollapsedMetadata(item: AssessmentRepositoryItem): string[] {
-  const base = [`${item.questionCount} questions`, `${item.estimatedMinutes} min`]
+  const base = [item.category === 'team' ? 'Team diagnostic' : 'Individual diagnostic', `${item.questionCount} questions`, `${item.estimatedMinutes} min`]
 
   if (item.status === 'in_progress' && typeof item.progressPercent === 'number') {
     return [...base, `${item.progressPercent}% complete`]
   }
 
   if (item.status === 'complete' && item.resultsAvailable) {
-    return [...base, 'Latest snapshot available']
+    return [...base, 'Results ready']
   }
 
   if (item.status === 'coming_soon') {
@@ -359,6 +376,72 @@ export function getExpandedActions(item: AssessmentRepositoryItem): AssessmentRe
     default:
       return []
   }
+}
+
+export function getPassiveState(item: AssessmentRepositoryItem): AssessmentPassiveState | null {
+  if (item.status === 'coming_soon') {
+    return {
+      label: 'Release pending',
+      detail: 'Visible for planning only until release readiness is confirmed.',
+    }
+  }
+
+  if (!getCollapsedAction(item) && getExpandedActions(item).length === 0) {
+    return {
+      label: 'Unavailable',
+      detail: 'This assessment is not actionable in the current repository state.',
+    }
+  }
+
+  return null
+}
+
+export function getActionState(item: AssessmentRepositoryItem): AssessmentActionState | null {
+  switch (item.status) {
+    case 'not_started':
+      return {
+        label: 'Launch now',
+        detail: 'Begin a new run from the assessment workspace.',
+      }
+    case 'in_progress':
+      return {
+        label: 'Resume now',
+        detail: 'Continue from the latest autosaved response set.',
+      }
+    case 'complete':
+      return {
+        label: 'Results ready',
+        detail: 'Open the latest completed snapshot and interpretation.',
+      }
+    case 'coming_soon':
+    default:
+      return null
+  }
+}
+
+export function getAssessmentFilterGroups(): [AssessmentFilterGroup<AssessmentRepositoryScopeFilter>, AssessmentFilterGroup<AssessmentRepositoryProgressFilter>] {
+  return [
+    {
+      key: 'scope',
+      label: 'Repository scope',
+      description: 'Browse the full inventory or focus on a catalogue grouping.',
+      options: [
+        { value: 'all', label: 'All assessments' },
+        { value: 'individual', label: 'Individual' },
+        { value: 'team', label: 'Team' },
+      ],
+    },
+    {
+      key: 'progress',
+      label: 'Progress state',
+      description: 'Narrow to assessments that already need follow-up.',
+      options: [
+        { value: 'all', label: 'Any status' },
+        { value: 'in_progress', label: 'In progress' },
+        { value: 'completed', label: 'Results ready' },
+      ],
+    },
+  ]
 }
 
 export function buildOperationalDetailRows(
@@ -433,7 +516,7 @@ export function buildOutputRows(
   const teamOutputsById: Record<string, AssessmentRepositoryDetailRow[]> = {
     'team-dynamics': [
       { label: 'Outputs', value: 'Team condition summary, participation metrics, and flagged operating risks' },
-      { label: 'Advanced outputs', value: advancedOutputsUnlocked ? 'Includes comparative team patterning and manager-ready reporting on eligible plans' : 'Available when advanced organizational outputs are enabled on the workspace plan' },
+      { label: 'Reporting scope', value: advancedOutputsUnlocked ? 'Includes comparative team patterning and manager-ready reporting on supported plans' : 'Advanced organizational reporting unlocks on supported plans' },
     ],
     'team-alignment': [
       { label: 'Outputs', value: 'Alignment heatmap, participation summary, and action-focused findings' },
@@ -441,11 +524,11 @@ export function buildOutputRows(
     ],
     'manager-effectiveness': [
       { label: 'Outputs', value: 'Manager effectiveness readout with priority themes and response distribution' },
-      { label: 'Advanced outputs', value: advancedOutputsUnlocked ? 'Includes cohort comparisons and expanded reporting for eligible plans' : 'Available when advanced organizational outputs are enabled on the workspace plan' },
+      { label: 'Reporting tier', value: advancedOutputsUnlocked ? 'Includes cohort comparisons and expanded reporting on supported plans' : 'Advanced organizational reporting unlocks on supported plans' },
     ],
     'culture-risk': [
       { label: 'Outputs', value: 'Risk-pattern summary, intervention cues, and organisational reporting' },
-      { label: 'Advanced outputs', value: advancedOutputsUnlocked ? 'Includes advanced organisational outputs on eligible plans' : 'Available when advanced organizational outputs are enabled on the workspace plan' },
+      { label: 'Reporting tier', value: advancedOutputsUnlocked ? 'Includes advanced organisational reporting on supported plans' : 'Advanced organizational reporting unlocks on supported plans' },
     ],
     'decision-friction-mapping': [
       { label: 'Outputs', value: 'Decision bottleneck analysis and operating cadence findings' },

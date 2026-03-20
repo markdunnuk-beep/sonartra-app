@@ -2,7 +2,14 @@ export type AssessmentRepositoryCategory = 'individual' | 'team'
 
 export type AssessmentRepositoryStatus = 'not_started' | 'in_progress' | 'complete' | 'coming_soon'
 
-export type AssessmentRepositoryFilter = 'all' | 'individual' | 'team' | 'in_progress' | 'completed'
+export type AssessmentRepositoryScopeFilter = 'all' | 'individual' | 'team'
+
+export type AssessmentRepositoryProgressFilter = 'all' | 'in_progress' | 'completed'
+
+export interface AssessmentRepositoryFilterState {
+  scope: AssessmentRepositoryScopeFilter
+  progress: AssessmentRepositoryProgressFilter
+}
 
 export interface AssessmentRepositoryDetailRow {
   label: string
@@ -45,7 +52,7 @@ export interface AssessmentRepositorySectionModel {
 }
 
 export interface AssessmentSummaryMetric {
-  label: 'Total Assessments' | 'In Progress' | 'Completed' | 'Team Assessments'
+  label: 'Ready to Start' | 'In Progress' | 'Results Ready' | 'Release Pending'
   value: string
   detail: string
 }
@@ -54,4 +61,26 @@ export interface AssessmentRepositoryAction {
   label: string
   href?: string
   action: 'launch' | 'resume' | 'view_results' | 'retake'
+}
+
+export interface AssessmentPassiveState {
+  label: string
+  detail: string
+}
+
+export interface AssessmentActionState {
+  label: string
+  detail: string
+}
+
+export interface AssessmentFilterOption<TValue extends string> {
+  value: TValue
+  label: string
+}
+
+export interface AssessmentFilterGroup<TValue extends string> {
+  key: 'scope' | 'progress'
+  label: string
+  description: string
+  options: AssessmentFilterOption<TValue>[]
 }

@@ -7,9 +7,11 @@ import { AssessmentStatusBadge } from './AssessmentStatusBadge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import {
+  getActionState,
   getCollapsedAction,
   getCollapsedMetadata,
   getExpandedActions,
+  getPassiveState,
 } from '@/lib/assessment/assessment-repository-selectors'
 import type { AssessmentRepositoryItem } from '@/lib/assessment/assessment-repository-types'
 
@@ -47,6 +49,8 @@ export function AssessmentAccordionCard({
   const collapsedAction = getCollapsedAction(item)
   const expandedActions = getExpandedActions(item)
   const collapsedMetadata = getCollapsedMetadata(item)
+  const passiveState = getPassiveState(item)
+  const actionState = getActionState(item)
 
   const handleKeyboardToggle = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') {
@@ -74,11 +78,6 @@ export function AssessmentAccordionCard({
             <div className="flex flex-wrap items-center gap-2.5">
               <h3 className="text-xl font-semibold tracking-tight text-textPrimary">{item.title}</h3>
               <AssessmentStatusBadge status={item.status} />
-              {item.hasAdvancedOutputs ? (
-                <span className="inline-flex items-center rounded-full border border-white/[0.06] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-textSecondary/60">
-                  Advanced outputs
-                </span>
-              ) : null}
             </div>
             <p
               className="max-w-3xl overflow-hidden text-sm leading-7 text-textSecondary [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
@@ -98,21 +97,28 @@ export function AssessmentAccordionCard({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 lg:min-w-[14rem] lg:flex-none lg:justify-end lg:self-center">
-          <div onClick={stopEvent} className="flex min-h-11 min-w-[8.5rem] items-center lg:justify-end lg:text-right">
-            {collapsedAction ? (
-              collapsedAction.action === 'retake' ? (
-                <Button onClick={() => onRetake(item)} className="w-full justify-center px-4 lg:w-auto">
-                  {collapsedAction.label}
-                </Button>
-              ) : (
-                <Button href={collapsedAction.href} className="w-full justify-center px-4 lg:w-auto">
-                  {collapsedAction.label}
-                </Button>
-              )
-            ) : (
-              <div className="flex min-h-10 items-center px-1 text-sm font-medium text-textSecondary/68">Unavailable</div>
-            )}
+        <div className="flex items-start justify-between gap-3 lg:min-w-[17rem] lg:flex-none lg:justify-end">
+          <div onClick={stopEvent} className="flex min-h-11 min-w-[12.5rem] items-center lg:justify-end lg:text-right">
+            {collapsedAction && actionState ? (
+              <div className="flex w-full flex-col items-stretch gap-2 lg:items-end">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-textSecondary/70">{actionState.label}</p>
+                {collapsedAction.action === 'retake' ? (
+                  <Button onClick={() => onRetake(item)} className="w-full justify-center px-4 lg:w-auto">
+                    {collapsedAction.label}
+                  </Button>
+                ) : (
+                  <Button href={collapsedAction.href} className="w-full justify-center px-4 lg:w-auto">
+                    {collapsedAction.label}
+                  </Button>
+                )}
+                <p className="text-sm leading-6 text-textSecondary/78 lg:max-w-[14rem]">{actionState.detail}</p>
+              </div>
+            ) : passiveState ? (
+              <div className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-3.5 text-left lg:max-w-[14rem] lg:text-right">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-textSecondary/74">{passiveState.label}</p>
+                <p className="mt-1.5 text-sm leading-6 text-textSecondary/82">{passiveState.detail}</p>
+              </div>
+            ) : null}
           </div>
 
           <button
@@ -192,9 +198,12 @@ export function AssessmentAccordionCard({
                         </Button>
                       ),
                     )
-                  ) : (
-                    <div className="min-h-10 px-1 text-sm font-medium text-textSecondary/70">Unavailable</div>
-                  )}
+                  ) : passiveState ? (
+                    <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-3.5 text-sm leading-6 text-textSecondary/82">
+                      <span className="mr-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-textSecondary/74">{passiveState.label}</span>
+                      {passiveState.detail}
+                    </div>
+                  ) : null}
                 </div>
               </section>
             </div>
