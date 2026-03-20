@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, ChevronRight, ClipboardList, Clock3, GitBranch } from 'lucide-react'
 import Link from 'next/link'
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
+import { AdminUsersAccessRegistryClient } from '@/components/admin/surfaces/AdminUsersAccessRegistryClient'
 import { AdminDashboardSurface } from '@/components/admin/dashboard/AdminDashboardSurface'
 import {
   Badge,
@@ -456,48 +457,6 @@ export function AdminUsersWireframePage() {
   const accessReviewUsers = adminUsers.filter((user) => getUserAccessSignals(user).length > 0)
   const multiMembershipUsers = adminUsers.filter((user) => getUserSummary(user).memberships.length > 1)
 
-  const buildRows = (users: typeof adminUsers) => users.map((user) => {
-    const summary = getUserSummary(user)
-    const accessFlags = getUserAccessSignals(user)
-    const roleSummary = getUserRoleSummary(user)
-    const activityBand = getUserActivityBand(user)
-    const organisationLabels = summary.memberships
-      .map((membership) => organisations.find((organisation) => organisation.id === membership.organisationId)?.name ?? membership.organisationId)
-      .join(' · ')
-
-    return [
-      <div key={`${user.id}-name`}>
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge status={user.kind} />
-          <Link href={`/admin/users/${user.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-textPrimary hover:text-accent">
-            {user.profile.fullName}
-            <ChevronRight className="h-4 w-4" />
-          </Link>
-        </div>
-        <p className="mt-1 text-sm text-textSecondary">{user.email}</p>
-      </div>,
-      <div key={`${user.id}-scope`} className="space-y-2">
-        <Badge label={roleSummary.label} tone={roleSummary.tone} />
-        <p className="text-xs text-textSecondary">{getKindLabel(user)}</p>
-      </div>,
-      <div key={`${user.id}-organisation`} className="space-y-2">
-        <p className="text-sm font-medium text-textPrimary">{summary.primaryOrganisation?.name ?? 'Internal-only access'}</p>
-        <p className="text-xs text-textSecondary">{summary.memberships.length} memberships{organisationLabels ? ` · ${organisationLabels}` : ''}</p>
-      </div>,
-      <div key={`${user.id}-status`} className="space-y-2">
-        <StatusBadge status={user.status === 'deactivated' ? 'inactive' : user.status} />
-        <Badge label={getActivityBandLabel(activityBand)} tone={activityBand === 'active' ? 'emerald' : activityBand === 'recent' ? 'sky' : activityBand === 'watch' ? 'amber' : 'slate'} />
-      </div>,
-      <div key={`${user.id}-activity`}>
-        <p className="text-sm font-medium text-textPrimary">{formatAdminRelativeTime(user.recentActivity.lastActiveAt)}</p>
-        <p className="text-xs text-textSecondary">{formatAdminTimestamp(user.recentActivity.lastActiveAt)}</p>
-      </div>,
-      <div key={`${user.id}-flags`}>
-        <AccessFlagGroup labels={accessFlags} />
-      </div>,
-    ]
-  })
-
   return (
     <div className="space-y-6 lg:space-y-8">
       <AdminPageHeader eyebrow="Users" title="Access control registry" description="Operator-facing registry for Sonartra admins, tenant users, invite posture, and access risk across the multi-tenant estate." actions={<Button variant="secondary">Initiate access review</Button>} />
@@ -509,29 +468,10 @@ export function AdminUsersWireframePage() {
         <MetricCard label="Multi-org identities" value={String(multiMembershipUsers.length).padStart(2, '0')} detail="Users spanning more than one organisation membership and needing explicit scope awareness." />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
-        <SurfaceSection title="Access registry" eyebrow="Control surface" description="Dense registry patterned after Organisations, tuned for access scope, membership posture, inactivity review, and elevated permissions.">
-          <FilterBar
-            searchPlaceholder="Search name, email, organisation, or role…"
-            groups={[
-              { label: 'User type', options: ['All', 'Internal', 'Organisation'] },
-              { label: 'Role', options: ['All', 'Super admin', 'Assessment admin', 'Org admin', 'Org member'] },
-              { label: 'Status', options: ['All', 'Active', 'Invited', 'Inactive', 'Suspended'] },
-              { label: 'Activity band', options: ['All', 'Active now', 'Recent', 'Watch', 'Inactive'] },
-            ]}
-            trailing={<Button href="/admin/audit" variant="ghost">Access audit</Button>}
-          />
-        </SurfaceSection>
+      <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr] xl:items-start">
+        <AdminUsersAccessRegistryClient />
         <UserRoleReferencePanel />
       </div>
-
-      <SurfaceSection title="Internal Sonartra operators" eyebrow="Internal access" description="Privileged platform operators are isolated from tenant identities so elevated access can be reviewed quickly.">
-        <Table columns={["User", "Role", "Access scope", "Status", "Last activity", "Flags"]} rows={buildRows(internalUsers)} />
-      </SurfaceSection>
-
-      <SurfaceSection title="Organisation user registry" eyebrow="Tenant access" description="Customer identities remain tenant-scoped, with clear organisation context, membership breadth, invite posture, and dormancy signals.">
-        <Table columns={["User", "Role", "Organisation / memberships", "Status", "Last activity", "Flags"]} rows={buildRows(organisationUsers)} />
-      </SurfaceSection>
     </div>
   )
 }

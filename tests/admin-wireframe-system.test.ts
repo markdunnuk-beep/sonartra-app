@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
+import { DEFAULT_ACCESS_QUERY, adminUsers, filterUsersByQuery, matchesActivity, matchesRisk, matchesScope } from '../lib/admin/domain'
 import {
   findAssessmentBySlug,
   findAssessmentVersion,
@@ -142,4 +143,57 @@ test('admin routes point to the shared high-fidelity wireframe surfaces', async 
     const source = await readFile(new URL(route, import.meta.url), 'utf8')
     assert.match(source, /Admin.*WireframePage/)
   }
+})
+
+
+test('access query selectors support operator-grade filtering across scope, role, status, activity, and risk', () => {
+  assert.deepEqual(
+    filterUsersByQuery(adminUsers, { ...DEFAULT_ACCESS_QUERY, scope: 'multi_org' }).map((user) => user.id),
+    ['user-org-bianca'],
+  )
+  assert.deepEqual(
+    filterUsersByQuery(adminUsers, { ...DEFAULT_ACCESS_QUERY, riskFlags: ['elevated_access'] }).map((user) => user.id),
+    ['user-admin-rina'],
+  )
+  assert.deepEqual(
+    filterUsersByQuery(adminUsers, { ...DEFAULT_ACCESS_QUERY, scope: 'organisation', activityBand: ['inactive'] }).map((user) => user.id),
+    ['user-org-isaac', 'user-org-maya'],
+  )
+  assert.equal(matchesScope(adminUsers.find((user) => user.id === 'user-org-bianca')!, 'multi_org'), true)
+  assert.equal(matchesActivity(adminUsers.find((user) => user.id === 'user-admin-ella')!, ['recent']), true)
+  assert.equal(matchesRisk(adminUsers.find((user) => user.id === 'user-org-maya')!, ['no_recent_activity']), true)
+})
+
+test('access query selectors combine multiple filters and preserve empty states when no users match', () => {
+  assert.deepEqual(
+    filterUsersByQuery(adminUsers, {
+      ...DEFAULT_ACCESS_QUERY,
+      scope: 'internal',
+      roleTypes: ['super_admin'],
+      riskFlags: ['elevated_access'],
+      status: ['active'],
+      activityBand: ['active_now'],
+    }).map((user) => user.id),
+    ['user-admin-rina'],
+  )
+  assert.deepEqual(
+    filterUsersByQuery(adminUsers, {
+      ...DEFAULT_ACCESS_QUERY,
+      scope: 'organisation',
+      status: ['suspended'],
+      riskFlags: ['multi_org'],
+    }),
+    [],
+  )
+})
+
+test('access query search matches organisation and role context for operator questions', () => {
+  assert.deepEqual(
+    filterUsersByQuery(adminUsers, { ...DEFAULT_ACCESS_QUERY, search: 'northstar' }).map((user) => user.id),
+    ['user-org-alex', 'user-org-bianca'],
+  )
+  assert.deepEqual(
+    filterUsersByQuery(adminUsers, { ...DEFAULT_ACCESS_QUERY, search: 'super admin' }).map((user) => user.id),
+    ['user-admin-rina'],
+  )
 })
