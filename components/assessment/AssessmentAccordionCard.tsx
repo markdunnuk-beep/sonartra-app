@@ -7,6 +7,7 @@ import { AssessmentStatusBadge } from './AssessmentStatusBadge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import {
+  getActionState,
   getCollapsedAction,
   getCollapsedMetadata,
   getExpandedActions,
@@ -49,6 +50,7 @@ export function AssessmentAccordionCard({
   const expandedActions = getExpandedActions(item)
   const collapsedMetadata = getCollapsedMetadata(item)
   const passiveState = getPassiveState(item)
+  const actionState = getActionState(item)
 
   const handleKeyboardToggle = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') {
@@ -97,9 +99,9 @@ export function AssessmentAccordionCard({
 
         <div className="flex items-start justify-between gap-3 lg:min-w-[17rem] lg:flex-none lg:justify-end">
           <div onClick={stopEvent} className="flex min-h-11 min-w-[12.5rem] items-center lg:justify-end lg:text-right">
-            {collapsedAction ? (
+            {collapsedAction && actionState ? (
               <div className="flex w-full flex-col items-stretch gap-2 lg:items-end">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-textSecondary/70">Available now</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-textSecondary/70">{actionState.label}</p>
                 {collapsedAction.action === 'retake' ? (
                   <Button onClick={() => onRetake(item)} className="w-full justify-center px-4 lg:w-auto">
                     {collapsedAction.label}
@@ -109,6 +111,7 @@ export function AssessmentAccordionCard({
                     {collapsedAction.label}
                   </Button>
                 )}
+                <p className="text-sm leading-6 text-textSecondary/78 lg:max-w-[14rem]">{actionState.detail}</p>
               </div>
             ) : passiveState ? (
               <div className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-3.5 text-left lg:max-w-[14rem] lg:text-right">

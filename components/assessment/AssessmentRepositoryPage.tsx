@@ -13,13 +13,18 @@ import {
   getAssessmentRepositoryInventory,
 } from '@/lib/assessment/assessment-repository-selectors'
 import type {
-  AssessmentRepositoryFilter,
+  AssessmentRepositoryFilterState,
   AssessmentRepositoryItem,
   AssessmentRepositorySectionModel,
 } from '@/lib/assessment/assessment-repository-types'
 
+const defaultFilterState: AssessmentRepositoryFilterState = {
+  scope: 'all',
+  progress: 'all',
+}
+
 export function AssessmentRepositoryPage({ inventory = getAssessmentRepositoryInventory() }: { inventory?: AssessmentRepositoryItem[] }) {
-  const [activeFilter, setActiveFilter] = useState<AssessmentRepositoryFilter>('all')
+  const [activeFilters, setActiveFilters] = useState<AssessmentRepositoryFilterState>(defaultFilterState)
   const [expandedBySection, setExpandedBySection] = useState<Record<AssessmentRepositorySectionModel['category'], string | null>>({
     individual: null,
     team: null,
@@ -27,7 +32,7 @@ export function AssessmentRepositoryPage({ inventory = getAssessmentRepositoryIn
   const [retakeTarget, setRetakeTarget] = useState<AssessmentRepositoryItem | null>(null)
 
   const metrics = useMemo(() => buildAssessmentSummaryMetrics(inventory), [inventory])
-  const sections = useMemo(() => buildAssessmentSections(inventory, activeFilter), [inventory, activeFilter])
+  const sections = useMemo(() => buildAssessmentSections(inventory, activeFilters), [inventory, activeFilters])
 
   const handleToggle = (sectionKey: AssessmentRepositorySectionModel['category'], itemId: string) => {
     setExpandedBySection((current) => ({
@@ -40,7 +45,7 @@ export function AssessmentRepositoryPage({ inventory = getAssessmentRepositoryIn
     <>
       <div className="space-y-8 lg:space-y-10">
         <AssessmentSummaryStrip metrics={metrics} />
-        <AssessmentFilterRow activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+        <AssessmentFilterRow activeFilters={activeFilters} onFilterChange={setActiveFilters} />
 
         <div className="space-y-10 lg:space-y-12">
           {sections.map((section, index) => (

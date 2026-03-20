@@ -2,7 +2,14 @@ export type AssessmentRepositoryCategory = 'individual' | 'team'
 
 export type AssessmentRepositoryStatus = 'not_started' | 'in_progress' | 'complete' | 'coming_soon'
 
-export type AssessmentRepositoryFilter = 'all' | 'individual' | 'team' | 'in_progress' | 'completed'
+export type AssessmentRepositoryScopeFilter = 'all' | 'individual' | 'team'
+
+export type AssessmentRepositoryProgressFilter = 'all' | 'in_progress' | 'completed'
+
+export interface AssessmentRepositoryFilterState {
+  scope: AssessmentRepositoryScopeFilter
+  progress: AssessmentRepositoryProgressFilter
+}
 
 export interface AssessmentRepositoryDetailRow {
   label: string
@@ -61,13 +68,19 @@ export interface AssessmentPassiveState {
   detail: string
 }
 
-export interface AssessmentFilterOption {
-  value: AssessmentRepositoryFilter
+export interface AssessmentActionState {
+  label: string
+  detail: string
+}
+
+export interface AssessmentFilterOption<TValue extends string> {
+  value: TValue
   label: string
 }
 
-export interface AssessmentFilterGroup {
+export interface AssessmentFilterGroup<TValue extends string> {
+  key: 'scope' | 'progress'
   label: string
   description: string
-  options: AssessmentFilterOption[]
+  options: AssessmentFilterOption<TValue>[]
 }
