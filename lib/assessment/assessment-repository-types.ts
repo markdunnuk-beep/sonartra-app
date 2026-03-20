@@ -45,7 +45,7 @@ export interface AssessmentRepositorySectionModel {
 }
 
 export interface AssessmentSummaryMetric {
-  label: 'Total Assessments' | 'In Progress' | 'Completed' | 'Team Assessments'
+  label: 'Ready to Start' | 'In Progress' | 'Results Ready' | 'Release Pending'
   value: string
   detail: string
 }
@@ -54,4 +54,20 @@ export interface AssessmentRepositoryAction {
   label: string
   href?: string
   action: 'launch' | 'resume' | 'view_results' | 'retake'
+}
+
+export interface AssessmentPassiveState {
+  label: string
+  detail: string
+}
+
+export interface AssessmentFilterOption {
+  value: AssessmentRepositoryFilter
+  label: string
+}
+
+export interface AssessmentFilterGroup {
+  label: string
+  description: string
+  options: AssessmentFilterOption[]
 }

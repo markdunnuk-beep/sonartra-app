@@ -10,9 +10,11 @@ import {
   buildAssessmentSummaryMetrics,
   createAssessmentCatalogueSnapshot,
   deriveAssessmentRepositoryItem,
+  getAssessmentFilterGroups,
   getAssessmentRepositoryInventory,
   getCollapsedAction,
   getExpandedActions,
+  getPassiveState,
   getVisibleAssessmentDefinitions,
   resolveRepositoryItemStatus,
   resolveRepositoryVisibilityState,
@@ -29,29 +31,40 @@ function renderRepository() {
   return renderToStaticMarkup(<AssessmentRepositoryPage inventory={inventory} />)
 }
 
-test('assessment repository renders the approved header content, summary metrics, and both assessment sections', () => {
+test('assessment repository renders operational summary metrics, grouped filters, and both assessment sections', () => {
   const html = renderRepository()
 
-  assert.match(html, /Total Assessments/)
+  assert.match(html, /Ready to Start/)
   assert.match(html, /In Progress/)
-  assert.match(html, /Completed/)
-  assert.match(html, /Team Assessments/)
+  assert.match(html, /Results Ready/)
+  assert.match(html, /Release Pending/)
+  assert.match(html, /Repository scope/)
+  assert.match(html, /Progress state/)
   assert.match(html, /Individual Assessments/)
   assert.match(html, /Team Assessments/)
+  assert.match(html, /Eligible team diagnostics include advanced organizational reporting on supported plans\./)
   assert.match(html, /Sonartra Signals/)
   assert.match(html, /Team Dynamics/)
-  assert.doesNotMatch(html, /Available/)
+  assert.doesNotMatch(html, /Advanced outputs<\/span>/)
 })
 
-test('summary strip counts use derived config-driven repository metrics', () => {
+test('summary strip counts stay within one operational state model', () => {
   const metrics = buildAssessmentSummaryMetrics(inventory)
 
   assert.deepEqual(metrics.map((metric) => [metric.label, metric.value]), [
-    ['Total Assessments', '10'],
+    ['Ready to Start', '6'],
     ['In Progress', '1'],
-    ['Completed', '1'],
-    ['Team Assessments', '5'],
+    ['Results Ready', '1'],
+    ['Release Pending', '2'],
   ])
+})
+
+test('filter groups separate repository scope from progress state semantics', () => {
+  const groups = getAssessmentFilterGroups()
+
+  assert.deepEqual(groups.map((group) => group.label), ['Repository scope', 'Progress state'])
+  assert.deepEqual(groups[0]?.options.map((option) => option.value), ['all', 'individual', 'team'])
+  assert.deepEqual(groups[1]?.options.map((option) => option.value), ['in_progress', 'completed'])
 })
 
 test('visible catalogue items exclude hidden and archived definitions before repository derivation', () => {
@@ -138,7 +151,7 @@ test('filters refine within section structure and hide sections with zero matchi
   assert.ok(teamSections[0]?.items.every((item) => item.category === 'team'))
 })
 
-test('status and CTA mapping follow the approved repository rules including coming soon and retake states', () => {
+test('status and CTA mapping keep actions distinct from passive repository states', () => {
   const notStarted = inventory.find((item) => item.id === 'leadership-effectiveness')
   const inProgress = inventory.find((item) => item.id === 'burnout-risk')
   const complete = inventory.find((item) => item.id === 'signals')
@@ -150,14 +163,19 @@ test('status and CTA mapping follow the approved repository rules including comi
   assert.equal(getExpandedActions(complete!).map((action) => action.label).join(' | '), 'View Results | Retake Assessment')
   assert.equal(getCollapsedAction(comingSoon!), null)
   assert.deepEqual(getExpandedActions(comingSoon!), [])
+  assert.deepEqual(getPassiveState(comingSoon!), {
+    label: 'Release pending',
+    detail: 'This assessment is visible for planning, but launch stays locked until release readiness is confirmed.',
+  })
 })
 
-test('advanced outputs remain a secondary label while primary repository status stays not started', () => {
+test('team advanced reporting shifts to calmer section and output semantics without repeated badge clutter', () => {
   const teamDynamics = inventory.find((item) => item.id === 'team-dynamics')
 
   assert.equal(teamDynamics?.status, 'not_started')
   assert.equal(teamDynamics?.hasAdvancedOutputs, true)
-  assert.match(teamDynamics?.outputRows[1]?.label ?? '', /Advanced outputs/)
+  assert.match(teamDynamics?.outputRows[1]?.label ?? '', /Reporting tier/)
+  assert.doesNotMatch(teamDynamics?.outputRows[1]?.label ?? '', /Advanced outputs/)
 })
 
 test('derived repository item exposes admin-ready catalogue and availability metadata without leaking it into UI status', () => {
@@ -202,6 +220,7 @@ test('only one card stays expanded per section and completed retakes open the sn
   })
 
   assert.match(JSON.stringify(renderer.toJSON()), /Identify pressure accumulation patterns affecting resilience/)
+  assert.match(JSON.stringify(renderer.toJSON()), /Available now/)
 
   act(() => {
     findCard('conflict-style').props.onClick()
@@ -210,6 +229,14 @@ test('only one card stays expanded per section and completed retakes open the sn
   const afterConflictExpand = JSON.stringify(renderer.toJSON())
   assert.doesNotMatch(afterConflictExpand, /Identify pressure accumulation patterns affecting resilience/)
   assert.match(afterConflictExpand, /Surface the response patterns most likely to show up when decisions stall/)
+
+  act(() => {
+    findCard('decision-profile').props.onClick()
+  })
+
+  const comingSoonExpanded = JSON.stringify(renderer.toJSON())
+  assert.match(comingSoonExpanded, /Release pending/)
+  assert.match(comingSoonExpanded, /launch stays locked until release readiness is confirmed/)
 
   act(() => {
     findCard('signals').props.onClick()

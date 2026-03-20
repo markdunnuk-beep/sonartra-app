@@ -22,7 +22,11 @@ export function AssessmentSection({
           {section.title}
         </h2>
         <p className="max-w-3xl text-sm leading-7 text-textSecondary">{section.description}</p>
-        {section.note ? <p className="text-sm text-textSecondary/80">{section.note}</p> : null}
+        {section.note ? (
+          <div className="inline-flex max-w-3xl items-center rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-sm text-textSecondary/82">
+            {section.note}
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-4">
