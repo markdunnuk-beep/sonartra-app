@@ -33,7 +33,12 @@ export function AdminSidebar({
       <div className="eyebrow mt-7 hidden lg:block">Control surface</div>
       <nav className="mt-3 grid grid-cols-1 gap-2 lg:mt-4 lg:gap-1.5">
         {navigationItems.map(({ href, label, icon: Icon, startsWith, requiredCapabilities }) => {
-          const isActive = startsWith ? pathname.startsWith(startsWith) : pathname === href
+          const isActive =
+            href === '/admin'
+              ? pathname === href || pathname.startsWith('/admin/dashboard')
+              : startsWith
+                ? pathname.startsWith(startsWith)
+                : pathname === href
 
           return (
             <Link
