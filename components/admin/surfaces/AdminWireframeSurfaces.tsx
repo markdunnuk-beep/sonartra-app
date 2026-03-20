@@ -23,7 +23,16 @@ import {
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { adminDashboardModel } from '@/lib/admin/dashboard'
-import { assessmentVersions, assessments, auditLogEvents, getSeatUtilisationPercent, getStatusLabel, organisations, adminUsers } from '@/lib/admin/domain'
+import {
+  adminUsers,
+  assessUserAccessPriority,
+  assessmentVersions,
+  assessments,
+  auditLogEvents,
+  getSeatUtilisationPercent,
+  getStatusLabel,
+  organisations,
+} from '@/lib/admin/domain'
 import { adminRoleDefinitions } from '@/lib/admin/domain/roles'
 import { AssessmentVersionStatus, PublishStatus } from '@/lib/admin/domain/assessments'
 import {
@@ -454,17 +463,21 @@ export function AdminOrganisationDetailWireframePage({ slug }: { slug: string })
 export function AdminUsersWireframePage() {
   const internalUsers = adminUsers.filter((user) => user.kind === 'internal_admin')
   const organisationUsers = adminUsers.filter((user) => user.kind === 'organisation_user')
-  const accessReviewUsers = adminUsers.filter((user) => getUserAccessSignals(user).length > 0)
+  const accessReviewUsers = adminUsers.filter((user) => {
+    const assessment = assessUserAccessPriority(user)
+
+    return assessment.level === 'critical' || assessment.level === 'high'
+  })
   const multiMembershipUsers = adminUsers.filter((user) => getUserSummary(user).memberships.length > 1)
 
   return (
     <div className="space-y-6 lg:space-y-8">
-      <AdminPageHeader eyebrow="Users" title="Access control registry" description="Operator-facing registry for Sonartra admins, tenant users, invite posture, and access risk across the multi-tenant estate." actions={<Button variant="secondary">Initiate access review</Button>} />
+      <AdminPageHeader eyebrow="Users" title="Access control registry" description="Operator-facing registry for Sonartra admins, tenant users, invite posture, and access risk across the multi-tenant estate." actions={<Button variant="secondary">Review flagged users</Button>} />
 
       <div className="grid gap-4 xl:grid-cols-4">
         <MetricCard label="Internal admins" value={String(internalUsers.length).padStart(2, '0')} detail="Privileged Sonartra operators with platform, assessment, support, or customer operations scope." />
         <MetricCard label="Organisation users" value={String(organisationUsers.length).padStart(2, '0')} detail="Customer-side accounts with tenant-scoped access and membership-linked roles." />
-        <MetricCard label="Access review signals" value={String(accessReviewUsers.length).padStart(2, '0')} detail="Invites, suspended operators, dormant users, and other access posture signals requiring review." />
+        <MetricCard label="Review queue" value={String(accessReviewUsers.length).padStart(2, '0')} detail="High and critical priority identities that should rise to the top of the operator queue." />
         <MetricCard label="Multi-org identities" value={String(multiMembershipUsers.length).padStart(2, '0')} detail="Users spanning more than one organisation membership and needing explicit scope awareness." />
       </div>
 
@@ -488,6 +501,7 @@ export function AdminUserDetailWireframePage({ userId }: { userId: string }) {
   const accessHistory = getUserAccessHistory(user)
   const roleSummary = getUserRoleSummary(user)
   const activityBand = getUserActivityBand(user)
+  const priorityAssessment = assessUserAccessPriority(user)
   const primaryMembership = summary.memberships.find((membership) => membership.organisationId === user.primaryOrganisationId) ?? summary.memberships[0] ?? null
   const internalRoleDefinition = user.internalAdminRole ? adminRoleDefinitions[user.internalAdminRole] : null
   const membershipRows = summary.memberships.map((membership) => {
@@ -553,23 +567,42 @@ export function AdminUserDetailWireframePage({ userId }: { userId: string }) {
           </div>
         </Card>
 
-        <MetaPanel
-          title="Role and permissions context"
-          items={[
-            { label: 'Resolved role', value: roleSummary.label },
-            { label: 'Primary organisation', value: summary.primaryOrganisation?.name ?? 'Internal-only operator' },
-            { label: 'Membership count', value: `${summary.memberships.length}` },
-            {
-              label: 'Permissions scope',
-              value: internalRoleDefinition
-                ? internalRoleDefinition.capabilities.map((capability) => capability.replace(':view', '')).join(' · ')
-                : primaryMembership
-                  ? `${getStatusLabel(primaryMembership.role)} within ${summary.memberships.length > 1 ? 'multi-organisation' : 'single-organisation'} scope`
-                  : 'No tenant membership assigned',
-            },
-          ]}
-          footer={<p className="text-xs leading-5 text-textSecondary">Editing flows remain intentionally absent; this surface is for review, audit, and operational decision support.</p>}
-        />
+        <div className="grid gap-4">
+          <MetaPanel
+            title="Role and permissions context"
+            items={[
+              { label: 'Resolved role', value: roleSummary.label },
+              { label: 'Primary organisation', value: summary.primaryOrganisation?.name ?? 'Internal-only operator' },
+              { label: 'Membership count', value: `${summary.memberships.length}` },
+              {
+                label: 'Permissions scope',
+                value: internalRoleDefinition
+                  ? internalRoleDefinition.capabilities.map((capability) => capability.replace(':view', '')).join(' · ')
+                  : primaryMembership
+                    ? `${getStatusLabel(primaryMembership.role)} within ${summary.memberships.length > 1 ? 'multi-organisation' : 'single-organisation'} scope`
+                    : 'No tenant membership assigned',
+              },
+            ]}
+            footer={<p className="text-xs leading-5 text-textSecondary">Editing flows remain intentionally absent; this surface is for review, audit, and operational decision support.</p>}
+          />
+          <MetaPanel
+            title="Priority assessment"
+            items={[
+              { label: 'Priority level', value: <Badge label={priorityAssessment.level} tone={priorityAssessment.level === 'critical' ? 'rose' : priorityAssessment.level === 'high' ? 'amber' : priorityAssessment.level === 'medium' ? 'sky' : 'slate'} /> },
+              { label: 'Score', value: `${priorityAssessment.score}` },
+              {
+                label: 'Derived reasons',
+                value: priorityAssessment.reasons.length ? (
+                  <ul className="space-y-1">
+                    {priorityAssessment.reasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                ) : 'No priority signals derived from the current access facts.',
+              },
+            ]}
+          />
+        </div>
       </div>
 
       <section className="grid gap-4 xl:grid-cols-3">

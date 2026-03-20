@@ -13,11 +13,14 @@ import {
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import {
+  assessUserAccessPriority,
   DEFAULT_ACCESS_QUERY,
   filterUsersByQuery,
+  getAccessPresetViews,
   getUserRoleTypes,
   isElevatedAccessRole,
   organisations,
+  prioritiseUsers,
   type AccessQuery,
   type User,
   adminUsers,
@@ -130,21 +133,51 @@ function FilterChip({
 }
 
 function QueryFilterBar({
+  presetViews,
   query,
+  applyPreset,
   setSearch,
   setScope,
   toggleArrayFilter,
   roleOptions,
 }: {
+  presetViews: ReturnType<typeof getAccessPresetViews>
   query: AccessQuery
+  applyPreset: (query: AccessQuery) => void
   setSearch: (value: string) => void
   setScope: (value: NonNullable<AccessQuery['scope']>) => void
   toggleArrayFilter: <K extends 'roleTypes' | 'status' | 'activityBand' | 'riskFlags'>(field: K, value: NonNullable<AccessQuery[K]>[number]) => void
   roleOptions: Array<{ value: string; label: string }>
 }) {
+  const normaliseQuery = (value: AccessQuery) => JSON.stringify({
+    ...value,
+    roleTypes: value.roleTypes ? [...value.roleTypes].sort() : undefined,
+    status: value.status ? [...value.status].sort() : undefined,
+    activityBand: value.activityBand ? [...value.activityBand].sort() : undefined,
+    riskFlags: value.riskFlags ? [...value.riskFlags].sort() : undefined,
+  })
+  const activePresetId = presetViews.find((preset) => normaliseQuery(query) === normaliseQuery(preset.query))?.id
+
   return (
     <div className="rounded-[1.25rem] border border-white/[0.08] bg-bg/55 p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <div className="grid gap-4">
+        <div className="flex flex-wrap gap-2">
+          {presetViews.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => applyPreset(preset.query)}
+              className={activePresetId === preset.id
+                ? 'inline-flex min-h-9 items-center rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 text-left text-[10px] uppercase tracking-[0.14em] text-accent transition-colors'
+                : 'inline-flex min-h-9 items-center rounded-xl border border-white/[0.08] bg-panel/45 px-3 py-2 text-left text-[10px] uppercase tracking-[0.14em] text-textSecondary transition-colors hover:border-white/[0.14] hover:text-textPrimary'}
+            >
+              <span>
+                <span className="block">{preset.label}</span>
+                <span className="mt-1 block text-[11px] normal-case tracking-normal text-textSecondary">{preset.description}</span>
+              </span>
+            </button>
+          ))}
+        </div>
         <div className="flex flex-wrap items-start gap-3 xl:items-center xl:justify-between">
           <div className="relative min-w-0 flex-1 basis-full">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-textSecondary" />
@@ -214,17 +247,44 @@ function QueryFilterBar({
   )
 }
 
+function getPriorityBadgeTone(level: ReturnType<typeof assessUserAccessPriority>['level']): 'rose' | 'amber' | 'sky' | 'slate' {
+  switch (level) {
+    case 'critical':
+      return 'rose'
+    case 'high':
+      return 'amber'
+    case 'medium':
+      return 'sky'
+    case 'low':
+      return 'slate'
+  }
+}
+
+function getPriorityRowClassName(level: ReturnType<typeof assessUserAccessPriority>['level']): string | undefined {
+  switch (level) {
+    case 'critical':
+      return 'bg-rose-400/[0.04] shadow-[inset_2px_0_0_rgba(251,113,133,0.18)]'
+    case 'high':
+      return 'bg-amber-400/[0.04] shadow-[inset_2px_0_0_rgba(251,191,36,0.18)]'
+    default:
+      return undefined
+  }
+}
+
 function buildRows(users: User[]) {
-  return users.map((user) => {
+  const rows = users.map((user) => {
     const summary = getUserSummary(user)
     const accessFlags = getUserAccessSignals(user)
     const roleSummary = getUserRoleSummary(user)
     const activityBand = getUserActivityBand(user)
+    const priority = assessUserAccessPriority(user)
     const organisationLabels = summary.memberships
       .map((membership) => organisations.find((organisation) => organisation.id === membership.organisationId)?.name ?? membership.organisationId)
       .join(' · ')
 
-    return [
+    return {
+      className: getPriorityRowClassName(priority.level),
+      cells: [
       <div key={`${user.id}-name`}>
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={user.kind} />
@@ -250,11 +310,21 @@ function buildRows(users: User[]) {
         <p className="text-sm font-medium text-textPrimary">{formatAdminRelativeTime(user.recentActivity.lastActiveAt)}</p>
         <p className="text-xs text-textSecondary">{formatAdminTimestamp(user.recentActivity.lastActiveAt)}</p>
       </div>,
+      <div key={`${user.id}-priority`} className="space-y-2">
+        <Badge label={priority.level} tone={getPriorityBadgeTone(priority.level)} />
+        <p className="text-xs text-textSecondary">Score {priority.score}</p>
+      </div>,
       <div key={`${user.id}-flags`}>
         <AccessFlagGroup labels={accessFlags} />
       </div>,
-    ]
+      ],
+    }
   })
+
+  return {
+    rows: rows.map((row) => row.cells),
+    rowClassNames: rows.map((row) => row.className),
+  }
 }
 
 function UserTableSection({
@@ -271,7 +341,7 @@ function UserTableSection({
   return (
     <SurfaceSection title={title} eyebrow={eyebrow} description={description}>
       {users.length ? (
-        <Table columns={["User", "Role", "Organisation / memberships", "Status", "Last activity", "Flags"]} rows={buildRows(users)} />
+        <Table columns={["User", "Role", "Organisation / memberships", "Status", "Last activity", "Priority", "Flags"]} {...buildRows(users)} />
       ) : (
         <EmptyState title="No users match this query" detail="Adjust the structured query filters to widen the access slice or clear one of the active constraints." />
       )}
@@ -280,7 +350,8 @@ function UserTableSection({
 }
 
 export function AdminUsersAccessRegistryClient({ initialQuery = DEFAULT_ACCESS_QUERY }: AdminUsersAccessRegistryClientProps) {
-  const [query, setQuery] = useState<AccessQuery>(initialQuery)
+  const [query, setQuery] = useState<AccessQuery>({ ...initialQuery })
+  const presetViews = useMemo(() => getAccessPresetViews(), [])
 
   const roleOptions = useMemo(() => {
     const roleTypes = Array.from(new Set(adminUsers.flatMap((user) => getUserRoleTypes(user))))
@@ -298,8 +369,9 @@ export function AdminUsersAccessRegistryClient({ initialQuery = DEFAULT_ACCESS_Q
   }, [])
 
   const filteredUsers = useMemo(() => filterUsersByQuery(adminUsers, query), [query])
-  const internalUsers = useMemo(() => filteredUsers.filter((user) => user.kind === 'internal_admin'), [filteredUsers])
-  const organisationUsers = useMemo(() => filteredUsers.filter((user) => user.kind === 'organisation_user'), [filteredUsers])
+  const prioritisedUsers = useMemo(() => prioritiseUsers(filteredUsers), [filteredUsers])
+  const internalUsers = useMemo(() => prioritisedUsers.filter((user) => user.kind === 'internal_admin'), [prioritisedUsers])
+  const organisationUsers = useMemo(() => prioritisedUsers.filter((user) => user.kind === 'organisation_user'), [prioritisedUsers])
 
   function toggleArrayFilter<K extends 'roleTypes' | 'status' | 'activityBand' | 'riskFlags'>(field: K, value: NonNullable<AccessQuery[K]>[number]) {
     setQuery((currentQuery) => {
@@ -334,10 +406,22 @@ export function AdminUsersAccessRegistryClient({ initialQuery = DEFAULT_ACCESS_Q
     }))
   }
 
+  function applyPreset(presetQuery: AccessQuery) {
+    setQuery({ ...presetQuery })
+  }
+
   return (
     <div className="space-y-4">
       <SurfaceSection title="Access registry" eyebrow="Control surface" description="Structured operator query layer for access scope, role posture, activity, and risk signals across the multi-tenant estate.">
-        <QueryFilterBar query={query} setSearch={setSearch} setScope={setScope} toggleArrayFilter={toggleArrayFilter} roleOptions={roleOptions} />
+        <QueryFilterBar
+          presetViews={presetViews}
+          query={query}
+          applyPreset={applyPreset}
+          setSearch={setSearch}
+          setScope={setScope}
+          toggleArrayFilter={toggleArrayFilter}
+          roleOptions={roleOptions}
+        />
       </SurfaceSection>
 
       <UserTableSection
