@@ -1,3 +1,4 @@
+import React from 'react'
 import { AlertTriangle, CheckCircle2, ChevronRight, ClipboardList, Clock3, GitBranch } from 'lucide-react'
 import Link from 'next/link'
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
@@ -26,6 +27,7 @@ import { adminDashboardModel } from '@/lib/admin/dashboard'
 import {
   adminUsers,
   assessUserAccessPriority,
+  type AdminAccessRegistryDomainData,
   assessmentVersions,
   assessments,
   auditLogEvents,
@@ -460,15 +462,15 @@ export function AdminOrganisationDetailWireframePage({ slug }: { slug: string })
   )
 }
 
-export function AdminUsersWireframePage() {
-  const internalUsers = adminUsers.filter((user) => user.kind === 'internal_admin')
-  const organisationUsers = adminUsers.filter((user) => user.kind === 'organisation_user')
-  const accessReviewUsers = adminUsers.filter((user) => {
-    const assessment = assessUserAccessPriority(user)
+export function AdminUsersWireframePage({ accessRegistryData }: { accessRegistryData: AdminAccessRegistryDomainData }) {
+  const internalUsers = accessRegistryData.users.filter((user) => user.kind === 'internal_admin')
+  const organisationUsers = accessRegistryData.users.filter((user) => user.kind === 'organisation_user')
+  const accessReviewUsers = accessRegistryData.users.filter((user) => {
+    const assessment = assessUserAccessPriority(user, accessRegistryData)
 
     return assessment.level === 'critical' || assessment.level === 'high'
   })
-  const multiMembershipUsers = adminUsers.filter((user) => getUserSummary(user).memberships.length > 1)
+  const multiMembershipUsers = accessRegistryData.users.filter((user) => getUserSummary(user, accessRegistryData).memberships.length > 1)
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -482,30 +484,30 @@ export function AdminUsersWireframePage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr] xl:items-start">
-        <AdminUsersAccessRegistryClient />
+        <AdminUsersAccessRegistryClient accessRegistryData={accessRegistryData} />
         <UserRoleReferencePanel />
       </div>
     </div>
   )
 }
 
-export function AdminUserDetailWireframePage({ userId }: { userId: string }) {
-  const user = findUserById(userId)
+export function AdminUserDetailWireframePage({ userId, accessRegistryData }: { userId: string; accessRegistryData: AdminAccessRegistryDomainData }) {
+  const user = findUserById(userId, accessRegistryData)
 
   if (!user) {
-    return <EmptyState title="User not found" detail="The requested user id is not present in the typed Sonartra admin domain model." action={<Button href="/admin/users" variant="secondary">Back to users</Button>} />
+    return <EmptyState title="User not found" detail="The requested user id is not present in the access registry." action={<Button href="/admin/users" variant="secondary">Back to users</Button>} />
   }
 
-  const summary = getUserSummary(user)
-  const accessFlags = getUserAccessSignals(user)
-  const accessHistory = getUserAccessHistory(user)
-  const roleSummary = getUserRoleSummary(user)
-  const activityBand = getUserActivityBand(user)
-  const priorityAssessment = assessUserAccessPriority(user)
+  const summary = getUserSummary(user, accessRegistryData)
+  const accessFlags = getUserAccessSignals(user, undefined, accessRegistryData)
+  const accessHistory = getUserAccessHistory(user, accessRegistryData)
+  const roleSummary = getUserRoleSummary(user, accessRegistryData)
+  const activityBand = getUserActivityBand(user, undefined, accessRegistryData)
+  const priorityAssessment = assessUserAccessPriority(user, accessRegistryData)
   const primaryMembership = summary.memberships.find((membership) => membership.organisationId === user.primaryOrganisationId) ?? summary.memberships[0] ?? null
   const internalRoleDefinition = user.internalAdminRole ? adminRoleDefinitions[user.internalAdminRole] : null
   const membershipRows = summary.memberships.map((membership) => {
-    const organisation = organisations.find((organisationItem) => organisationItem.id === membership.organisationId)
+    const organisation = accessRegistryData.organisations.find((organisationItem) => organisationItem.id === membership.organisationId)
 
     return [
       <div key={`${membership.id}-org`}>

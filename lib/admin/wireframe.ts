@@ -22,6 +22,8 @@ import {
   getStatusLabel,
   organisationMemberships,
   organisations,
+  type AdminAccessRegistryDomainData,
+  DEFAULT_ADMIN_ACCESS_REGISTRY_DATA,
 } from './domain'
 
 export interface AdminTabItem {
@@ -159,8 +161,8 @@ export function findOrganisationBySlug(slug: string): Organisation | null {
   return organisations.find((organisation) => organisation.slug === slug) ?? null
 }
 
-export function findUserById(userId: string): User | null {
-  return adminUsers.find((user) => user.id === userId) ?? null
+export function findUserById(userId: string, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): User | null {
+  return data.users.find((user) => user.id === userId) ?? null
 }
 
 export function findAssessmentBySlug(slug: string): Assessment | null {
@@ -189,8 +191,8 @@ export function getOrganisationUsers(organisationId: string): User[] {
   return adminUsers.filter((user) => membershipUserIds.has(user.id))
 }
 
-export function getUserMemberships(userId: string): OrganisationMembership[] {
-  return organisationMemberships.filter((membership) => membership.userId === userId)
+export function getUserMemberships(userId: string, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): OrganisationMembership[] {
+  return data.memberships.filter((membership) => membership.userId === userId)
 }
 
 export function getAssessmentVersionsForAssessment(assessmentId: string): AssessmentVersion[] {
@@ -204,10 +206,10 @@ export function getAssessmentAuditEvents(assessmentId: string): AuditLogEvent[] 
   return auditLogEvents.filter((event) => event.entity.entityId === assessmentId || versionIds.has(event.entity.entityId))
 }
 
-export function getEntityAuditEvents(entityIds: string[]): AuditLogEvent[] {
+export function getEntityAuditEvents(entityIds: string[], dataSource: Pick<AdminAccessRegistryDomainData, 'auditEvents'> = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): AuditLogEvent[] {
   const entityIdSet = new Set(entityIds)
 
-  return auditLogEvents.filter((event) => entityIdSet.has(event.entity.entityId))
+  return dataSource.auditEvents.filter((event) => entityIdSet.has(event.entity.entityId))
 }
 
 export function getOrganisationAuditEvents(organisationId: string): AuditLogEvent[] {
@@ -304,18 +306,18 @@ export function getOrganisationHealthSignals(organisation: Organisation, referen
   return signals
 }
 
-export function getUserSummary(user: User) {
-  const memberships = getUserMemberships(user.id)
-  const primaryOrganisation = user.primaryOrganisationId ? organisations.find((organisation) => organisation.id === user.primaryOrganisationId) ?? null : null
+export function getUserSummary(user: User, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA) {
+  const memberships = getUserMemberships(user.id, data)
+  const primaryOrganisation = user.primaryOrganisationId ? data.organisations.find((organisation) => organisation.id === user.primaryOrganisationId) ?? null : null
 
   return {
     memberships,
     primaryOrganisation,
-    auditEvents: getEntityAuditEvents([user.id, ...memberships.map((membership) => membership.id)]),
+    auditEvents: getEntityAuditEvents([user.id, ...memberships.map((membership) => membership.id)], data),
   }
 }
 
-export function getUserActivityBand(user: User, referenceDate: Date = getAdminReferenceDate()): UserActivityBand {
+export function getUserActivityBand(user: User, referenceDate: Date = getAdminReferenceDate(), _data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): UserActivityBand {
   const daysSinceActivity = getDaysSince(user.recentActivity.lastActiveAt, referenceDate)
 
   if (daysSinceActivity === null) {
@@ -337,8 +339,8 @@ export function getUserActivityBand(user: User, referenceDate: Date = getAdminRe
   return 'inactive'
 }
 
-export function getUserRoleSummary(user: User): UserRoleSummary {
-  const memberships = getUserMemberships(user.id)
+export function getUserRoleSummary(user: User, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): UserRoleSummary {
+  const memberships = getUserMemberships(user.id, data)
 
   if (user.kind === UserKind.InternalAdmin && user.internalAdminRole) {
     const definition = getAdminRoleDefinition(user.internalAdminRole)
@@ -363,11 +365,11 @@ export function getUserRoleSummary(user: User): UserRoleSummary {
   }
 }
 
-export function getUserAccessSignals(user: User, referenceDate: Date = getAdminReferenceDate()): UserAccessSignal[] {
-  const summary = getUserSummary(user)
+export function getUserAccessSignals(user: User, referenceDate: Date = getAdminReferenceDate(), data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): UserAccessSignal[] {
+  const summary = getUserSummary(user, data)
   const signals: UserAccessSignal[] = []
-  const activityBand = getUserActivityBand(user, referenceDate)
-  const roleSummary = getUserRoleSummary(user)
+  const activityBand = getUserActivityBand(user, referenceDate, data)
+  const roleSummary = getUserRoleSummary(user, data)
 
   if (user.status === UserStatus.Invited && !user.externalAuthId) {
     signals.push({ label: 'Invite pending', tone: 'amber' })
@@ -400,8 +402,8 @@ export function getUserAccessSignals(user: User, referenceDate: Date = getAdminR
   return signals
 }
 
-export function getUserAccessHistory(user: User) {
-  const summary = getUserSummary(user)
+export function getUserAccessHistory(user: User, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA) {
+  const summary = getUserSummary(user, data)
 
   return summary.auditEvents.filter((event) =>
     ['user', 'membership', 'admin_access'].includes(event.entity.entityType),

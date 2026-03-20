@@ -1,25 +1,25 @@
 import { getStatusLabel } from './helpers'
-import { auditLogEvents, assessmentVersions, organisations, organisationMemberships } from './mock-data'
 import { OrganisationRole } from './organisations'
 import { getAdminRoleDefinition, InternalAdminRole } from './roles'
 import { User, UserKind, UserStatus } from './users'
 import { AccessQuery } from './access-query'
+import { AdminAccessRegistryDomainData, DEFAULT_ADMIN_ACCESS_REGISTRY_DATA } from './access-registry'
 
-function getUserMemberships(userId: string) {
-  return organisationMemberships.filter((membership) => membership.userId === userId)
+function getUserMemberships(userId: string, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA) {
+  return data.memberships.filter((membership) => membership.userId === userId)
 }
 
-function getAccessReferenceDate(): Date {
+function getAccessReferenceDate(data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): Date {
   const timestamps = [
-    ...auditLogEvents.map((event) => Date.parse(event.occurredAt)),
-    ...assessmentVersions.map((version) => Date.parse(version.updatedAt)),
-    ...organisations.map((organisation) => Date.parse(organisation.updatedAt)),
+    ...data.auditEvents.map((event) => Date.parse(event.occurredAt)),
+    ...data.organisations.map((organisation) => Date.parse(organisation.updatedAt)),
+    ...data.users.map((user) => Date.parse(user.updatedAt)),
   ].filter((value) => Number.isFinite(value))
 
-  return new Date(Math.max(...timestamps))
+  return new Date(timestamps.length ? Math.max(...timestamps) : Date.now())
 }
 
-function getDaysSince(value: string | null, referenceDate: Date = getAccessReferenceDate()): number | null {
+function getDaysSince(value: string | null, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA, referenceDate: Date = getAccessReferenceDate(data)): number | null {
   if (!value) {
     return null
   }
@@ -33,8 +33,8 @@ function getDaysSince(value: string | null, referenceDate: Date = getAccessRefer
   return Math.floor((referenceDate.getTime() - timestamp) / (24 * 60 * 60 * 1000))
 }
 
-function getNormalisedActivityBand(user: User): NonNullable<AccessQuery['activityBand']>[number] {
-  const daysSinceActivity = getDaysSince(user.recentActivity.lastActiveAt)
+function getNormalisedActivityBand(user: User, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): NonNullable<AccessQuery['activityBand']>[number] {
+  const daysSinceActivity = getDaysSince(user.recentActivity.lastActiveAt, data)
 
   if (daysSinceActivity === null) {
     return 'inactive'
@@ -51,8 +51,8 @@ function getNormalisedActivityBand(user: User): NonNullable<AccessQuery['activit
   return 'inactive'
 }
 
-function getUserRoleLabel(user: User): string {
-  const memberships = getUserMemberships(user.id)
+function getUserRoleLabel(user: User, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): string {
+  const memberships = getUserMemberships(user.id, data)
 
   if (user.kind === UserKind.InternalAdmin && user.internalAdminRole) {
     return getAdminRoleDefinition(user.internalAdminRole).label
@@ -76,9 +76,9 @@ function normaliseStatus(user: User): NonNullable<AccessQuery['status']>[number]
   }
 }
 
-function hasRiskFlag(user: User, riskFlag: NonNullable<AccessQuery['riskFlags']>[number]): boolean {
-  const membershipCount = getUserMemberships(user.id).length
-  const activityBand = getNormalisedActivityBand(user)
+function hasRiskFlag(user: User, riskFlag: NonNullable<AccessQuery['riskFlags']>[number], data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): boolean {
+  const membershipCount = getUserMemberships(user.id, data).length
+  const activityBand = getNormalisedActivityBand(user, data)
 
   switch (riskFlag) {
     case 'elevated_access':
@@ -94,16 +94,16 @@ function hasRiskFlag(user: User, riskFlag: NonNullable<AccessQuery['riskFlags']>
   }
 }
 
-function matchesSearch(user: User, search?: string): boolean {
+function matchesSearch(user: User, search: string | undefined, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): boolean {
   const query = search?.trim().toLowerCase()
 
   if (!query) {
     return true
   }
 
-  const memberships = getUserMemberships(user.id)
+  const memberships = getUserMemberships(user.id, data)
   const organisationNames = memberships
-    .map((membership) => organisations.find((organisation) => organisation.id === membership.organisationId)?.name)
+    .map((membership) => data.organisations.find((organisation) => organisation.id === membership.organisationId)?.name)
     .filter((name): name is string => Boolean(name))
   const membershipRoles = memberships.map((membership) => getStatusLabel(membership.role))
   const haystack = [
@@ -112,7 +112,7 @@ function matchesSearch(user: User, search?: string): boolean {
     user.profile.lastName,
     user.email,
     user.profile.title,
-    getUserRoleLabel(user),
+    getUserRoleLabel(user, data),
     user.internalAdminRole,
     ...organisationNames,
     ...membershipRoles,
@@ -124,7 +124,7 @@ function matchesSearch(user: User, search?: string): boolean {
   return haystack.includes(query)
 }
 
-export function matchesScope(user: User, scope: AccessQuery['scope'] = 'all'): boolean {
+export function matchesScope(user: User, scope: AccessQuery['scope'] = 'all', data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): boolean {
   if (!scope || scope === 'all') {
     return true
   }
@@ -137,10 +137,10 @@ export function matchesScope(user: User, scope: AccessQuery['scope'] = 'all'): b
     return user.kind === UserKind.OrganisationUser
   }
 
-  return getUserMemberships(user.id).length > 1
+  return getUserMemberships(user.id, data).length > 1
 }
 
-export function matchesRole(user: User, roleTypes?: string[]): boolean {
+export function matchesRole(user: User, roleTypes: string[] | undefined, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): boolean {
   if (!roleTypes?.length) {
     return true
   }
@@ -151,7 +151,7 @@ export function matchesRole(user: User, roleTypes?: string[]): boolean {
     userRoles.add(user.internalAdminRole)
   }
 
-  getUserMemberships(user.id).forEach((membership) => userRoles.add(membership.role))
+  getUserMemberships(user.id, data).forEach((membership) => userRoles.add(membership.role))
 
   return roleTypes.some((roleType) => userRoles.has(roleType))
 }
@@ -164,41 +164,41 @@ export function matchesStatus(user: User, statuses?: AccessQuery['status']): boo
   return statuses.includes(normaliseStatus(user))
 }
 
-export function matchesActivity(user: User, activityBand?: AccessQuery['activityBand']): boolean {
+export function matchesActivity(user: User, activityBand: AccessQuery['activityBand'] | undefined, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): boolean {
   if (!activityBand?.length) {
     return true
   }
 
-  return activityBand.includes(getNormalisedActivityBand(user))
+  return activityBand.includes(getNormalisedActivityBand(user, data))
 }
 
-export function matchesRisk(user: User, riskFlags?: AccessQuery['riskFlags']): boolean {
+export function matchesRisk(user: User, riskFlags: AccessQuery['riskFlags'] | undefined, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): boolean {
   if (!riskFlags?.length) {
     return true
   }
 
-  return riskFlags.some((riskFlag) => hasRiskFlag(user, riskFlag))
+  return riskFlags.some((riskFlag) => hasRiskFlag(user, riskFlag, data))
 }
 
-export function filterUsersByQuery(users: User[], query: AccessQuery): User[] {
+export function filterUsersByQuery(users: User[], query: AccessQuery, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): User[] {
   return users.filter((user) => (
-    matchesSearch(user, query.search)
-    && matchesScope(user, query.scope)
-    && matchesRole(user, query.roleTypes)
+    matchesSearch(user, query.search, data)
+    && matchesScope(user, query.scope, data)
+    && matchesRole(user, query.roleTypes, data)
     && matchesStatus(user, query.status)
-    && matchesActivity(user, query.activityBand)
-    && matchesRisk(user, query.riskFlags)
+    && matchesActivity(user, query.activityBand, data)
+    && matchesRisk(user, query.riskFlags, data)
   ))
 }
 
-export function getUserRoleTypes(user: User): string[] {
+export function getUserRoleTypes(user: User, data: AdminAccessRegistryDomainData = DEFAULT_ADMIN_ACCESS_REGISTRY_DATA): string[] {
   const roleTypes = new Set<string>()
 
   if (user.internalAdminRole) {
     roleTypes.add(user.internalAdminRole)
   }
 
-  getUserMemberships(user.id).forEach((membership) => roleTypes.add(membership.role))
+  getUserMemberships(user.id, data).forEach((membership) => roleTypes.add(membership.role))
 
   return [...roleTypes]
 }
