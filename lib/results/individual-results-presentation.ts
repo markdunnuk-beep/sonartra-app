@@ -286,7 +286,7 @@ function buildDomainSection(
 function buildAssessmentSummary(archetypeSummary: ArchetypeSummary | undefined, domainSections: IndividualResultDomainSectionModel[]) {
   if (archetypeSummary) {
     return archetypeSummary.secondaryLabel
-      ? `${archetypeSummary.primaryLabel} supported by ${archetypeSummary.secondaryLabel}.`
+      ? `${archetypeSummary.primaryLabel} with ${archetypeSummary.secondaryLabel}.`
       : `${archetypeSummary.primaryLabel} is the clearest readout in the latest result.`
   }
 
@@ -322,7 +322,7 @@ export function buildIndividualResultsPresentationModel(data: IndividualResultRe
   return {
     title: 'Sonartra Signals — Individual Results',
     subtitle:
-      'Scan the baseline result, decision signals, and immediate follow-on path from one controlled briefing surface.',
+      'Review the baseline result, key signals, and next step from one place.',
     intelligence,
     assessments: [
       {
@@ -335,7 +335,7 @@ export function buildIndividualResultsPresentationModel(data: IndividualResultRe
         summary: assessmentSummary,
         howToUse: {
           summary:
-            'Start with the archetype overview, then scan each domain for the strongest pattern, score spread, and the watchouts most likely to matter in practice.',
+            'Start with the archetype overview, then scan each domain for the strongest pattern, score spread, and key watchouts.',
           sections: DEFAULT_SECTION_LABELS,
         },
         archetype: {
