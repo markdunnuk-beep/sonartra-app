@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { HeadlineReveal } from '@/components/ui/motion/HeadlineReveal'
 import { Reveal, RevealGroup, RevealItem } from '@/components/ui/motion/Reveal'
 import { HeroSignalBackground } from '@/components/hero/HeroSignalBackground'
+import { SIGNALS_ASSESSMENT_WORKSPACE_PATH } from '@/lib/server/assessment-entry-routing'
 
 const intelligenceLayers = ['Individual Intelligence', 'Team Intelligence', 'Organisational Intelligence']
 
@@ -32,7 +33,7 @@ export function Hero() {
             </RevealItem>
             <RevealItem>
               <div className="flex flex-wrap gap-3 pt-1">
-                <Button href="/assessment-entry" variant="secondary" className="min-h-11 border-white/[0.12] bg-panel/78 px-5 text-[#e4edf9] hover:border-accent/28 hover:bg-panel/88">
+                <Button href={SIGNALS_ASSESSMENT_WORKSPACE_PATH} variant="secondary" className="min-h-11 border-white/[0.12] bg-panel/78 px-5 text-[#e4edf9] hover:border-accent/28 hover:bg-panel/88">
                   Run Signals Assessment
                 </Button>
                 <Button href="#platform-model" variant="ghost" className="min-h-11 px-4 text-[#9fb0c7] hover:bg-panel/35 hover:text-[#dbe6f5]">

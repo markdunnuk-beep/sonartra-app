@@ -1,28 +1,14 @@
-import { getGenericAuthFallbackRedirectUrl } from '@/lib/auth-redirects'
-import { type IndividualLifecycleState, resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness'
-
+export const SIGNALS_ASSESSMENT_WORKSPACE_PATH = '/assessment/workspace'
 export const ASSESSMENT_ENTRY_PATH = '/assessment-entry'
 
-export function getAssessmentEntryRedirectTarget(lifecycleState: IndividualLifecycleState): string {
-  if (lifecycleState === 'not_started' || lifecycleState === 'in_progress') {
-    return '/assessment/workspace'
-  }
-
-  return getGenericAuthFallbackRedirectUrl()
+export function getAssessmentEntryRedirectTarget(): string {
+  return SIGNALS_ASSESSMENT_WORKSPACE_PATH
 }
 
 export function getAssessmentEntrySignInRedirect(): string {
-  return `/sign-in?redirect_url=${encodeURIComponent(ASSESSMENT_ENTRY_PATH)}`
+  return `/sign-in?redirect_url=${encodeURIComponent(SIGNALS_ASSESSMENT_WORKSPACE_PATH)}`
 }
 
-export async function resolveAssessmentEntryRedirect(
-  resolveLifecycle: typeof resolveIndividualLifecycleState = resolveIndividualLifecycleState,
-): Promise<string> {
-  const resolved = await resolveLifecycle()
-
-  if (resolved.authState === 'unauthenticated') {
-    return getAssessmentEntrySignInRedirect()
-  }
-
-  return getAssessmentEntryRedirectTarget(resolved.lifecycle.state)
+export async function resolveAssessmentEntryRedirect(): Promise<string> {
+  return getAssessmentEntryRedirectTarget()
 }

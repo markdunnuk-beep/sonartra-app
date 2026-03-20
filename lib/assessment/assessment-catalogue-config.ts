@@ -1,6 +1,7 @@
 import type { AssessmentCatalogueDefinition } from './assessment-catalogue-types'
+import { SIGNALS_ASSESSMENT_WORKSPACE_PATH } from '@/lib/server/assessment-entry-routing'
 
-const individualAssessmentPath = '/assessment/workspace'
+const individualAssessmentPath = SIGNALS_ASSESSMENT_WORKSPACE_PATH
 
 export const assessmentCatalogueDefinitions: AssessmentCatalogueDefinition[] = [
   {
