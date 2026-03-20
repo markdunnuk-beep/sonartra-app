@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { ProvisionalAdminRole } from '../lib/admin/domain'
 import { getAdminNavigationItems } from '../lib/admin/navigation'
 
 const access = {
@@ -9,7 +10,11 @@ const access = {
   email: 'ops@sonartra.com',
   allowlist: ['ops@sonartra.com'],
   accessSource: 'email_allowlist' as const,
-  provisionalRole: 'internal_admin' as const,
+  provisionalRole: ProvisionalAdminRole.InternalAdmin,
+  provisionalAccess: {
+    role: ProvisionalAdminRole.InternalAdmin,
+    rationale: 'bootstrap_allowlist' as const,
+  },
 }
 
 test('admin navigation scaffold covers the primary administrator modules', () => {
@@ -25,6 +30,7 @@ test('admin navigation routes remain scoped to the admin control surface', () =>
 test('admin navigation items expose permission-ready metadata', () => {
   const items = getAdminNavigationItems(access)
 
-  assert.equal(items.every((item) => item.requiredRoles.includes('internal_admin')), true)
+  assert.equal(items.every((item) => item.compatibleProvisionalRoles.includes(ProvisionalAdminRole.InternalAdmin)), true)
+  assert.equal(items.every((item) => item.requiredRoles.length > 0), true)
   assert.equal(items.every((item) => item.requiredCapabilities.length > 0), true)
 })
