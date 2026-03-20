@@ -27,8 +27,8 @@ export function AssessmentFilterRow({ activeFilter, onFilterChange }: { activeFi
               className={clsx(
                 'interaction-control rounded-full border px-4 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/65 focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
                 active
-                  ? 'border-accent/30 bg-white/[0.065] text-textPrimary shadow-[0_16px_28px_-24px_rgba(76,159,255,0.55)]'
-                  : 'border-border/80 bg-panel/65 text-textSecondary hover:border-white/[0.14] hover:bg-panel/85 hover:text-textPrimary',
+                  ? 'border-white/[0.14] bg-white/[0.075] text-textPrimary shadow-[0_16px_28px_-24px_rgba(76,159,255,0.38)]'
+                  : 'border-border/65 bg-panel/50 text-textSecondary/82 hover:border-white/[0.12] hover:bg-panel/72 hover:text-textPrimary',
               )}
             >
               {filter.label}

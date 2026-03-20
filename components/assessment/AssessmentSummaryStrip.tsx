@@ -6,12 +6,12 @@ import type { AssessmentSummaryMetric } from '@/lib/assessment/assessment-reposi
 export function AssessmentSummaryStrip({ metrics }: { metrics: AssessmentSummaryMetric[] }) {
   return (
     <section aria-label="Assessment summary strip">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
-          <Card key={metric.label} className="min-h-[140px] border-border/75 bg-panel/78 px-5 py-5 sm:px-6 sm:py-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-textSecondary/90">{metric.label}</p>
-            <p className="mt-3 metric-value">{metric.value}</p>
-            <p className="mt-3 text-sm leading-6 text-textSecondary">{metric.detail}</p>
+          <Card key={metric.label} className="min-h-[116px] border-border/50 bg-panel/72 px-5 py-4 sm:px-5 sm:py-[1.125rem]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-textSecondary/82">{metric.label}</p>
+            <p className="metric-value mt-2.5 text-textPrimary/88">{metric.value}</p>
+            <p className="mt-2.5 text-sm leading-6 text-textSecondary/88">{metric.detail}</p>
           </Card>
         ))}
       </div>

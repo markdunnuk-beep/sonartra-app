@@ -43,14 +43,15 @@ export function AssessmentRepositoryPage({ inventory = getAssessmentRepositoryIn
         <AssessmentFilterRow activeFilter={activeFilter} onFilterChange={setActiveFilter} />
 
         <div className="space-y-10 lg:space-y-12">
-          {sections.map((section) => (
-            <AssessmentSection
-              key={section.category}
-              section={section}
-              expandedId={expandedBySection[section.category]}
-              onToggle={handleToggle}
-              onRetake={setRetakeTarget}
-            />
+          {sections.map((section, index) => (
+            <div key={section.category} className={index > 0 ? 'pt-2.5 lg:pt-3' : undefined}>
+              <AssessmentSection
+                section={section}
+                expandedId={expandedBySection[section.category]}
+                onToggle={handleToggle}
+                onRetake={setRetakeTarget}
+              />
+            </div>
           ))}
         </div>
       </div>
