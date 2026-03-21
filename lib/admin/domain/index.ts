@@ -1,5 +1,6 @@
 export * from './roles'
 export * from './organisations'
+export * from './organisation-registry'
 export * from './users'
 export * from './assessments'
 export * from './audit'

@@ -2,6 +2,7 @@ import React from 'react'
 import { AlertTriangle, CheckCircle2, ChevronRight, ClipboardList, Clock3, GitBranch } from 'lucide-react'
 import Link from 'next/link'
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
+import { AdminOrganisationsRegistryClient } from '@/components/admin/surfaces/AdminOrganisationsRegistryClient'
 import { AdminUsersAccessRegistryClient } from '@/components/admin/surfaces/AdminUsersAccessRegistryClient'
 import { AdminDashboardSurface } from '@/components/admin/dashboard/AdminDashboardSurface'
 import {
@@ -224,92 +225,29 @@ export function AdminDashboardWireframePage() {
   )
 }
 
-export function AdminOrganisationsWireframePage() {
-  const tenantSignals = organisations.flatMap((organisation) => getOrganisationHealthSignals(organisation))
-  const dormantTenants = organisations.filter((organisation) => getOrganisationHealthSignals(organisation).some((signal) => signal.label === 'Dormant'))
-  const lowUtilisationTenants = organisations.filter((organisation) => getOrganisationUtilisationBand(organisation) === 'low')
-  const rows = organisations.map((organisation) => {
-    const summary = getOrganisationSummary(organisation)
-    const healthSignals = getOrganisationHealthSignals(organisation)
-    const enabledAssessmentLabels = summary.enabledProducts.map((product) => product.label).join(' · ')
-    const utilisationBand = getOrganisationUtilisationBand(organisation)
-
-    return [
-      <div key={`${organisation.id}-entity`}>
-        <Link href={`/admin/organisations/${organisation.slug}`} className="inline-flex items-center gap-2 text-sm font-semibold text-textPrimary hover:text-accent">
-          {organisation.name}
-          <ChevronRight className="h-4 w-4" />
-        </Link>
-        <p className="mt-1 text-sm text-textSecondary">{organisation.sector} · {organisation.region}</p>
-      </div>,
-      <div key={`${organisation.id}-status`} className="space-y-2">
-        <StatusBadge status={organisation.status} />
-        <div>
-          <Badge label={getStatusLabel(organisation.plan)} tone="slate" />
-        </div>
-      </div>,
-      <div key={`${organisation.id}-seats`} className="space-y-1.5">
-        <p className="text-sm font-medium text-textPrimary">{organisation.seatSummary.assigned}/{organisation.seatSummary.purchased}</p>
-        <div className="flex items-center gap-2">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
-            <div
-              className={utilisationBand === 'high' ? 'h-full rounded-full bg-emerald-300' : utilisationBand === 'medium' ? 'h-full rounded-full bg-sky-300' : 'h-full rounded-full bg-amber-300'}
-              style={{ width: `${Math.min(summary.seatUtilisation, 100)}%` }}
-            />
-          </div>
-          <span className="text-xs text-textSecondary">{summary.seatUtilisation}%</span>
-        </div>
-      </div>,
-      <div key={`${organisation.id}-utilisation`}>
-        <Badge
-          label={utilisationBand}
-          tone={utilisationBand === 'high' ? 'emerald' : utilisationBand === 'medium' ? 'sky' : 'amber'}
-        />
-        <p className="mt-2 text-xs text-textSecondary">{organisation.seatSummary.available} open · {organisation.seatSummary.invited} invited</p>
-      </div>,
-      <div key={`${organisation.id}-assessments`} className="text-sm text-textSecondary">{enabledAssessmentLabels || 'No enabled products'}</div>,
-      <div key={`${organisation.id}-activity`}>
-        <p className="text-sm font-medium text-textPrimary">{formatAdminRelativeTime(organisation.lastActivityAt)}</p>
-        <p className="text-xs text-textSecondary">{formatAdminTimestamp(organisation.lastActivityAt)}</p>
-      </div>,
-      <div key={`${organisation.id}-signals`} className="space-y-2">
-        <HealthSignalBadges labels={healthSignals} />
-        <p className="text-xs text-textSecondary">Primary contact {summary.contact?.profile.fullName ?? 'Unassigned'}</p>
-      </div>,
-    ]
-  })
+export function AdminOrganisationsWireframePage({ organisationRegistryData }: { organisationRegistryData: import('@/lib/admin/domain/organisation-registry').AdminOrganisationRegistryDomainData }) {
+  const totalOrganisations = organisationRegistryData.organisations.length
+  const activeOrganisations = organisationRegistryData.organisations.filter((entry) => entry.lifecycle === 'active').length
+  const dormantOrganisations = organisationRegistryData.organisations.filter((entry) => entry.lifecycle === 'dormant').length
+  const flaggedOrganisations = organisationRegistryData.organisations.filter((entry) => entry.lifecycle === 'flagged').length
 
   return (
     <div className="space-y-6 lg:space-y-8">
       <AdminPageHeader
         eyebrow="Organisations"
         title="Tenant registry"
-        description="Operational registry for tenant posture, capacity, enablement, activity, and intervention signals."
-        actions={<Button variant="secondary">New tenant brief</Button>}
+        description="Operator-facing registry for live tenant posture, lifecycle, membership coverage, and recent operational movement across the estate."
+        actions={<Button variant="secondary">Review tenant posture</Button>}
       />
 
       <div className="grid gap-4 xl:grid-cols-4">
-        <MetricCard label="Managed tenants" value={String(organisations.length).padStart(2, '0')} detail="Tracked workspaces across active, implementation, and suspended operating states." />
-        <MetricCard label="Average utilisation" value={`${Math.round(organisations.reduce((total, organisation) => total + getSeatUtilisationPercent(organisation), 0) / organisations.length)}%`} detail="Average assigned-seat utilisation across the tenant estate." />
-        <MetricCard label="Implementation" value={String(organisations.filter((organisation) => organisation.status === 'implementation').length).padStart(2, '0')} detail="Tenants in provisioning, rollout, or controlled enablement." />
-        <MetricCard label="Attention signals" value={String(tenantSignals.length).padStart(2, '0')} detail={`${dormantTenants.length} dormant · ${lowUtilisationTenants.length} low-utilisation tenants.`} />
+        <MetricCard label="Total organisations" value={String(totalOrganisations).padStart(2, '0')} detail="Tracked tenant workspaces currently present in the database-backed registry." />
+        <MetricCard label="Active organisations" value={String(activeOrganisations).padStart(2, '0')} detail="Tenants with active operational movement and usable membership coverage." />
+        <MetricCard label="Dormant organisations" value={String(dormantOrganisations).padStart(2, '0')} detail="Tenants showing no recent activity signal or no active coverage posture." />
+        <MetricCard label="Flagged organisations" value={String(flaggedOrganisations).padStart(2, '0')} detail="Tenants with restricted status, invite-only posture, inactive coverage, or cross-tenant overlap signals." />
       </div>
 
-      <SurfaceSection title="Tenant registry" eyebrow="Operations view" description="Dense tenant list for comparison across status, plan, utilisation, enablement, activity, and intervention posture.">
-        <FilterBar
-          searchPlaceholder="Search organisation, region, contact, or assessment…"
-          groups={[
-            { label: 'Status', options: ['All', 'Active', 'Implementation', 'Suspended'] },
-            { label: 'Plan', options: ['All', 'Enterprise', 'Growth', 'Essential'] },
-            { label: 'Utilisation', options: ['All', 'Low', 'Medium', 'High'] },
-            { label: 'Activity', options: ['All', 'Active', 'Dormant'] },
-          ]}
-          trailing={<Button href="/admin/audit" variant="ghost">View tenant audit</Button>}
-        />
-        <div className="mt-4">
-          <Table columns={["Organisation", "Status", "Seats", "Utilisation", "Enabled assessments", "Last activity", "Health / flags"]} rows={rows} />
-        </div>
-      </SurfaceSection>
+      <AdminOrganisationsRegistryClient organisationRegistryData={organisationRegistryData} />
     </div>
   )
 }
