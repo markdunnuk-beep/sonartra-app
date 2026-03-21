@@ -29,3 +29,10 @@ test('admin dashboard alias route resolves to the shared dashboard surface', asy
 
   assert.match(source, /AdminDashboardWireframePage/)
 })
+
+
+test('admin layout keeps the shared product-return control wired into the shell', async () => {
+  const source = await readFile(new URL('../components/admin/AdminShell.tsx', import.meta.url), 'utf8')
+
+  assert.match(source, /AdminShellProductModeSwitch/)
+})
