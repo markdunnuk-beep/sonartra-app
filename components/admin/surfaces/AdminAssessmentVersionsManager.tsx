@@ -12,6 +12,7 @@ import {
   type AdminAssessmentVersionRecord,
 } from '@/lib/admin/domain/assessment-management'
 import { getAssessmentPackageStatusLabel } from '@/lib/admin/domain/assessment-package'
+import { getAdminAssessmentVersionControlTowerSummary } from '@/lib/admin/domain/assessment-package-review'
 import { formatAdminRelativeTime, formatAdminTimestamp } from '@/lib/admin/wireframe'
 
 const INITIAL_STATE: AdminAssessmentVersionMutationState = { status: 'idle' }
@@ -93,51 +94,83 @@ function ArchiveVersionForm({ assessmentId, version }: { assessmentId: string; v
   )
 }
 
-export function AdminAssessmentVersionsManager({ assessmentId, versions }: { assessmentId: string; versions: AdminAssessmentVersionRecord[] }) {
+function getReadinessTone(verdict: 'ready' | 'ready_with_warnings' | 'blocked') {
+  switch (verdict) {
+    case 'ready':
+      return 'emerald' as const
+    case 'ready_with_warnings':
+      return 'amber' as const
+    default:
+      return 'rose' as const
+  }
+}
+
+function getReadinessLabel(verdict: 'ready' | 'ready_with_warnings' | 'blocked') {
+  return verdict === 'ready_with_warnings' ? 'Ready with warnings' : verdict === 'ready' ? 'Ready' : 'Blocked'
+}
+
+export function AdminAssessmentVersionsManager({
+  assessmentId,
+  versions,
+  currentPublishedVersionId,
+}: {
+  assessmentId: string
+  versions: AdminAssessmentVersionRecord[]
+  currentPublishedVersionId?: string | null
+}) {
   return (
     <SurfaceSection
       title="Assessment versions"
       eyebrow="Lifecycle control"
-      description="Create metadata-only drafts now, then publish or archive versions as the stable lifecycle surface for future imported definition packages."
+      description="Control-tower view of version package state, structured diff evidence, and publish readiness without opening each version."
     >
       <div className="space-y-4">
         <DraftCreator assessmentId={assessmentId} />
 
         {versions.length ? (
           <Table
-            columns={["Version", "Lifecycle", "Package state", "Created / updated", "Notes", "Actions"]}
-            rows={versions.map((version) => [
-              <div key={`${version.id}-version`} className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold text-textPrimary">v{version.versionLabel}</p>
-                  <Badge label={getAdminAssessmentVersionSourceLabel(version.sourceType)} tone="slate" />
-                  <Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}`} variant="ghost" className="min-h-8 px-2.5 py-1 text-[10px]">Open</Button>
-                </div>
-                <p className="text-xs text-textSecondary">Created by {version.createdByName ?? 'System'}{version.publishedByName ? ` · Published by ${version.publishedByName}` : ''}</p>
-              </div>,
-              <div key={`${version.id}-status`} className="space-y-2">
-                <StatusBadge status={version.lifecycleStatus} />
-                <p className="text-xs text-textSecondary">{version.publishedAt ? `Published ${formatAdminTimestamp(version.publishedAt)}` : version.archivedAt ? `Archived ${formatAdminTimestamp(version.archivedAt)}` : 'Not yet published'}</p>
-              </div>,
-              <div key={`${version.id}-payload`} className="space-y-2">
-                <Badge label={getAssessmentPackageStatusLabel(version.packageInfo.status)} tone={version.packageInfo.status === 'valid' ? 'emerald' : version.packageInfo.status === 'valid_with_warnings' ? 'amber' : version.packageInfo.status === 'invalid' ? 'rose' : 'slate'} />
-                <p className="text-xs text-textSecondary">{version.packageInfo.summary ? `${version.packageInfo.summary.questionsCount} questions · ${version.packageInfo.summary.dimensionsCount} dimensions` : 'No package summary recorded yet.'}</p>
-                <p className="text-xs text-textSecondary">{version.validationStatus ?? 'No validation run recorded yet.'}</p>
-              </div>,
-              <div key={`${version.id}-updated`} className="space-y-1">
-                <p className="text-sm font-medium text-textPrimary">{formatAdminRelativeTime(version.updatedAt)}</p>
-                <p className="text-xs text-textSecondary">{formatAdminTimestamp(version.updatedAt)}</p>
-                <p className="text-xs text-textSecondary">Created {formatAdminTimestamp(version.createdAt)}</p>
-              </div>,
-              <div key={`${version.id}-notes`} className="space-y-1">
-                <p className="text-sm leading-6 text-textPrimary">{version.notes ?? 'No notes recorded.'}</p>
-              </div>,
-              <div key={`${version.id}-actions`} className="flex flex-col gap-2">
-                <Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}/import`} variant="ghost">{version.packageInfo.status === 'missing' ? 'Import package' : 'Re-import package'}</Button>
-                <PublishVersionForm assessmentId={assessmentId} version={version} />
-                <ArchiveVersionForm assessmentId={assessmentId} version={version} />
-              </div>,
-            ])}
+            columns={["Version", "Lifecycle", "Package evidence", "Readiness / diff", "Created / updated", "Actions"]}
+            rows={versions.map((version) => {
+              const controlTower = getAdminAssessmentVersionControlTowerSummary(version, versions, currentPublishedVersionId)
+
+              return [
+                <div key={`${version.id}-version`} className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-textPrimary">v{version.versionLabel}</p>
+                    <Badge label={getAdminAssessmentVersionSourceLabel(version.sourceType)} tone="slate" />
+                    <Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}`} variant="ghost" className="min-h-8 px-2.5 py-1 text-[10px]">Open</Button>
+                  </div>
+                  <p className="text-xs text-textSecondary">Created by {version.createdByName ?? 'System'}{version.publishedByName ? ` · Published by ${version.publishedByName}` : ''}</p>
+                  <p className="text-xs text-textSecondary">{version.notes ?? 'No notes recorded.'}</p>
+                </div>,
+                <div key={`${version.id}-status`} className="space-y-2">
+                  <StatusBadge status={version.lifecycleStatus} />
+                  <p className="text-xs text-textSecondary">{version.publishedAt ? `Published ${formatAdminTimestamp(version.publishedAt)}` : version.archivedAt ? `Archived ${formatAdminTimestamp(version.archivedAt)}` : 'Not yet published'}</p>
+                </div>,
+                <div key={`${version.id}-payload`} className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge label={getAssessmentPackageStatusLabel(version.packageInfo.status)} tone={version.packageInfo.status === 'valid' ? 'emerald' : version.packageInfo.status === 'valid_with_warnings' ? 'amber' : version.packageInfo.status === 'invalid' ? 'rose' : 'slate'} />
+                    <Badge label={getReadinessLabel(controlTower.readiness.verdict)} tone={getReadinessTone(controlTower.readiness.verdict)} />
+                  </div>
+                  <p className="text-xs text-textSecondary">{version.packageInfo.summary ? `${version.packageInfo.summary.questionsCount} questions · ${version.packageInfo.summary.dimensionsCount} dimensions · imported ${formatAdminTimestamp(version.packageInfo.importedAt)}` : 'No package summary recorded yet.'}</p>
+                  <p className="text-xs text-textSecondary">{version.validationStatus ?? 'No validation run recorded yet.'}</p>
+                </div>,
+                <div key={`${version.id}-evidence`} className="space-y-2">
+                  <p className="text-sm leading-6 text-textPrimary">{controlTower.snippet}</p>
+                  <p className="text-xs text-textSecondary">{controlTower.diff.baseline ? `Compared with v${controlTower.diff.baseline.versionLabel}` : 'No baseline yet'}</p>
+                </div>,
+                <div key={`${version.id}-updated`} className="space-y-1">
+                  <p className="text-sm font-medium text-textPrimary">{formatAdminRelativeTime(version.updatedAt)}</p>
+                  <p className="text-xs text-textSecondary">{formatAdminTimestamp(version.updatedAt)}</p>
+                  <p className="text-xs text-textSecondary">Created {formatAdminTimestamp(version.createdAt)}</p>
+                </div>,
+                <div key={`${version.id}-actions`} className="flex flex-col gap-2">
+                  <Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}/import`} variant="ghost">{version.packageInfo.status === 'missing' ? 'Import package' : 'Re-import package'}</Button>
+                  <PublishVersionForm assessmentId={assessmentId} version={version} />
+                  <ArchiveVersionForm assessmentId={assessmentId} version={version} />
+                </div>,
+              ]
+            })}
           />
         ) : (
           <EmptyState

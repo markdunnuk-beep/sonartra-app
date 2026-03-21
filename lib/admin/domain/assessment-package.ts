@@ -122,6 +122,23 @@ export interface AdminAssessmentVersionPackageInfo {
   warnings: SonartraAssessmentPackageValidationIssue[]
 }
 
+export function parseStoredNormalizedAssessmentPackage(input: unknown): SonartraAssessmentPackageV1 | null {
+  if (!input) {
+    return null
+  }
+
+  const parsed = typeof input === 'string' ? (() => {
+    try {
+      return JSON.parse(input)
+    } catch {
+      return null
+    }
+  })() : input
+
+  const validation = validateSonartraAssessmentPackage(parsed)
+  return validation.ok ? validation.normalizedPackage : null
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }

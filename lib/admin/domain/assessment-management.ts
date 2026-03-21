@@ -1,4 +1,4 @@
-import type { AdminAssessmentVersionPackageInfo } from '@/lib/admin/domain/assessment-package'
+import type { AdminAssessmentVersionPackageInfo, SonartraAssessmentPackageV1 } from '@/lib/admin/domain/assessment-package'
 
 export type AdminAssessmentLifecycleStatus = 'draft' | 'published' | 'archived'
 export type AdminAssessmentVersionSourceType = 'manual' | 'import' | 'system'
@@ -67,6 +67,7 @@ export interface AdminAssessmentVersionRecord {
   hasDefinitionPayload: boolean
   validationStatus: string | null
   packageInfo: AdminAssessmentVersionPackageInfo
+  normalizedPackage: SonartraAssessmentPackageV1 | null
   createdAt: string
   updatedAt: string
   publishedAt: string | null

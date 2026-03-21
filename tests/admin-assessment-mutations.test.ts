@@ -358,6 +358,25 @@ test('publish version succeeds when a valid package is attached and enforces a s
             lifecycle_status: 'draft',
             updated_at: '2026-03-21T09:00:00.000Z',
             package_status: 'valid',
+            package_schema_version: 'sonartra-assessment-package/v1',
+            package_source_type: 'manual_import',
+            package_imported_at: '2026-03-21T08:00:00.000Z',
+            package_source_filename: 'signals-v1.json',
+            package_imported_by_name: 'Rina Patel',
+            package_validation_report_json: {
+              summary: {
+                dimensionsCount: 2,
+                questionsCount: 1,
+                optionsCount: 2,
+                scoringRuleCount: 1,
+                normalizationRuleCount: 1,
+                outputRuleCount: 1,
+                localeCount: 1,
+              },
+              errors: [],
+              warnings: [],
+            },
+            definition_payload: JSON.parse(validPackage),
             assessment_name: 'Sonartra Signals',
           }] }
         }
@@ -426,7 +445,7 @@ test('publish version is blocked when no valid package exists', async () => {
 
   assert.equal(result.ok, false)
   assert.equal(result.code, 'invalid_transition')
-  assert.match(result.message, /valid package/i)
+  assert.match(result.message, /package readiness blockers|repair the package first/i)
   assert.deepEqual(auditEvents, ['assessment_publish_blocked_invalid_package', 'assessment_publish_blocked_invalid_package'])
 })
 
