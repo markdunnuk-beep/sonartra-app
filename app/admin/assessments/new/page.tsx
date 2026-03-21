@@ -1,5 +1,5 @@
-import { AdminAssessmentNewWorkflowWireframePage } from '@/components/admin/surfaces/AdminWireframeSurfaces'
+import { AdminAssessmentCreateForm } from '@/components/admin/surfaces/AdminAssessmentCreateForm'
 
 export default function AdminAssessmentNewPage() {
-  return <AdminAssessmentNewWorkflowWireframePage />
+  return <AdminAssessmentCreateForm />
 }
