@@ -49,6 +49,22 @@ function DashboardSectionHeading({ eyebrow, title, description }: { eyebrow: str
   )
 }
 
+function DashboardInfrastructureFallback() {
+  return (
+    <Card className="space-y-4 px-6 py-5 sm:px-7 sm:py-6">
+      <div className="space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-textSecondary">Temporary issue</p>
+        <h2 className="text-xl font-semibold tracking-tight text-textPrimary">We couldn&apos;t load your dashboard right now.</h2>
+        <p className="text-sm text-textSecondary">Please try again shortly.</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button href="/dashboard">Reload dashboard</Button>
+        <p className="text-sm text-textSecondary">Your session is still active, but dashboard data is temporarily unavailable.</p>
+      </div>
+    </Card>
+  )
+}
+
 function DashboardStatusCard({ state }: { state: DashboardState }) {
   const presentation = mapLifecyclePresentation(state.assessment.status)
 
@@ -214,10 +230,16 @@ function DashboardPageContent({ state }: { state: DashboardState }) {
   return (
     <div className="space-y-8 lg:space-y-10">
       <TopHeader title="Dashboard" subtitle="Status, next actions, and intelligence coverage." />
-      <DashboardStatusCard state={state} />
-      <DashboardNextActions state={state} />
-      <DashboardKeySignalsSnapshot state={state} />
-      <DashboardPlatformProgress state={state} />
+      {state.status === 'error' ? (
+        <DashboardInfrastructureFallback />
+      ) : (
+        <>
+          <DashboardStatusCard state={state} />
+          <DashboardNextActions state={state} />
+          <DashboardKeySignalsSnapshot state={state} />
+          <DashboardPlatformProgress state={state} />
+        </>
+      )}
     </div>
   )
 }

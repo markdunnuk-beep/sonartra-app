@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { AssessmentRow } from '../lib/assessment-types'
+import { DatabaseUserResolutionError } from '../lib/server/auth'
 import { getAuthenticatedDashboardState } from '../lib/server/dashboard-state'
 import { IndividualIntelligenceResultContract } from '../lib/server/individual-intelligence-result'
 
@@ -194,4 +195,24 @@ test('latest ready result with newer in-progress attempt keeps real progress met
   assert.equal(state.assessment.status, 'ready')
   assert.equal(state.assessment.progressPercent, 15)
   assert.equal(state.assessment.questionsCompleted, 12)
+})
+
+test('database failure during authenticated user resolution falls back to a safe dashboard error state', async () => {
+  const state = await getAuthenticatedDashboardState({
+    resolveAuthenticatedUserId: async () => {
+      throw new DatabaseUserResolutionError('Database user resolution failed.')
+    },
+    checkDatabaseHealth: async () => ({
+      ok: false,
+      reason: 'unavailable',
+      message: 'Database query failed because the database connection is unavailable.',
+    }),
+  })
+
+  assert.equal(state.status, 'error')
+  assert.equal(state.authStatus, 'authenticated')
+  assert.equal(state.hasCompletedResult, false)
+  assert.equal(state.result, null)
+  assert.equal(state.assessment.status, 'error')
+  assert.equal(state.assessment.progressPercent, 0)
 })
