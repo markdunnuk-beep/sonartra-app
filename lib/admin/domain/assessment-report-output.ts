@@ -1,11 +1,21 @@
 import type { AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
 import type { SonartraAssessmentPackageNormalizationScale, SonartraAssessmentPackageOutputRule, SonartraAssessmentPackageV1 } from '@/lib/admin/domain/assessment-package'
-import { getAdminAssessmentSimulationWorkspaceStatus, type AdminAssessmentSimulationNormalizedDimensionResult, type AdminAssessmentSimulationOutputResult, type AdminAssessmentSimulationRawDimensionResult, type AdminAssessmentSimulationResult } from '@/lib/admin/domain/assessment-simulation'
+import {
+  resolveAssessmentPackageAuthoredContent,
+  resolveAssessmentPackageLocaleContext,
+  type SonartraAssessmentPackageAuthoredContentReference,
+  type SonartraAssessmentPackageAuthoredSectionContent,
+  type SonartraAssessmentPackageOutputDimensionNarrative,
+  type SonartraAssessmentPackageOutputRuleNarrative,
+  type SonartraPackageContentProvenance,
+} from '@/lib/admin/domain/assessment-package-content'
+import { getAdminAssessmentSimulationWorkspaceStatus, type AdminAssessmentSimulationResult } from '@/lib/admin/domain/assessment-simulation'
 
 export type AdminAssessmentReportPreviewAvailability = 'available' | 'blocked'
 export type AdminAssessmentReportQualityVerdict = 'strong' | 'usable_with_gaps' | 'blocked'
 export type AdminAssessmentReportSectionType = 'headline' | 'summary' | 'dimension_card' | 'strengths' | 'watchouts' | 'recommendations' | 'output_rule' | 'pdf_block' | 'warning'
 export type AdminAssessmentPdfBlockType = 'title' | 'intro_summary' | 'dimension_profile' | 'strengths' | 'risk_watchout' | 'recommendation_action' | 'explanatory_text' | 'table'
+export type AdminAssessmentReportContentProvenance = SonartraPackageContentProvenance
 
 export interface AdminAssessmentReportPreviewWorkspaceStatus {
   availability: AdminAssessmentReportPreviewAvailability
@@ -16,7 +26,7 @@ export interface AdminAssessmentReportPreviewWorkspaceStatus {
 }
 
 export interface AdminAssessmentReportTraceabilityReference {
-  type: 'rule' | 'language_key' | 'dimension' | 'score' | 'fallback' | 'warning'
+  type: 'rule' | 'language_key' | 'dimension' | 'score' | 'fallback' | 'warning' | 'provenance' | 'locale'
   value: string
   detail: string
 }
@@ -28,6 +38,9 @@ export interface AdminAssessmentReportSectionTrace {
   ruleKeys: string[]
   languageKeys: string[]
   dimensionIds: string[]
+  locale: string | null
+  provenance: AdminAssessmentReportContentProvenance
+  fallbackPath: string[]
   scoreEvidence: Array<{
     dimensionId: string
     rawScore: number | null
@@ -53,6 +66,9 @@ export interface AdminAssessmentWebSummaryDimensionCard {
   bandLabel: string | null
   scaleId: string | null
   narrative: string
+  provenance: AdminAssessmentReportContentProvenance
+  localeUsed: string | null
+  fallbackPath: string[]
   badges: AdminAssessmentWebSummaryBadge[]
   traceSectionId: string
 }
@@ -63,13 +79,18 @@ export interface AdminAssessmentWebSummarySection {
   kind: 'summary' | 'strengths' | 'watchouts' | 'recommendations' | 'outputs'
   narrative: string | null
   items: string[]
+  provenance: AdminAssessmentReportContentProvenance
+  localeUsed: string | null
+  fallbackPath: string[]
   traceSectionId: string
 }
 
 export interface AdminAssessmentWebSummaryModel {
   headline: {
     text: string | null
-    source: 'output_rule' | 'system_fallback' | 'blocked'
+    source: AdminAssessmentReportContentProvenance
+    localeUsed: string | null
+    fallbackPath: string[]
     traceSectionId: string
   }
   verdict: {
@@ -100,6 +121,9 @@ export interface AdminAssessmentPdfContentBlock {
     languageKeys: string[]
     dimensionIds: string[]
     fallbackUsed: boolean
+    provenance: AdminAssessmentReportContentProvenance
+    localeUsed: string | null
+    fallbackPath: string[]
   }
 }
 
@@ -122,10 +146,15 @@ export interface AdminAssessmentReportOutputQuality {
   verdict: AdminAssessmentReportQualityVerdict
   summary: string
   checks: AdminAssessmentReportQualityCheck[]
+  authoredSectionCount: number
+  fallbackSectionCount: number
+  localeFallbackCount: number
 }
 
 export interface AdminAssessmentGeneratedReportOutput {
   locale: string
+  localeFallbackUsed: boolean
+  localeFallbackPath: string[]
   webSummary: AdminAssessmentWebSummaryModel
   pdfBlocks: AdminAssessmentPdfContentBlock[]
   traceability: AdminAssessmentReportSectionTrace[]
@@ -145,23 +174,19 @@ interface DimensionContext {
   relatedOutputKeys: string[]
 }
 
-function buildLocaleText(pkg: SonartraAssessmentPackageV1, locale: string): Record<string, string> {
-  return pkg.language.locales.find((entry) => entry.locale === locale)?.text
-    ?? pkg.language.locales.find((entry) => entry.locale === pkg.meta.defaultLocale)?.text
-    ?? pkg.language.locales[0]?.text
-    ?? {}
+interface TriggeredOutputContext {
+  rule: SonartraAssessmentPackageOutputRule
+  result: NonNullable<AdminAssessmentSimulationResult['outputs'][number]>
+  matchedBandKey: string | null
 }
 
-function resolveLocale(pkg: SonartraAssessmentPackageV1, requestedLocale?: string | null): string {
-  if (requestedLocale && pkg.language.locales.some((entry) => entry.locale === requestedLocale)) {
-    return requestedLocale
-  }
-
-  if (pkg.language.locales.some((entry) => entry.locale === pkg.meta.defaultLocale)) {
-    return pkg.meta.defaultLocale
-  }
-
-  return pkg.language.locales[0]?.locale ?? 'en'
+interface ResolvedNarrativeContent {
+  text: string
+  provenance: AdminAssessmentReportContentProvenance
+  localeUsed: string | null
+  languageKeys: string[]
+  fallbackPath: string[]
+  warnings: string[]
 }
 
 function roundMetric(value: number, precision = 2): number {
@@ -250,7 +275,7 @@ function getDimensionContext(
   }).sort((left, right) => (right.normalizedScore ?? Number.NEGATIVE_INFINITY) - (left.normalizedScore ?? Number.NEGATIVE_INFINITY))
 }
 
-function getOutputDisplayLabel(rule: SonartraAssessmentPackageOutputRule, output: AdminAssessmentSimulationOutputResult, localeText: Record<string, string>, warnings: AdminAssessmentReportOutputWarning[], sectionId?: string): string {
+function getOutputDisplayLabel(rule: SonartraAssessmentPackageOutputRule, localeText: Record<string, string>, warnings: AdminAssessmentReportOutputWarning[], sectionId?: string): string {
   const label = getLanguageValue(localeText, rule.labelKey)
   if (!label) {
     pushWarning(warnings, {
@@ -262,16 +287,6 @@ function getOutputDisplayLabel(rule: SonartraAssessmentPackageOutputRule, output
     })
 
     return `Missing language: ${rule.labelKey}`
-  }
-
-  if (output.label === rule.labelKey) {
-    pushWarning(warnings, {
-      code: `simulation_output_language.output.${rule.key}`,
-      severity: 'warning',
-      message: `Simulation returned the raw language key for output rule "${rule.key}" instead of resolved text.`,
-      sectionId,
-      relatedKeys: [rule.labelKey, rule.key],
-    })
   }
 
   return label
@@ -293,9 +308,7 @@ function getHeadlineTone(topDimension: DimensionContext | undefined): 'emerald' 
   return 'rose'
 }
 
-function buildTrace(
-  input: Omit<AdminAssessmentReportSectionTrace, 'references'>,
-): AdminAssessmentReportSectionTrace {
+function buildTrace(input: Omit<AdminAssessmentReportSectionTrace, 'references'>): AdminAssessmentReportSectionTrace {
   return {
     ...input,
     references: [
@@ -303,10 +316,182 @@ function buildTrace(
       ...input.languageKeys.map((value): AdminAssessmentReportTraceabilityReference => ({ type: 'language_key', value, detail: `Language key ${value} was used or expected here.` })),
       ...input.dimensionIds.map((value): AdminAssessmentReportTraceabilityReference => ({ type: 'dimension', value, detail: `Dimension ${value} contributes evidence to this section.` })),
       ...input.scoreEvidence.map((value): AdminAssessmentReportTraceabilityReference => ({ type: 'score', value: value.dimensionId, detail: `${value.dimensionId} raw ${value.rawScore ?? 'n/a'} · normalized ${value.normalizedScore ?? 'n/a'} · band ${value.bandKey ?? 'n/a'}.` })),
+      { type: 'provenance', value: input.provenance, detail: `Content provenance resolved as ${input.provenance.replace(/_/g, ' ')}.` },
+      ...(input.locale ? [{ type: 'locale', value: input.locale, detail: `Content resolved using locale ${input.locale}.` } satisfies AdminAssessmentReportTraceabilityReference] : []),
       ...input.fallbacks.map((value): AdminAssessmentReportTraceabilityReference => ({ type: 'fallback', value, detail: value })),
       ...input.warnings.map((value): AdminAssessmentReportTraceabilityReference => ({ type: 'warning', value, detail: value })),
     ],
   }
+}
+
+function createResolvedNarrativeContent(
+  fallbackText: string,
+  fallbackReason: string,
+  sectionId: string,
+  warnings: AdminAssessmentReportOutputWarning[],
+  relatedKeys: string[],
+  fallbackCode: string,
+): ResolvedNarrativeContent {
+  pushWarning(warnings, {
+    code: fallbackCode,
+    severity: 'warning',
+    message: fallbackReason,
+    sectionId,
+    relatedKeys,
+  })
+
+  return {
+    text: fallbackText,
+    provenance: 'system_fallback',
+    localeUsed: null,
+    languageKeys: [],
+    fallbackPath: [fallbackReason],
+    warnings: [fallbackReason],
+  }
+}
+
+function resolveNarrativeReference(
+  reference: SonartraAssessmentPackageAuthoredContentReference | null | undefined,
+  sectionId: string,
+  warnings: AdminAssessmentReportOutputWarning[],
+  relatedKeys: string[],
+  missingReferenceMessage: string,
+  missingContentCode: string,
+): Omit<ResolvedNarrativeContent, 'text'> | null {
+  if (!reference) {
+    pushWarning(warnings, {
+      code: missingContentCode,
+      severity: 'warning',
+      message: missingReferenceMessage,
+      sectionId,
+      relatedKeys,
+    })
+    return null
+  }
+
+  return null
+}
+
+function resolveSectionContent(
+  authored: SonartraAssessmentPackageAuthoredContentReference | null | undefined,
+  localeContext: ReturnType<typeof resolveAssessmentPackageLocaleContext>,
+  sectionId: string,
+  warnings: AdminAssessmentReportOutputWarning[],
+  relatedKeys: string[],
+  fallbackText: string,
+  fallbackReason: string,
+  fallbackCode: string,
+): ResolvedNarrativeContent {
+  const missing = resolveNarrativeReference(authored, sectionId, warnings, relatedKeys, fallbackReason, fallbackCode)
+  if (missing) {
+    return { text: fallbackText, ...missing }
+  }
+
+  if (authored) {
+    const resolved = resolveAssessmentPackageAuthoredContent(authored, localeContext)
+    if (resolved.text) {
+      if (resolved.provenance === 'package_authored_default_locale') {
+        pushWarning(warnings, {
+          code: `${fallbackCode}.default_locale`,
+          severity: 'warning',
+          message: `${fallbackReason} Localized authored content was unavailable, so the default locale authored content was used.`,
+          sectionId,
+          relatedKeys: unique([...relatedKeys, ...resolved.languageKeys]),
+        })
+      }
+      return {
+        text: resolved.text,
+        provenance: resolved.provenance,
+        localeUsed: resolved.localeUsed,
+        languageKeys: resolved.languageKeys,
+        fallbackPath: resolved.fallbackPath,
+        warnings: resolved.provenance === 'package_authored_default_locale'
+          ? ['Default locale authored content was used because locale-specific narrative content was unavailable.']
+          : [],
+      }
+    }
+
+    pushWarning(warnings, {
+      code: `${fallbackCode}.missing_authored`,
+      severity: 'warning',
+      message: `${fallbackReason} Package-authored content could not be resolved from language or inline content.`,
+      sectionId,
+      relatedKeys: unique([...relatedKeys, ...resolved.languageKeys]),
+    })
+  }
+
+  return createResolvedNarrativeContent(fallbackText, fallbackReason, sectionId, warnings, relatedKeys, fallbackCode)
+}
+
+function getTriggeredOutputContexts(
+  pkg: SonartraAssessmentPackageV1,
+  simulation: AdminAssessmentSimulationResult,
+  dimensions: DimensionContext[],
+): TriggeredOutputContext[] {
+  return (pkg.outputs?.reportRules ?? []).map((rule) => {
+    const result = simulation.outputs.find((entry) => entry.key === rule.key) ?? null
+    if (!result?.triggered) {
+      return null
+    }
+
+    const matchingDimension = dimensions.find((dimension) => rule.dimensionIds.includes(dimension.dimensionId)) ?? null
+    return {
+      rule,
+      result,
+      matchedBandKey: matchingDimension?.bandKey ?? null,
+    }
+  }).filter((entry): entry is TriggeredOutputContext => Boolean(entry))
+}
+
+function getMatchedNarrative(rule: SonartraAssessmentPackageOutputRule, matchedBandKey: string | null): SonartraAssessmentPackageOutputRuleNarrative | null {
+  if (!rule.narrative) {
+    return null
+  }
+
+  if (!matchedBandKey || !rule.narrative.variants?.length) {
+    return rule.narrative
+  }
+
+  const matchedVariant = rule.narrative.variants.find((entry) => entry.bandKey === matchedBandKey)
+  if (!matchedVariant) {
+    return rule.narrative
+  }
+
+  return {
+    ...rule.narrative,
+    ...matchedVariant,
+  }
+}
+
+function getDimensionNarrative(
+  firedOutputs: TriggeredOutputContext[],
+  dimensionId: string,
+  bandKey: string | null,
+): { rule: SonartraAssessmentPackageOutputRule, narrative: SonartraAssessmentPackageOutputDimensionNarrative } | null {
+  for (const firedOutput of firedOutputs) {
+    const ruleNarrative = getMatchedNarrative(firedOutput.rule, firedOutput.matchedBandKey)
+    const dimensionNarrative = ruleNarrative?.dimensionNarratives?.find((entry) => entry.dimensionId === dimensionId)
+    if (!dimensionNarrative) {
+      continue
+    }
+
+    if (bandKey) {
+      const matchedBandNarrative = dimensionNarrative.bandNarratives?.find((entry) => entry.bandKey === bandKey)
+      if (matchedBandNarrative) {
+        return {
+          rule: firedOutput.rule,
+          narrative: {
+            ...dimensionNarrative,
+            ...matchedBandNarrative,
+          },
+        }
+      }
+    }
+
+    return { rule: firedOutput.rule, narrative: dimensionNarrative }
+  }
+
+  return null
 }
 
 export function getAdminAssessmentReportPreviewWorkspaceStatus(version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage'>): AdminAssessmentReportPreviewWorkspaceStatus {
@@ -335,58 +520,77 @@ export function generateAdminAssessmentReportOutput(
   pkg: SonartraAssessmentPackageV1,
   simulation: AdminAssessmentSimulationResult,
 ): AdminAssessmentGeneratedReportOutput {
-  const locale = resolveLocale(pkg, simulation.responseSummary.locale)
-  const localeText = buildLocaleText(pkg, locale)
+  const localeContext = resolveAssessmentPackageLocaleContext(pkg, simulation.responseSummary.locale)
   const warnings: AdminAssessmentReportOutputWarning[] = simulation.warnings.map((warning) => ({
     code: `simulation.${warning.path}`,
-    severity: warning.path.startsWith('outputs') ? 'warning' : 'warning',
+    severity: 'warning',
     message: warning.message,
     relatedKeys: [warning.path],
   }))
 
-  const dimensions = getDimensionContext(pkg, simulation, localeText, warnings)
-  const triggeredOutputs = (pkg.outputs?.reportRules ?? []).map((rule) => ({
-    rule,
-    result: simulation.outputs.find((entry) => entry.key === rule.key) ?? null,
-  })).filter((entry) => entry.result)
-  const firedOutputs = triggeredOutputs.filter((entry) => entry.result?.triggered)
+  if (localeContext.localeFallbackUsed) {
+    pushWarning(warnings, {
+      code: 'locale.fallback',
+      severity: 'warning',
+      message: localeContext.localeFallbackPath.join(' '),
+      relatedKeys: [simulation.responseSummary.locale],
+    })
+  }
+
+  const dimensions = getDimensionContext(pkg, simulation, localeContext.localeText, warnings)
+  const firedOutputs = getTriggeredOutputContexts(pkg, simulation, dimensions)
   const topDimension = dimensions[0]
   const lowDimensions = dimensions.filter((dimension) => dimension.normalizedScore !== null && dimension.normalizedScore < 40)
   const unresolvedDimensions = dimensions.filter((dimension) => dimension.normalizedScore === null)
   const headlineSectionId = 'headline'
   const summarySectionId = 'summary'
   const traceability: AdminAssessmentReportSectionTrace[] = []
+  const primaryOutput = firedOutputs[0] ?? null
+  const primaryNarrative = primaryOutput ? getMatchedNarrative(primaryOutput.rule, primaryOutput.matchedBandKey) : null
 
-  let headlineText: string | null = null
-  let headlineSource: 'output_rule' | 'system_fallback' | 'blocked' = 'blocked'
-  let headlineFallbacks: string[] = []
-  let headlineRuleKeys: string[] = []
-  let headlineLanguageKeys: string[] = []
-  let headlineWarnings: string[] = []
+  const headline = primaryNarrative?.summaryHeadline
+    ? resolveSectionContent(
+      primaryNarrative.summaryHeadline,
+      localeContext,
+      headlineSectionId,
+      warnings,
+      [primaryOutput.rule.key, primaryOutput.rule.labelKey],
+      getOutputDisplayLabel(primaryOutput.rule, localeContext.localeText, warnings, headlineSectionId),
+      'Package-authored summary headline was unavailable, so the report headline fell back to the rule label.',
+      'fallback.headline',
+    )
+    : primaryOutput
+      ? {
+        text: getOutputDisplayLabel(primaryOutput.rule, localeContext.localeText, warnings, headlineSectionId),
+        provenance: 'package_authored_localized' as const,
+        localeUsed: localeContext.locale,
+        languageKeys: [primaryOutput.rule.labelKey],
+        fallbackPath: [],
+        warnings: [],
+      }
+      : topDimension
+        ? createResolvedNarrativeContent(
+          `${topDimension.label} leads this sample profile${topDimension.bandLabel ? ` · ${topDimension.bandLabel}` : ''}`,
+          'No triggered output rule supplied authored headline content, so the preview headline fell back to score-derived wording.',
+          headlineSectionId,
+          warnings,
+          topDimension.relatedOutputKeys,
+          'fallback.headline.score',
+        )
+        : {
+          text: null as never,
+          provenance: 'blocked' as const,
+          localeUsed: null,
+          languageKeys: [],
+          fallbackPath: ['No normalized dimension evidence exists, so the preview headline could not be generated.'],
+          warnings: ['No normalized dimension evidence exists, so the preview headline could not be generated.'],
+        }
 
-  if (firedOutputs[0]?.result) {
-    headlineText = getOutputDisplayLabel(firedOutputs[0].rule, firedOutputs[0].result, localeText, warnings, headlineSectionId)
-    headlineSource = 'output_rule'
-    headlineRuleKeys = [firedOutputs[0].rule.key]
-    headlineLanguageKeys = [firedOutputs[0].rule.labelKey]
-  } else if (topDimension) {
-    headlineText = `${topDimension.label} leads this sample profile${topDimension.bandLabel ? ` · ${topDimension.bandLabel}` : ''}`
-    headlineSource = 'system_fallback'
-    headlineFallbacks = ['No triggered output rule supplied a resolved language label, so the preview headline falls back to score-derived wording.']
-    headlineWarnings = headlineFallbacks
-    pushWarning(warnings, {
-      code: 'fallback.headline',
-      severity: 'warning',
-      message: headlineFallbacks[0],
-      sectionId: headlineSectionId,
-      relatedKeys: topDimension.relatedOutputKeys,
-    })
-  } else {
-    headlineWarnings = ['No normalized dimension evidence exists, so the preview headline could not be generated.']
+  if (!headline.text && headline.provenance === 'blocked') {
     pushWarning(warnings, {
       code: 'blocked.headline',
       severity: 'error',
-      message: headlineWarnings[0],
+      message: headline.warnings[0] ?? 'No headline could be generated.',
       sectionId: headlineSectionId,
       relatedKeys: [],
     })
@@ -396,68 +600,98 @@ export function generateAdminAssessmentReportOutput(
     sectionId: headlineSectionId,
     sectionType: 'headline',
     title: 'Headline',
-    ruleKeys: headlineRuleKeys,
-    languageKeys: headlineLanguageKeys,
+    ruleKeys: primaryOutput ? [primaryOutput.rule.key] : [],
+    languageKeys: headline.languageKeys,
     dimensionIds: topDimension ? [topDimension.dimensionId] : [],
+    locale: headline.localeUsed,
+    provenance: headline.provenance,
+    fallbackPath: headline.fallbackPath,
     scoreEvidence: topDimension ? [{
       dimensionId: topDimension.dimensionId,
       rawScore: topDimension.rawScore,
       normalizedScore: topDimension.normalizedScore,
       bandKey: topDimension.bandKey,
     }] : [],
-    fallbacks: headlineFallbacks,
-    warnings: headlineWarnings,
+    fallbacks: headline.provenance === 'system_fallback' || headline.provenance === 'blocked' ? headline.fallbackPath : [],
+    warnings: headline.warnings,
   }))
 
-  const overview = topDimension
-    ? `Sample scenario ${simulation.responseSummary.scenarioKey?.replace(/_/g, ' ') ?? 'custom'} resolved ${firedOutputs.length} triggered output${firedOutputs.length === 1 ? '' : 's'} across ${dimensions.length} dimension${dimensions.length === 1 ? '' : 's'}. Highest observed signal: ${topDimension.label}${topDimension.normalizedScore !== null ? ` at ${roundMetric(topDimension.normalizedScore)}.` : '.'}`
-    : 'Sample scenario could not resolve enough score evidence to build a report-output preview.'
+  const summaryNarrative = resolveSectionContent(
+    primaryNarrative?.summaryBody,
+    localeContext,
+    summarySectionId,
+    warnings,
+    unique([...(primaryOutput ? [primaryOutput.rule.key, primaryOutput.rule.labelKey] : []), ...firedOutputs.flatMap((entry) => [entry.rule.key])]),
+    topDimension
+      ? `Sample scenario ${simulation.responseSummary.scenarioKey?.replace(/_/g, ' ') ?? 'custom'} resolved ${firedOutputs.length} triggered output${firedOutputs.length === 1 ? '' : 's'} across ${dimensions.length} dimension${dimensions.length === 1 ? '' : 's'}. Highest observed signal: ${topDimension.label}${topDimension.normalizedScore !== null ? ` at ${roundMetric(topDimension.normalizedScore)}.` : '.'}`
+      : 'Sample scenario could not resolve enough score evidence to build a report-output preview.',
+    'Package-authored summary body was unavailable, so the summary overview fell back to system-generated wording.',
+    'fallback.summary',
+  )
 
   traceability.push(buildTrace({
     sectionId: summarySectionId,
     sectionType: 'summary',
     title: 'Summary overview',
     ruleKeys: firedOutputs.map((entry) => entry.rule.key),
-    languageKeys: firedOutputs.map((entry) => entry.rule.labelKey),
+    languageKeys: summaryNarrative.languageKeys,
     dimensionIds: dimensions.map((dimension) => dimension.dimensionId),
+    locale: summaryNarrative.localeUsed,
+    provenance: summaryNarrative.provenance,
+    fallbackPath: summaryNarrative.fallbackPath,
     scoreEvidence: dimensions.map((dimension) => ({
       dimensionId: dimension.dimensionId,
       rawScore: dimension.rawScore,
       normalizedScore: dimension.normalizedScore,
       bandKey: dimension.bandKey,
     })),
-    fallbacks: [],
-    warnings: [],
+    fallbacks: summaryNarrative.provenance === 'system_fallback' ? summaryNarrative.fallbackPath : [],
+    warnings: summaryNarrative.warnings,
   }))
 
   const dimensionCards: AdminAssessmentWebSummaryDimensionCard[] = dimensions.map((dimension) => {
     const sectionId = `dimension.${dimension.dimensionId}`
-    const narrative = dimension.normalizedScore === null
-      ? `${dimension.label} did not resolve to a normalized score in this sample preview.`
-      : `${dimension.label} resolved at ${roundMetric(dimension.normalizedScore)}${dimension.bandLabel ? ` in the ${dimension.bandLabel} band` : ''}. Raw score ${dimension.rawScore ?? 'n/a'} across range ${dimension.rangeText}.`
+    const dimensionNarrativeSource = getDimensionNarrative(firedOutputs, dimension.dimensionId, dimension.bandKey)
+    const authoredDimensionNarrative = resolveSectionContent(
+      dimensionNarrativeSource?.narrative.body,
+      localeContext,
+      sectionId,
+      warnings,
+      unique([dimension.dimensionId, ...(dimensionNarrativeSource ? [dimensionNarrativeSource.rule.key] : []), ...dimension.relatedOutputKeys]),
+      dimension.normalizedScore === null
+        ? `${dimension.label} did not resolve to a normalized score in this sample preview.`
+        : `${dimension.label} resolved at ${roundMetric(dimension.normalizedScore)}${dimension.bandLabel ? ` in the ${dimension.bandLabel} band` : ''}. Raw score ${dimension.rawScore ?? 'n/a'} across range ${dimension.rangeText}.`,
+      'Package-authored dimension narrative was unavailable, so the dimension card fell back to score-derived wording.',
+      `fallback.dimension.${dimension.dimensionId}`,
+    )
 
-    const dimensionPackage = pkg.dimensions.find((entry) => entry.id === dimension.dimensionId)
-    const scale = getDimensionScale(pkg, dimension.dimensionId, dimension.scaleId)
-    const band = scale?.bands.find((entry) => entry.key === dimension.bandKey)
-    const cardWarnings: string[] = []
+    const cardWarnings = [...authoredDimensionNarrative.warnings]
     if (dimension.normalizedScore === null) {
       cardWarnings.push('No normalized score was available for this dimension.')
     }
+
+    const languageKeys = unique([
+      ...authoredDimensionNarrative.languageKeys,
+      ...(dimension.label.startsWith('Missing language:') ? [] : [pkg.dimensions.find((entry) => entry.id === dimension.dimensionId)?.labelKey].filter(Boolean) as string[]),
+    ])
 
     traceability.push(buildTrace({
       sectionId,
       sectionType: 'dimension_card',
       title: `${dimension.label} card`,
-      ruleKeys: dimension.relatedOutputKeys,
-      languageKeys: unique([dimensionPackage?.labelKey, band?.labelKey].filter(Boolean) as string[]),
+      ruleKeys: unique([...(dimensionNarrativeSource ? [dimensionNarrativeSource.rule.key] : []), ...dimension.relatedOutputKeys]),
+      languageKeys,
       dimensionIds: [dimension.dimensionId],
+      locale: authoredDimensionNarrative.localeUsed,
+      provenance: authoredDimensionNarrative.provenance,
+      fallbackPath: authoredDimensionNarrative.fallbackPath,
       scoreEvidence: [{
         dimensionId: dimension.dimensionId,
         rawScore: dimension.rawScore,
         normalizedScore: dimension.normalizedScore,
         bandKey: dimension.bandKey,
       }],
-      fallbacks: dimension.label.startsWith('Missing language:') ? ['Dimension label fell back to an explicit missing-language marker.'] : [],
+      fallbacks: authoredDimensionNarrative.provenance === 'system_fallback' ? authoredDimensionNarrative.fallbackPath : [],
       warnings: cardWarnings,
     }))
 
@@ -468,10 +702,14 @@ export function generateAdminAssessmentReportOutput(
       rawScore: dimension.rawScore,
       bandLabel: dimension.bandLabel,
       scaleId: dimension.scaleId,
-      narrative,
+      narrative: authoredDimensionNarrative.text,
+      provenance: authoredDimensionNarrative.provenance,
+      localeUsed: authoredDimensionNarrative.localeUsed,
+      fallbackPath: authoredDimensionNarrative.fallbackPath,
       badges: [
         { id: `${dimension.dimensionId}-band`, label: dimension.bandLabel ?? 'No band', tone: dimension.normalizedScore === null ? 'rose' : dimension.normalizedScore >= 70 ? 'emerald' : dimension.normalizedScore >= 40 ? 'amber' : 'rose' },
         { id: `${dimension.dimensionId}-outputs`, label: `${dimension.relatedOutputKeys.length} output refs`, tone: dimension.relatedOutputKeys.length ? 'sky' : 'slate' },
+        { id: `${dimension.dimensionId}-provenance`, label: authoredDimensionNarrative.provenance.replace(/_/g, ' '), tone: authoredDimensionNarrative.provenance === 'package_authored_localized' ? 'emerald' : authoredDimensionNarrative.provenance === 'package_authored_default_locale' ? 'amber' : 'slate' },
       ],
       traceSectionId: sectionId,
     }
@@ -485,39 +723,84 @@ export function generateAdminAssessmentReportOutput(
   const recommendationItems = (lowDimensions.length ? lowDimensions : unresolvedDimensions).map((dimension) => dimension.normalizedScore === null
     ? `Review why ${dimension.label} did not resolve to a normalized result in this sample scenario before publish.`
     : `Review the report language and downstream advice for ${dimension.label} because this sample preview resolved in the ${dimension.bandLabel ?? dimension.bandKey ?? 'lower'} band.`)
-  const outputItems = firedOutputs.map(({ rule, result }) => `${getOutputDisplayLabel(rule, result!, localeText, warnings, 'outputs')} · ${result?.reasons[0] ?? 'Triggered by referenced score evidence.'}`)
+  const outputItems = firedOutputs.map(({ rule, result }) => `${getOutputDisplayLabel(rule, localeContext.localeText, warnings, 'outputs')} · ${result.reasons[0] ?? 'Triggered by referenced score evidence.'}`)
+
+  const strengthsNarrative = resolveSectionContent(
+    primaryNarrative?.strengths?.body,
+    localeContext,
+    'strengths',
+    warnings,
+    unique([...(primaryOutput ? [primaryOutput.rule.key] : []), ...dimensions.slice(0, 2).flatMap((dimension) => dimension.relatedOutputKeys)]),
+    strengthsItems.length ? 'Highest-scoring dimensions in this sample preview.' : 'No strength narrative could be assembled from the current sample evidence.',
+    'Package-authored strengths body was unavailable, so strengths copy fell back to system wording.',
+    'fallback.strengths',
+  )
+
+  const watchoutsNarrative = resolveSectionContent(
+    primaryNarrative?.watchouts?.body,
+    localeContext,
+    'watchouts',
+    warnings,
+    unique([...(primaryOutput ? [primaryOutput.rule.key] : []), ...lowDimensions.flatMap((dimension) => dimension.relatedOutputKeys)]),
+    watchoutItems.length ? 'Lower-band dimensions that may require careful wording or recommendations.' : 'No low-band watchouts were triggered in this sample preview.',
+    'Package-authored watchout body was unavailable, so watchout copy fell back to system wording.',
+    'fallback.watchouts',
+  )
+
+  const recommendationsNarrative = resolveSectionContent(
+    primaryNarrative?.recommendations?.body,
+    localeContext,
+    'recommendations',
+    warnings,
+    unique([...(primaryOutput ? [primaryOutput.rule.key] : []), ...(lowDimensions.length ? lowDimensions : unresolvedDimensions).flatMap((dimension) => dimension.relatedOutputKeys)]),
+    recommendationItems.length ? 'System-generated recommendations are being used where package-authored recommendation language is not yet available.' : 'No recommendation block was required by this sample preview.',
+    'Package-authored recommendation body was unavailable, so recommendation copy fell back to system wording.',
+    'fallback.recommendations',
+  )
 
   const sections: AdminAssessmentWebSummarySection[] = [
     {
       id: 'summary-output',
-      title: 'Top-line summary',
+      title: primaryNarrative?.summaryHeadline ? headline.text : 'Top-line summary',
       kind: 'summary',
-      narrative: overview,
+      narrative: summaryNarrative.text,
       items: firedOutputs.length ? outputItems.slice(0, 3) : ['No triggered outputs supplied resolved copy for this sample scenario.'],
+      provenance: summaryNarrative.provenance,
+      localeUsed: summaryNarrative.localeUsed,
+      fallbackPath: summaryNarrative.fallbackPath,
       traceSectionId: summarySectionId,
     },
     {
       id: 'strengths-output',
       title: 'Strengths',
       kind: 'strengths',
-      narrative: strengthsItems.length ? 'Highest-scoring dimensions in this sample preview.' : 'No strength narrative could be assembled from the current sample evidence.',
+      narrative: strengthsNarrative.text,
       items: strengthsItems.length ? strengthsItems : ['No high-signal dimensions were available.'],
+      provenance: strengthsNarrative.provenance,
+      localeUsed: strengthsNarrative.localeUsed,
+      fallbackPath: strengthsNarrative.fallbackPath,
       traceSectionId: 'strengths',
     },
     {
       id: 'watchouts-output',
       title: 'Risks / watchouts',
       kind: 'watchouts',
-      narrative: watchoutItems.length ? 'Lower-band dimensions that may require careful wording or recommendations.' : 'No low-band watchouts were triggered in this sample preview.',
+      narrative: watchoutsNarrative.text,
       items: watchoutItems.length ? watchoutItems : ['No explicit watchouts were triggered.'],
+      provenance: watchoutsNarrative.provenance,
+      localeUsed: watchoutsNarrative.localeUsed,
+      fallbackPath: watchoutsNarrative.fallbackPath,
       traceSectionId: 'watchouts',
     },
     {
       id: 'recommendations-output',
       title: 'Recommendations',
       kind: 'recommendations',
-      narrative: recommendationItems.length ? 'System-generated recommendations are being used where package-authored recommendation language is not yet available.' : 'No recommendation block was required by this sample preview.',
+      narrative: recommendationsNarrative.text,
       items: recommendationItems.length ? recommendationItems : ['No recommendations were required for this sample preview.'],
+      provenance: recommendationsNarrative.provenance,
+      localeUsed: recommendationsNarrative.localeUsed,
+      fallbackPath: recommendationsNarrative.fallbackPath,
       traceSectionId: 'recommendations',
     },
     {
@@ -526,6 +809,9 @@ export function generateAdminAssessmentReportOutput(
       kind: 'outputs',
       narrative: firedOutputs.length ? 'Triggered output rules that would feed later report-delivery layers.' : 'No output rules triggered for this sample scenario.',
       items: firedOutputs.length ? outputItems : ['No triggered outputs.'],
+      provenance: firedOutputs.length ? 'package_authored_localized' : 'system_fallback',
+      localeUsed: firedOutputs.length ? localeContext.locale : null,
+      fallbackPath: firedOutputs.length ? [] : ['No output-rule content fired, so the outputs block remains informational only.'],
       traceSectionId: 'outputs',
     },
   ]
@@ -534,51 +820,60 @@ export function generateAdminAssessmentReportOutput(
     sectionId: 'strengths',
     sectionType: 'strengths',
     title: 'Strengths block',
-    ruleKeys: unique(dimensions.slice(0, 2).flatMap((dimension) => dimension.relatedOutputKeys)),
-    languageKeys: unique(dimensions.slice(0, 2).map((dimension) => pkg.dimensions.find((entry) => entry.id === dimension.dimensionId)?.labelKey).filter(Boolean) as string[]),
+    ruleKeys: unique([...(primaryOutput ? [primaryOutput.rule.key] : []), ...dimensions.slice(0, 2).flatMap((dimension) => dimension.relatedOutputKeys)]),
+    languageKeys: strengthsNarrative.languageKeys,
     dimensionIds: dimensions.slice(0, 2).map((dimension) => dimension.dimensionId),
+    locale: strengthsNarrative.localeUsed,
+    provenance: strengthsNarrative.provenance,
+    fallbackPath: strengthsNarrative.fallbackPath,
     scoreEvidence: dimensions.slice(0, 2).map((dimension) => ({
       dimensionId: dimension.dimensionId,
       rawScore: dimension.rawScore,
       normalizedScore: dimension.normalizedScore,
       bandKey: dimension.bandKey,
     })),
-    fallbacks: [],
-    warnings: strengthsItems.length ? [] : ['No dimensions resolved strongly enough to populate the strengths block beyond fallback copy.'],
+    fallbacks: strengthsNarrative.provenance === 'system_fallback' ? strengthsNarrative.fallbackPath : [],
+    warnings: strengthsNarrative.warnings.length ? strengthsNarrative.warnings : strengthsItems.length ? [] : ['No dimensions resolved strongly enough to populate the strengths block beyond fallback copy.'],
   }))
 
   traceability.push(buildTrace({
     sectionId: 'watchouts',
     sectionType: 'watchouts',
     title: 'Watchouts block',
-    ruleKeys: unique(lowDimensions.flatMap((dimension) => dimension.relatedOutputKeys)),
-    languageKeys: unique(lowDimensions.map((dimension) => pkg.dimensions.find((entry) => entry.id === dimension.dimensionId)?.labelKey).filter(Boolean) as string[]),
+    ruleKeys: unique([...(primaryOutput ? [primaryOutput.rule.key] : []), ...lowDimensions.flatMap((dimension) => dimension.relatedOutputKeys)]),
+    languageKeys: watchoutsNarrative.languageKeys,
     dimensionIds: lowDimensions.map((dimension) => dimension.dimensionId),
+    locale: watchoutsNarrative.localeUsed,
+    provenance: watchoutsNarrative.provenance,
+    fallbackPath: watchoutsNarrative.fallbackPath,
     scoreEvidence: lowDimensions.map((dimension) => ({
       dimensionId: dimension.dimensionId,
       rawScore: dimension.rawScore,
       normalizedScore: dimension.normalizedScore,
       bandKey: dimension.bandKey,
     })),
-    fallbacks: watchoutItems.length ? [] : ['Watchout block fell back to an explicit “no watchouts triggered” state.'],
-    warnings: unresolvedDimensions.length ? ['One or more dimensions did not resolve, so watchout coverage may be incomplete.'] : [],
+    fallbacks: watchoutsNarrative.provenance === 'system_fallback' ? watchoutsNarrative.fallbackPath : [],
+    warnings: unique([...watchoutsNarrative.warnings, ...(unresolvedDimensions.length ? ['One or more dimensions did not resolve, so watchout coverage may be incomplete.'] : [])]),
   }))
 
   traceability.push(buildTrace({
     sectionId: 'recommendations',
     sectionType: 'recommendations',
     title: 'Recommendations block',
-    ruleKeys: unique((lowDimensions.length ? lowDimensions : unresolvedDimensions).flatMap((dimension) => dimension.relatedOutputKeys)),
-    languageKeys: unique((lowDimensions.length ? lowDimensions : unresolvedDimensions).map((dimension) => pkg.dimensions.find((entry) => entry.id === dimension.dimensionId)?.labelKey).filter(Boolean) as string[]),
+    ruleKeys: unique([...(primaryOutput ? [primaryOutput.rule.key] : []), ...(lowDimensions.length ? lowDimensions : unresolvedDimensions).flatMap((dimension) => dimension.relatedOutputKeys)]),
+    languageKeys: recommendationsNarrative.languageKeys,
     dimensionIds: (lowDimensions.length ? lowDimensions : unresolvedDimensions).map((dimension) => dimension.dimensionId),
+    locale: recommendationsNarrative.localeUsed,
+    provenance: recommendationsNarrative.provenance,
+    fallbackPath: recommendationsNarrative.fallbackPath,
     scoreEvidence: (lowDimensions.length ? lowDimensions : unresolvedDimensions).map((dimension) => ({
       dimensionId: dimension.dimensionId,
       rawScore: dimension.rawScore,
       normalizedScore: dimension.normalizedScore,
       bandKey: dimension.bandKey,
     })),
-    fallbacks: recommendationItems.length ? ['Recommendation language is currently system-generated because the v1 package model does not yet carry authored recommendation bodies.'] : [],
-    warnings: recommendationItems.length ? [] : ['No recommendations were required for the supplied sample scenario.'],
+    fallbacks: recommendationsNarrative.provenance === 'system_fallback' ? recommendationsNarrative.fallbackPath : [],
+    warnings: recommendationsNarrative.warnings.length ? recommendationsNarrative.warnings : recommendationItems.length ? [] : ['No recommendations were required for the supplied sample scenario.'],
   }))
 
   traceability.push(buildTrace({
@@ -588,6 +883,9 @@ export function generateAdminAssessmentReportOutput(
     ruleKeys: firedOutputs.map((entry) => entry.rule.key),
     languageKeys: firedOutputs.map((entry) => entry.rule.labelKey),
     dimensionIds: unique(firedOutputs.flatMap((entry) => entry.rule.dimensionIds)),
+    locale: firedOutputs.length ? localeContext.locale : null,
+    provenance: firedOutputs.length ? 'package_authored_localized' : 'system_fallback',
+    fallbackPath: firedOutputs.length ? [] : ['No output-rule content fired, so the outputs block remains informational only.'],
     scoreEvidence: dimensions.filter((dimension) => firedOutputs.some((entry) => entry.rule.dimensionIds.includes(dimension.dimensionId))).map((dimension) => ({
       dimensionId: dimension.dimensionId,
       rawScore: dimension.rawScore,
@@ -595,7 +893,7 @@ export function generateAdminAssessmentReportOutput(
       bandKey: dimension.bandKey,
     })),
     fallbacks: firedOutputs.length ? [] : ['No output-rule content fired, so the outputs block remains informational only.'],
-    warnings: firedOutputs.flatMap((entry) => entry.result?.warnings ?? []),
+    warnings: firedOutputs.flatMap((entry) => entry.result.warnings ?? []),
   }))
 
   const pdfBlocks: AdminAssessmentPdfContentBlock[] = []
@@ -610,13 +908,16 @@ export function generateAdminAssessmentReportOutput(
     sectionId: headlineSectionId,
     sectionIdentifier: 'report.title',
     type: 'title',
-    title: headlineText ?? 'Report preview blocked',
+    title: headline.text ?? 'Report preview blocked',
     text: `${pkg.meta.assessmentTitle} · sample preview`,
     metadata: {
-      ruleKeys: headlineRuleKeys,
-      languageKeys: headlineLanguageKeys,
+      ruleKeys: primaryOutput ? [primaryOutput.rule.key] : [],
+      languageKeys: headline.languageKeys,
       dimensionIds: topDimension ? [topDimension.dimensionId] : [],
-      fallbackUsed: headlineSource !== 'output_rule',
+      fallbackUsed: headline.provenance !== 'package_authored_localized',
+      provenance: headline.provenance,
+      localeUsed: headline.localeUsed,
+      fallbackPath: headline.fallbackPath,
     },
   })
 
@@ -626,40 +927,46 @@ export function generateAdminAssessmentReportOutput(
     sectionIdentifier: 'report.intro',
     type: 'intro_summary',
     title: 'Preview summary',
-    text: overview,
+    text: summaryNarrative.text,
     items: [
       `Scenario: ${simulation.responseSummary.scenarioKey?.replace(/_/g, ' ') ?? 'custom'}`,
       `Triggered outputs: ${firedOutputs.length}`,
-      `Locale: ${locale}`,
+      `Locale: ${localeContext.locale}`,
     ],
     metadata: {
       ruleKeys: firedOutputs.map((entry) => entry.rule.key),
-      languageKeys: firedOutputs.map((entry) => entry.rule.labelKey),
+      languageKeys: summaryNarrative.languageKeys,
       dimensionIds: dimensions.map((dimension) => dimension.dimensionId),
-      fallbackUsed: false,
+      fallbackUsed: summaryNarrative.provenance !== 'package_authored_localized',
+      provenance: summaryNarrative.provenance,
+      localeUsed: summaryNarrative.localeUsed,
+      fallbackPath: summaryNarrative.fallbackPath,
     },
   })
 
-  dimensions.forEach((dimension) => {
+  dimensionCards.forEach((dimension) => {
     pushPdfBlock({
-      id: `pdf.dimension.${dimension.dimensionId}`,
-      sectionId: `dimension.${dimension.dimensionId}`,
-      sectionIdentifier: `report.dimension.${dimension.dimensionId}`,
+      id: `pdf.dimension.${dimension.id}`,
+      sectionId: `dimension.${dimension.id}`,
+      sectionIdentifier: `report.dimension.${dimension.id}`,
       type: 'dimension_profile',
       title: dimension.label,
-      text: dimension.normalizedScore === null
-        ? `${dimension.label} did not resolve to a normalized score in this sample preview.`
-        : `${dimension.label} resolved at ${roundMetric(dimension.normalizedScore)}${dimension.bandLabel ? ` in the ${dimension.bandLabel} band` : ''}.`,
+      text: dimension.narrative,
       items: [
         `Raw score: ${dimension.rawScore ?? 'n/a'}`,
         `Scale: ${dimension.scaleId ?? 'n/a'}`,
-        `Related outputs: ${dimension.relatedOutputKeys.length ? dimension.relatedOutputKeys.join(', ') : 'none'}`,
+        `Related outputs: ${dimensions.find((entry) => entry.dimensionId === dimension.id)?.relatedOutputKeys.length ? dimensions.find((entry) => entry.dimensionId === dimension.id)?.relatedOutputKeys.join(', ') : 'none'}`,
       ],
       metadata: {
-        ruleKeys: dimension.relatedOutputKeys,
-        languageKeys: unique([pkg.dimensions.find((entry) => entry.id === dimension.dimensionId)?.labelKey].filter(Boolean) as string[]),
-        dimensionIds: [dimension.dimensionId],
-        fallbackUsed: dimension.label.startsWith('Missing language:'),
+        ruleKeys: dimensions.find((entry) => entry.dimensionId === dimension.id)?.relatedOutputKeys ?? [],
+        languageKeys: unique([
+          ...(pkg.dimensions.find((entry) => entry.id === dimension.id)?.labelKey ? [pkg.dimensions.find((entry) => entry.id === dimension.id)!.labelKey] : []),
+        ]),
+        dimensionIds: [dimension.id],
+        fallbackUsed: dimension.provenance !== 'package_authored_localized',
+        provenance: dimension.provenance,
+        localeUsed: dimension.localeUsed,
+        fallbackPath: dimension.fallbackPath,
       },
     })
   })
@@ -670,13 +977,16 @@ export function generateAdminAssessmentReportOutput(
     sectionIdentifier: 'report.strengths',
     type: 'strengths',
     title: 'Strengths',
-    text: sections.find((section) => section.id === 'strengths-output')?.narrative ?? null,
+    text: strengthsNarrative.text,
     items: strengthsItems.length ? strengthsItems : ['No high-signal dimensions were available.'],
     metadata: {
-      ruleKeys: unique(dimensions.slice(0, 2).flatMap((dimension) => dimension.relatedOutputKeys)),
-      languageKeys: unique(dimensions.slice(0, 2).map((dimension) => pkg.dimensions.find((entry) => entry.id === dimension.dimensionId)?.labelKey).filter(Boolean) as string[]),
+      ruleKeys: unique([...(primaryOutput ? [primaryOutput.rule.key] : []), ...dimensions.slice(0, 2).flatMap((dimension) => dimension.relatedOutputKeys)]),
+      languageKeys: strengthsNarrative.languageKeys,
       dimensionIds: dimensions.slice(0, 2).map((dimension) => dimension.dimensionId),
-      fallbackUsed: strengthsItems.length === 0,
+      fallbackUsed: strengthsNarrative.provenance !== 'package_authored_localized',
+      provenance: strengthsNarrative.provenance,
+      localeUsed: strengthsNarrative.localeUsed,
+      fallbackPath: strengthsNarrative.fallbackPath,
     },
   })
 
@@ -686,13 +996,16 @@ export function generateAdminAssessmentReportOutput(
     sectionIdentifier: 'report.watchouts',
     type: 'risk_watchout',
     title: 'Risks / watchouts',
-    text: sections.find((section) => section.id === 'watchouts-output')?.narrative ?? null,
+    text: watchoutsNarrative.text,
     items: watchoutItems.length ? watchoutItems : ['No explicit watchouts were triggered.'],
     metadata: {
-      ruleKeys: unique(lowDimensions.flatMap((dimension) => dimension.relatedOutputKeys)),
-      languageKeys: unique(lowDimensions.map((dimension) => pkg.dimensions.find((entry) => entry.id === dimension.dimensionId)?.labelKey).filter(Boolean) as string[]),
+      ruleKeys: unique([...(primaryOutput ? [primaryOutput.rule.key] : []), ...lowDimensions.flatMap((dimension) => dimension.relatedOutputKeys)]),
+      languageKeys: watchoutsNarrative.languageKeys,
       dimensionIds: lowDimensions.map((dimension) => dimension.dimensionId),
-      fallbackUsed: watchoutItems.length === 0,
+      fallbackUsed: watchoutsNarrative.provenance !== 'package_authored_localized',
+      provenance: watchoutsNarrative.provenance,
+      localeUsed: watchoutsNarrative.localeUsed,
+      fallbackPath: watchoutsNarrative.fallbackPath,
     },
   })
 
@@ -702,13 +1015,16 @@ export function generateAdminAssessmentReportOutput(
     sectionIdentifier: 'report.recommendations',
     type: 'recommendation_action',
     title: 'Recommendations',
-    text: sections.find((section) => section.id === 'recommendations-output')?.narrative ?? null,
+    text: recommendationsNarrative.text,
     items: recommendationItems.length ? recommendationItems : ['No recommendations were required for this sample preview.'],
     metadata: {
-      ruleKeys: unique((lowDimensions.length ? lowDimensions : unresolvedDimensions).flatMap((dimension) => dimension.relatedOutputKeys)),
-      languageKeys: unique((lowDimensions.length ? lowDimensions : unresolvedDimensions).map((dimension) => pkg.dimensions.find((entry) => entry.id === dimension.dimensionId)?.labelKey).filter(Boolean) as string[]),
+      ruleKeys: unique([...(primaryOutput ? [primaryOutput.rule.key] : []), ...(lowDimensions.length ? lowDimensions : unresolvedDimensions).flatMap((dimension) => dimension.relatedOutputKeys)]),
+      languageKeys: recommendationsNarrative.languageKeys,
       dimensionIds: (lowDimensions.length ? lowDimensions : unresolvedDimensions).map((dimension) => dimension.dimensionId),
-      fallbackUsed: true,
+      fallbackUsed: recommendationsNarrative.provenance !== 'package_authored_localized',
+      provenance: recommendationsNarrative.provenance,
+      localeUsed: recommendationsNarrative.localeUsed,
+      fallbackPath: recommendationsNarrative.fallbackPath,
     },
   })
 
@@ -724,7 +1040,7 @@ export function generateAdminAssessmentReportOutput(
       rows: (pkg.outputs?.reportRules ?? []).map((rule) => {
         const result = simulation.outputs.find((entry) => entry.key === rule.key)
         return [
-          getOutputDisplayLabel(rule, result ?? { key: rule.key, label: rule.labelKey, triggered: false, normalizationScaleId: rule.normalizationScaleId ?? null, referencedDimensions: rule.dimensionIds, reasons: [], warnings: [] }, localeText, warnings, 'outputs'),
+          getOutputDisplayLabel(rule, localeContext.localeText, warnings, 'outputs'),
           result?.triggered ? 'Yes' : 'No',
           rule.dimensionIds.join(', '),
         ]
@@ -735,6 +1051,9 @@ export function generateAdminAssessmentReportOutput(
       languageKeys: (pkg.outputs?.reportRules ?? []).map((rule) => rule.labelKey),
       dimensionIds: unique((pkg.outputs?.reportRules ?? []).flatMap((rule) => rule.dimensionIds)),
       fallbackUsed: false,
+      provenance: 'package_authored_localized',
+      localeUsed: localeContext.locale,
+      fallbackPath: [],
     },
   })
 
@@ -745,23 +1064,38 @@ export function generateAdminAssessmentReportOutput(
       sectionIdentifier: 'report.warnings',
       type: 'explanatory_text',
       title: 'Preview warnings and fallbacks',
-      text: 'This sample preview includes warnings, missing language references, or fallback-generated content that should be reviewed before publish.',
+      text: 'This sample preview includes warnings, missing language references, locale fallbacks, or fallback-generated content that should be reviewed before publish.',
       items: warnings.map((warning) => warning.message),
       metadata: {
         ruleKeys: [],
         languageKeys: unique(warnings.flatMap((warning) => warning.relatedKeys)),
         dimensionIds: [],
         fallbackUsed: true,
+        provenance: 'system_fallback',
+        localeUsed: null,
+        fallbackPath: unique(warnings.map((warning) => warning.message)),
       },
     })
   }
+
+  const narrativeSections = [headline, summaryNarrative, strengthsNarrative, watchoutsNarrative, recommendationsNarrative, ...dimensionCards.map((card) => ({
+    text: card.narrative,
+    provenance: card.provenance,
+    localeUsed: card.localeUsed,
+    languageKeys: [] as string[],
+    fallbackPath: card.fallbackPath,
+    warnings: [],
+  }))]
+  const authoredSectionCount = narrativeSections.filter((entry) => entry.provenance === 'package_authored_localized').length
+  const fallbackSectionCount = narrativeSections.filter((entry) => entry.provenance === 'system_fallback' || entry.provenance === 'blocked').length
+  const defaultLocaleSectionCount = narrativeSections.filter((entry) => entry.provenance === 'package_authored_default_locale').length
 
   const qualityChecks: AdminAssessmentReportQualityCheck[] = [
     {
       key: 'headline_generated',
       label: 'Headline generated',
-      status: headlineText ? 'pass' : 'fail',
-      detail: headlineText ? `Headline source: ${headlineSource.replace(/_/g, ' ')}.` : 'No headline could be generated from the current sample evidence.',
+      status: headline.text ? 'pass' : 'fail',
+      detail: headline.text ? `Headline source: ${headline.provenance.replace(/_/g, ' ')}.` : 'No headline could be generated from the current sample evidence.',
     },
     {
       key: 'dimension_coverage',
@@ -772,12 +1106,20 @@ export function generateAdminAssessmentReportOutput(
         : `${dimensions.filter((dimension) => dimension.normalizedScore !== null).length}/${dimensions.length} dimensions produced normalized content.`,
     },
     {
-      key: 'output_language_resolution',
-      label: 'Triggered outputs resolved to language',
-      status: firedOutputs.length === 0 ? 'warning' : firedOutputs.every((entry) => Boolean(getLanguageValue(localeText, entry.rule.labelKey))) ? 'pass' : 'warning',
-      detail: firedOutputs.length === 0
-        ? 'No output rules triggered in the supplied sample scenario.'
-        : `${firedOutputs.filter((entry) => Boolean(getLanguageValue(localeText, entry.rule.labelKey))).length}/${firedOutputs.length} triggered outputs resolved to language text.`,
+      key: 'authored_content_coverage',
+      label: 'Authored narrative coverage',
+      status: fallbackSectionCount <= 1 && authoredSectionCount >= 4 ? 'pass' : 'warning',
+      detail: `${authoredSectionCount}/${narrativeSections.length} narrative sections resolved with locale-specific package-authored content; ${defaultLocaleSectionCount} used default-locale authored content and ${fallbackSectionCount} used system fallback.`,
+    },
+    {
+      key: 'locale_resolution',
+      label: 'Locale resolution',
+      status: localeContext.localeFallbackUsed || defaultLocaleSectionCount > 0 ? 'warning' : 'pass',
+      detail: localeContext.localeFallbackUsed
+        ? localeContext.localeFallbackPath.join(' ')
+        : defaultLocaleSectionCount > 0
+          ? `${defaultLocaleSectionCount} section(s) relied on default-locale authored content.`
+          : 'Locale-specific authored content resolved cleanly.',
     },
     {
       key: 'recommendation_population',
@@ -790,18 +1132,10 @@ export function generateAdminAssessmentReportOutput(
     {
       key: 'fallback_usage',
       label: 'Fallback usage',
-      status: warnings.some((warning) => warning.code.startsWith('fallback') || warning.code.startsWith('missing_language')) ? 'warning' : 'pass',
-      detail: warnings.some((warning) => warning.code.startsWith('fallback') || warning.code.startsWith('missing_language'))
-        ? 'Fallbacks or explicit missing-language markers were required in the preview output.'
+      status: fallbackSectionCount > 1 || warnings.some((warning) => warning.code.startsWith('missing_language') || warning.code.startsWith('locale.') || warning.code.startsWith('fallback.headline')) ? 'warning' : 'pass',
+      detail: fallbackSectionCount > 1 || warnings.some((warning) => warning.code.startsWith('missing_language') || warning.code.startsWith('locale.') || warning.code.startsWith('fallback.headline'))
+        ? 'Fallbacks, missing language, or locale fallbacks were required in the preview output.'
         : 'No fallback-generated copy was required.',
-    },
-    {
-      key: 'content_depth',
-      label: 'Content coverage depth',
-      status: dimensions.length >= 2 && (firedOutputs.length > 0 || strengthsItems.length > 0) ? 'pass' : dimensions.length >= 1 ? 'warning' : 'fail',
-      detail: dimensions.length >= 2 && (firedOutputs.length > 0 || strengthsItems.length > 0)
-        ? 'Content coverage is sufficient for admin QA review.'
-        : 'Content coverage is thin and may not provide enough publish confidence yet.',
     },
   ]
 
@@ -809,28 +1143,34 @@ export function generateAdminAssessmentReportOutput(
   const hasWarning = qualityChecks.some((check) => check.status === 'warning')
   const qualityVerdict: AdminAssessmentReportQualityVerdict = hasFailure ? 'blocked' : hasWarning ? 'usable_with_gaps' : 'strong'
   const qualitySummary = qualityVerdict === 'strong'
-    ? 'Preview output is structurally strong for this sample scenario.'
+    ? 'Preview output is structurally strong and relies primarily on locale-specific package-authored narrative content.'
     : qualityVerdict === 'usable_with_gaps'
-      ? 'Preview output is usable, but gaps, fallbacks, or thin sections should be reviewed before publish.'
+      ? 'Preview output is usable, but fallback wording, locale fallback, or thin authored coverage should be reviewed before publish.'
       : 'Preview output is blocked because core report sections could not be generated reliably.'
 
   return {
-    locale,
+    locale: localeContext.locale,
+    localeFallbackUsed: localeContext.localeFallbackUsed,
+    localeFallbackPath: localeContext.localeFallbackPath,
     webSummary: {
       headline: {
-        text: headlineText,
-        source: headlineSource,
+        text: headline.text,
+        source: headline.provenance,
+        localeUsed: headline.localeUsed,
+        fallbackPath: headline.fallbackPath,
         traceSectionId: headlineSectionId,
       },
       verdict: {
         label: qualityVerdict === 'strong' ? 'Strong preview' : qualityVerdict === 'usable_with_gaps' ? 'Usable with gaps' : 'Blocked',
         tone: qualityVerdict === 'strong' ? getHeadlineTone(topDimension) : qualityVerdict === 'usable_with_gaps' ? 'amber' : 'rose',
       },
-      overview,
+      overview: summaryNarrative.text,
       badges: [
         { id: 'scenario', label: simulation.responseSummary.scenarioKey?.replace(/_/g, ' ') ?? 'Custom scenario', tone: 'sky' },
         { id: 'quality', label: qualityVerdict.replace(/_/g, ' '), tone: qualityVerdict === 'strong' ? 'emerald' : qualityVerdict === 'usable_with_gaps' ? 'amber' : 'rose' },
         { id: 'outputs', label: `${firedOutputs.length} output${firedOutputs.length === 1 ? '' : 's'} triggered`, tone: firedOutputs.length ? 'emerald' : 'slate' },
+        { id: 'authored', label: `${authoredSectionCount} authored sections`, tone: authoredSectionCount >= 4 ? 'emerald' : authoredSectionCount >= 2 ? 'amber' : 'rose' },
+        { id: 'locale', label: localeContext.localeFallbackUsed ? `Locale fallback · ${localeContext.locale}` : `Locale · ${localeContext.locale}`, tone: localeContext.localeFallbackUsed ? 'amber' : 'sky' },
       ],
       dimensionCards,
       sections,
@@ -842,6 +1182,9 @@ export function generateAdminAssessmentReportOutput(
       verdict: qualityVerdict,
       summary: qualitySummary,
       checks: qualityChecks,
+      authoredSectionCount,
+      fallbackSectionCount,
+      localeFallbackCount: defaultLocaleSectionCount + (localeContext.localeFallbackUsed ? 1 : 0),
     },
   }
 }

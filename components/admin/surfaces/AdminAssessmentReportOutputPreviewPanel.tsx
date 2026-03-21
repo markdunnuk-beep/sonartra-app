@@ -64,6 +64,8 @@ export function AdminAssessmentReportOutputPreviewPanel({
                   { label: 'PDF blocks', value: String(output.pdfBlocks.length) },
                   { label: 'Trace sections', value: String(output.traceability.length) },
                   { label: 'Warnings', value: String(output.warnings.length) },
+                  { label: 'Authored sections', value: String(output.quality.authoredSectionCount) },
+                  { label: 'Fallback sections', value: String(output.quality.fallbackSectionCount) },
                 ]}
               />
             </div>
@@ -92,6 +94,11 @@ export function AdminAssessmentReportOutputPreviewPanel({
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Headline</p>
                   <h3 className="mt-3 text-2xl font-semibold text-textPrimary">{output.webSummary.headline.text ?? 'No headline generated'}</h3>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge label={output.webSummary.headline.source.replace(/_/g, ' ')} tone={output.webSummary.headline.source === 'package_authored_localized' ? 'emerald' : output.webSummary.headline.source === 'package_authored_default_locale' ? 'amber' : 'slate'} />
+                    {output.webSummary.headline.localeUsed ? <Badge label={`Locale ${output.webSummary.headline.localeUsed}`} tone="sky" /> : null}
+                    {output.webSummary.headline.fallbackPath.length ? <Badge label="Fallback path used" tone="amber" /> : null}
+                  </div>
                   <p className="mt-3 text-sm leading-6 text-textSecondary">{output.webSummary.overview}</p>
                 </div>
                 <Badge label={output.webSummary.verdict.label} tone={getQualityTone(output.quality.verdict)} />
@@ -115,6 +122,8 @@ export function AdminAssessmentReportOutputPreviewPanel({
                     {card.badges.map((badge) => <Badge key={badge.id} label={badge.label} tone={badge.tone} />)}
                   </div>
                   <p className="mt-3 text-sm leading-6 text-textSecondary">{card.narrative}</p>
+                  <p className="mt-3 text-xs text-textSecondary">Authored narrative source: {card.provenance.replace(/_/g, ' ')}{card.localeUsed ? ` · locale ${card.localeUsed}` : ''}</p>
+                  {card.fallbackPath.length ? <p className="mt-2 text-xs text-amber-100">Fallback path: {card.fallbackPath.join(' · ')}</p> : null}
                   <p className="mt-3 text-xs uppercase tracking-[0.14em] text-textSecondary">Trace section: {card.traceSectionId}</p>
                 </article>
               ))}
@@ -126,6 +135,11 @@ export function AdminAssessmentReportOutputPreviewPanel({
                   <p className="text-[11px] uppercase tracking-[0.14em] text-textSecondary">{section.kind.replace(/_/g, ' ')}</p>
                   <h4 className="mt-2 text-base font-semibold text-textPrimary">{section.title}</h4>
                   {section.narrative ? <p className="mt-3 text-sm leading-6 text-textSecondary">{section.narrative}</p> : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge label={section.provenance.replace(/_/g, ' ')} tone={section.provenance === 'package_authored_localized' ? 'emerald' : section.provenance === 'package_authored_default_locale' ? 'amber' : 'slate'} />
+                    {section.localeUsed ? <Badge label={`Locale ${section.localeUsed}`} tone="sky" /> : null}
+                    {section.fallbackPath.length ? <Badge label="system fallback" tone="amber" /> : null}
+                  </div>
                   <ul className="mt-3 space-y-2 text-sm leading-6 text-textPrimary">
                     {section.items.map((item) => <li key={item}>• {item}</li>)}
                   </ul>
@@ -139,7 +153,7 @@ export function AdminAssessmentReportOutputPreviewPanel({
         <SurfaceSection
           title="Warnings and fallbacks"
           eyebrow="Output QA signals"
-          description="Missing language, unresolved rules, and system-generated fallback copy are surfaced explicitly instead of being silently hidden."
+          description="Missing language, locale fallback, authored narrative provenance, and system-generated fallback copy are surfaced explicitly instead of being silently hidden."
         >
           <div className="space-y-3">
             {output.warnings.length ? output.warnings.map((warning) => (
@@ -195,6 +209,7 @@ export function AdminAssessmentReportOutputPreviewPanel({
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Badge label={block.sectionId} tone="sky" />
+                  <Badge label={block.metadata.provenance.replace(/_/g, ' ')} tone={block.metadata.provenance === 'package_authored_localized' ? 'emerald' : block.metadata.provenance === 'package_authored_default_locale' ? 'amber' : 'slate'} />
                   {block.metadata.fallbackUsed ? <Badge label="fallback used" tone="amber" /> : null}
                   <Badge label={`${block.metadata.dimensionIds.length} dimension refs`} tone="slate" />
                 </div>
@@ -221,6 +236,7 @@ export function AdminAssessmentReportOutputPreviewPanel({
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-textSecondary">Rule / language refs</p>
+                    <p className="mt-2 text-xs text-textSecondary">Provenance: {trace.provenance.replace(/_/g, ' ')}{trace.locale ? ` · locale ${trace.locale}` : ''}</p>
                     <ul className="mt-2 space-y-2 text-sm leading-6 text-textPrimary">
                       {(trace.ruleKeys.length ? trace.ruleKeys.map((value) => `Rule · ${value}`) : ['No direct rule key']).concat(trace.languageKeys.length ? trace.languageKeys.map((value) => `Language · ${value}`) : []).map((value) => <li key={value}>• {value}</li>)}
                     </ul>
