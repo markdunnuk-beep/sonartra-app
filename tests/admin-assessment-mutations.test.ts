@@ -95,6 +95,70 @@ const validPackage = JSON.stringify({
   },
 })
 
+
+function makeManagedVersionRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'version-2',
+    assessment_definition_id: 'assessment-1',
+    version_label: '1.2.0',
+    lifecycle_status: 'draft',
+    source_type: 'import',
+    notes: null,
+    has_definition_payload: true,
+    definition_payload: JSON.parse(validPackage),
+    validation_status: 'valid',
+    package_status: 'valid',
+    package_schema_version: 'sonartra-assessment-package/v1',
+    package_source_type: 'manual_import',
+    package_imported_at: '2026-03-21T08:00:00.000Z',
+    package_source_filename: 'signals-v1.json',
+    package_imported_by_name: 'Rina Patel',
+    package_validation_report_json: {
+      summary: {
+        dimensionsCount: 2,
+        questionsCount: 1,
+        optionsCount: 2,
+        scoringRuleCount: 1,
+        normalizationRuleCount: 1,
+        outputRuleCount: 1,
+        localeCount: 1,
+      },
+      errors: [],
+      warnings: [],
+    },
+    publish_readiness_status: 'ready',
+    readiness_check_summary_json: null,
+    last_readiness_evaluated_at: null,
+    sign_off_status: 'unsigned',
+    sign_off_at: null,
+    sign_off_by_name: null,
+    sign_off_material_updated_at: null,
+    release_notes: null,
+    material_updated_at: '2026-03-21T08:00:00.000Z',
+    created_at: '2026-03-21T08:00:00.000Z',
+    updated_at: '2026-03-21T09:00:00.000Z',
+    published_at: null,
+    archived_at: null,
+    created_by_name: 'Rina Patel',
+    updated_by_name: 'Rina Patel',
+    published_by_name: null,
+    latest_regression_suite_snapshot_json: {
+      executedAt: '2026-03-21T09:00:00.000Z',
+      executedBy: 'Rina Patel',
+      baselineVersionId: null,
+      baselineVersionLabel: null,
+      totalScenarios: 1,
+      passedCount: 1,
+      warningCount: 0,
+      failedCount: 0,
+      overallStatus: 'pass',
+      summaryText: '1/1 passed.',
+    },
+    assessment_name: 'Sonartra Signals',
+    ...overrides,
+  }
+}
+
 test('create assessment flow succeeds and records audit', async () => {
   const auditEvents: unknown[][] = []
   const inserts: unknown[][] = []
@@ -112,6 +176,31 @@ test('create assessment flow succeeds and records audit', async () => {
       query: async (sql: string, params: unknown[] = []) => {
         if (/insert into assessment_definitions/i.test(sql)) {
           inserts.push(params)
+          return { rows: [] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [{
+            id: 'scenario-1',
+            assessment_version_id: 'version-2',
+            version_label: '1.2.0',
+            name: 'Baseline',
+            description: null,
+            scenario_payload: { answers: [{ questionId: 'q1', optionId: 'q1.b' }], locale: 'en', source: 'manual_json', scenarioKey: null },
+            status: 'active',
+            source_version_id: null,
+            source_version_label: null,
+            source_scenario_id: null,
+            provenance_json: {},
+            created_at: '2026-03-21T08:30:00.000Z',
+            updated_at: '2026-03-21T08:30:00.000Z',
+            archived_at: null,
+            created_by_name: 'Rina Patel',
+            updated_by_name: 'Rina Patel',
+          }] }
+        }
+
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql)) {
           return { rows: [] }
         }
 
@@ -187,7 +276,7 @@ test('create draft version succeeds for an existing assessment', async () => {
           return { rows: [] }
         }
 
-        if (/update assessment_definitions/i.test(sql)) {
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql) || /update assessment_definitions/i.test(sql)) {
           return { rows: [] }
         }
 
@@ -228,19 +317,23 @@ test('valid package import succeeds and records replacement audit metadata', asy
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av/i.test(sql)) {
-          return { rows: [{
-            id: 'version-2',
-            assessment_definition_id: 'assessment-1',
-            version_label: '1.2.0',
-            lifecycle_status: 'draft',
-            updated_at: '2026-03-21T09:00:00.000Z',
-            package_status: 'missing',
-            assessment_name: 'Sonartra Signals',
-          }] }
+          return { rows: [makeManagedVersionRow({ package_status: 'missing' })] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
         }
 
         if (/update assessment_versions/i.test(sql) || /update assessment_definitions/i.test(sql)) {
           updates.push(params)
+          return { rows: [] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql)) {
           return { rows: [] }
         }
 
@@ -261,8 +354,9 @@ test('valid package import succeeds and records replacement audit metadata', asy
 
   assert.equal(result.ok, true)
   assert.equal(result.code, 'imported')
-  assert.equal(updates.length, 2)
-  assert.deepEqual(auditEvents, ['assessment_package_imported', 'assessment_package_imported'])
+  assert.equal(updates.length, 3)
+  assert.ok(auditEvents.includes('assessment_package_imported'))
+  assert.ok(auditEvents.includes('assessment_release_readiness_evaluated'))
 })
 
 test('package import rejects malformed JSON before any database writes', async () => {
@@ -306,15 +400,11 @@ test('package import persists validation failure for missing sections and broken
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av/i.test(sql)) {
-          return { rows: [{
-            id: 'version-2',
-            assessment_definition_id: 'assessment-1',
-            version_label: '1.2.0',
-            lifecycle_status: 'draft',
-            updated_at: '2026-03-21T09:00:00.000Z',
-            package_status: 'missing',
-            assessment_name: 'Sonartra Signals',
-          }] }
+          return { rows: [makeManagedVersionRow({ package_status: 'missing' })] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
         }
 
         if (/update assessment_versions/i.test(sql) || /update assessment_definitions/i.test(sql)) {
@@ -339,7 +429,8 @@ test('package import persists validation failure for missing sections and broken
   assert.equal(result.ok, false)
   assert.equal(result.code, 'validation_error')
   assert.ok((result.validationResult?.errors.length ?? 0) >= 4)
-  assert.deepEqual(auditEvents, ['assessment_package_validation_failed', 'assessment_package_validation_failed'])
+  assert.ok(auditEvents.includes('assessment_package_validation_failed'))
+  assert.ok(auditEvents.includes('assessment_release_readiness_evaluated'))
 })
 
 test('bulk scenario copy-forward imports valid scenarios, skips invalid ones, and suffixes duplicate names', async () => {
@@ -473,7 +564,7 @@ test('bulk scenario copy-forward imports valid scenarios, skips invalid ones, an
           return { rows: [] }
         }
 
-        if (/update assessment_definitions/i.test(sql)) {
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql) || /update assessment_definitions/i.test(sql)) {
           return { rows: [] }
         }
 
@@ -497,7 +588,8 @@ test('bulk scenario copy-forward imports valid scenarios, skips invalid ones, an
   assert.equal(result.skippedCount, 1)
   assert.deepEqual(insertedNames, ['Leadership baseline (copy 2)'])
   assert.match(result.skipped[0]?.reason ?? '', /optionId is required/i)
-  assert.deepEqual(auditEvents, ['assessment_saved_scenarios_imported', 'assessment_saved_scenarios_imported'])
+  assert.ok(auditEvents.includes('assessment_saved_scenarios_imported'))
+  assert.ok(auditEvents.includes('assessment_release_readiness_evaluated'))
 })
 
 test('single scenario clone rejects incompatible payloads for the target version', async () => {
@@ -715,7 +807,7 @@ test('suite snapshot persists latest full-run summary without using single simul
           }
         }
 
-        if (/update assessment_versions\s+set latest_regression_suite_snapshot_json/i.test(sql)) {
+        if (/update assessment_versions\s+set latest_regression_suite_snapshot_json/i.test(sql) || /update assessment_versions\s+set publish_readiness_status/i.test(sql)) {
           versionUpdates.push(params)
           return { rows: [] }
         }
@@ -744,8 +836,9 @@ test('suite snapshot persists latest full-run summary without using single simul
   assert.equal(result.snapshot?.baselineVersionLabel, '1.2.0')
   assert.equal(result.snapshot?.overallStatus, 'pass')
   assert.equal(result.snapshot?.totalScenarios, 1)
-  assert.equal(versionUpdates.length, 1)
-  assert.deepEqual(auditEvents, ['assessment_regression_suite_snapshot_updated', 'assessment_regression_suite_snapshot_updated'])
+  assert.equal(versionUpdates.length, 2)
+  assert.ok(auditEvents.includes('assessment_regression_suite_snapshot_updated'))
+  assert.ok(auditEvents.includes('assessment_release_readiness_evaluated'))
 })
 
 test('publish version succeeds when a valid package is attached and enforces a single published version', async () => {
@@ -760,37 +853,14 @@ test('publish version succeeds when a valid package is attached and enforces a s
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string) => {
         if (/from assessment_versions av/i.test(sql)) {
-          return { rows: [{
-            id: 'version-2',
-            assessment_definition_id: 'assessment-1',
-            version_label: '1.2.0',
-            lifecycle_status: 'draft',
-            updated_at: '2026-03-21T09:00:00.000Z',
-            package_status: 'valid',
-            package_schema_version: 'sonartra-assessment-package/v1',
-            package_source_type: 'manual_import',
-            package_imported_at: '2026-03-21T08:00:00.000Z',
-            package_source_filename: 'signals-v1.json',
-            package_imported_by_name: 'Rina Patel',
-            package_validation_report_json: {
-              summary: {
-                dimensionsCount: 2,
-                questionsCount: 1,
-                optionsCount: 2,
-                scoringRuleCount: 1,
-                normalizationRuleCount: 1,
-                outputRuleCount: 1,
-                localeCount: 1,
-              },
-              errors: [],
-              warnings: [],
-            },
-            definition_payload: JSON.parse(validPackage),
-            assessment_name: 'Sonartra Signals',
-          }] }
+          return { rows: [makeManagedVersionRow({ sign_off_status: 'signed_off', sign_off_at: '2026-03-21T09:30:00.000Z', sign_off_by_name: 'Rina Patel', sign_off_material_updated_at: '2026-03-21T08:00:00.000Z' })] }
         }
 
-        if (/update assessment_versions\s+set lifecycle_status = 'archived'/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'published'/i.test(sql) || /update assessment_definitions/i.test(sql)) {
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'archived'/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'published'/i.test(sql) || /update assessment_definitions/i.test(sql)) {
           updates.push(sql)
           return { rows: /returning id/i.test(sql) ? [{ id: 'version-2' }] : [] }
         }
@@ -811,7 +881,7 @@ test('publish version succeeds when a valid package is attached and enforces a s
 
   assert.equal(result.ok, true)
   assert.equal(result.code, 'published')
-  assert.equal(updates.length, 3)
+  assert.equal(updates.length, 4)
 })
 
 test('publish version is blocked when no valid package exists', async () => {
@@ -826,15 +896,15 @@ test('publish version is blocked when no valid package exists', async () => {
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av/i.test(sql)) {
-          return { rows: [{
-            id: 'version-2',
-            assessment_definition_id: 'assessment-1',
-            version_label: '1.2.0',
-            lifecycle_status: 'draft',
-            updated_at: '2026-03-21T09:00:00.000Z',
-            package_status: 'invalid',
-            assessment_name: 'Sonartra Signals',
-          }] }
+          return { rows: [makeManagedVersionRow({ package_status: 'invalid', definition_payload: null, package_validation_report_json: { summary: null, errors: [{ path: 'questions[0].dimensionId', message: 'Unknown dimension.' }], warnings: [] } })] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql)) {
+          return { rows: [] }
         }
 
         if (/insert into access_audit_events/i.test(sql)) {
@@ -854,8 +924,8 @@ test('publish version is blocked when no valid package exists', async () => {
 
   assert.equal(result.ok, false)
   assert.equal(result.code, 'invalid_transition')
-  assert.match(result.message, /package readiness blockers|repair the package first/i)
-  assert.deepEqual(auditEvents, ['assessment_publish_blocked_invalid_package', 'assessment_publish_blocked_invalid_package'])
+  assert.match(result.message, /publish blocked|unknown dimension/i)
+  assert.ok(auditEvents.includes('assessment_publish_blocked_release_governance'))
 })
 
 test('archive version succeeds and requires confirmation', async () => {

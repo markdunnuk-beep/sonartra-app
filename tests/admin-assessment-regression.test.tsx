@@ -114,6 +114,8 @@ function makeVersion(id: string, versionLabel: string, lifecycleStatus: 'draft' 
     createdByName: 'Rina Patel',
     updatedByName: 'Rina Patel',
     publishedByName: lifecycleStatus === 'published' ? 'Rina Patel' : null,
+    latestSuiteSnapshot: null,
+    savedScenarios: [],
   }
 }
 

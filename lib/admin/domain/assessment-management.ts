@@ -64,6 +64,41 @@ export interface AdminAssessmentRegistryItem {
   description: string | null
 }
 
+export type AdminAssessmentReleaseReadinessStatus = 'not_ready' | 'ready_with_warnings' | 'ready'
+export type AdminAssessmentReleaseSignOffStatus = 'unsigned' | 'signed_off'
+export type AdminAssessmentReleaseCheckStatus = 'pass' | 'warning' | 'fail'
+
+export interface AdminAssessmentReleaseCheck {
+  key: string
+  label: string
+  status: AdminAssessmentReleaseCheckStatus
+  detail: string
+}
+
+export interface AdminAssessmentReleaseReadinessSummary {
+  status: AdminAssessmentReleaseReadinessStatus
+  summaryText: string
+  checks: AdminAssessmentReleaseCheck[]
+  blockingChecks: AdminAssessmentReleaseCheck[]
+  warningChecks: AdminAssessmentReleaseCheck[]
+}
+
+export interface AdminAssessmentReleaseSignOff {
+  status: AdminAssessmentReleaseSignOffStatus
+  signedOffBy: string | null
+  signedOffAt: string | null
+  isStale: boolean
+  staleReason: string | null
+}
+
+export interface AdminAssessmentReleaseGovernance {
+  readinessStatus: AdminAssessmentReleaseReadinessStatus
+  readinessSummary: AdminAssessmentReleaseReadinessSummary | null
+  lastReadinessEvaluatedAt: string | null
+  signOff: AdminAssessmentReleaseSignOff
+  releaseNotes: string | null
+}
+
 export interface AdminAssessmentVersionRecord {
   id: string
   assessmentId: string
@@ -83,6 +118,8 @@ export interface AdminAssessmentVersionRecord {
   updatedByName: string | null
   publishedByName: string | null
   latestSuiteSnapshot: AdminAssessmentLatestSuiteSnapshot | null
+  releaseGovernance?: AdminAssessmentReleaseGovernance
+  materialUpdatedAt?: string
   savedScenarios: AdminAssessmentSavedScenarioRecord[]
 }
 
@@ -187,11 +224,12 @@ export interface AdminAssessmentCreateState {
 }
 
 export interface AdminAssessmentVersionMutationState {
-  status: 'idle' | 'error'
+  status: 'idle' | 'error' | 'success'
   message?: string
   fieldErrors?: {
     versionLabel?: string
     notes?: string
+    releaseNotes?: string
     confirmation?: string
   }
 }
