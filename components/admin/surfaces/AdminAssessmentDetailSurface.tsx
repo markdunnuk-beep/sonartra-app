@@ -233,7 +233,7 @@ export function AdminAssessmentDetailSurface({
       />
 
       {activeTab === 'overview' ? <OverviewTab detailData={detailData} /> : null}
-      {activeTab === 'versions' ? <AdminAssessmentVersionsManager assessmentId={assessment.id} versions={versions} /> : null}
+      {activeTab === 'versions' ? <AdminAssessmentVersionsManager assessmentId={assessment.id} versions={versions} currentPublishedVersionId={assessment.currentPublishedVersionId} /> : null}
       {activeTab === 'settings' ? <SettingsTab detailData={detailData} /> : null}
       {activeTab === 'activity' ? <ActivityTab detailData={detailData} /> : null}
     </div>

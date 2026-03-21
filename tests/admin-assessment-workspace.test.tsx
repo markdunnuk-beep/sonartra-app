@@ -11,7 +11,129 @@ import {
   getAdminAssessmentDetailTab,
   getAdminAssessmentRegistryFilters,
 } from '../lib/admin/domain/assessment-management'
+import type { SonartraAssessmentPackageV1 } from '../lib/admin/domain/assessment-package'
 import { mapAssessmentVersionRows } from '../lib/admin/server/assessment-management'
+
+const normalizedPackage: SonartraAssessmentPackageV1 = {
+  meta: {
+    schemaVersion: 'sonartra-assessment-package/v1',
+    assessmentKey: 'sonartra_signals',
+    assessmentTitle: 'Sonartra Signals',
+    versionLabel: '1.2.0',
+    defaultLocale: 'en',
+  },
+  dimensions: [
+    { id: 'drive', labelKey: 'dimension.drive.label' },
+    { id: 'focus', labelKey: 'dimension.focus.label' },
+  ],
+  questions: [
+    {
+      id: 'q1',
+      promptKey: 'question.q1.prompt',
+      dimensionId: 'drive',
+      reverseScored: false,
+      weight: 1,
+      options: [
+        { id: 'q1.a', labelKey: 'question.q1.option.a', value: 1, scoreMap: { drive: 1 } },
+        { id: 'q1.b', labelKey: 'question.q1.option.b', value: 2, scoreMap: { drive: 2, focus: 1 } },
+      ],
+    },
+    {
+      id: 'q2',
+      promptKey: 'question.q2.prompt',
+      dimensionId: 'focus',
+      reverseScored: false,
+      weight: 1,
+      options: [
+        { id: 'q2.a', labelKey: 'question.q2.option.a', value: 1, scoreMap: { focus: 1 } },
+        { id: 'q2.b', labelKey: 'question.q2.option.b', value: 2, scoreMap: { focus: 2, drive: 1 } },
+      ],
+    },
+  ],
+  scoring: {
+    dimensionRules: [
+      { dimensionId: 'drive', aggregation: 'sum' as const },
+    ],
+  },
+  normalization: {
+    scales: [
+      {
+        id: 'core-scale',
+        dimensionIds: ['drive', 'focus'],
+        range: { min: 0, max: 10 },
+        bands: [
+          { key: 'low', min: 0, max: 4, labelKey: 'band.low.label' },
+          { key: 'high', min: 5, max: 10, labelKey: 'band.high.label' },
+        ],
+      },
+    ],
+  },
+  outputs: {
+    reportRules: [
+      {
+        key: 'core-summary',
+        labelKey: 'output.core-summary.label',
+        dimensionIds: ['drive'],
+        normalizationScaleId: 'core-scale',
+      },
+    ],
+  },
+  language: {
+    locales: [
+      {
+        locale: 'en',
+        text: {
+          'dimension.drive.label': 'Drive',
+          'dimension.focus.label': 'Focus',
+          'question.q1.prompt': 'I naturally set the pace for the team.',
+          'question.q1.option.a': 'Rarely',
+          'question.q1.option.b': 'Often',
+          'question.q2.prompt': 'I maintain focus in ambiguity.',
+          'question.q2.option.a': 'Sometimes',
+          'question.q2.option.b': 'Consistently',
+          'band.low.label': 'Low',
+          'band.high.label': 'High',
+          'output.core-summary.label': 'Core summary',
+        },
+      },
+    ],
+  },
+}
+
+const priorNormalizedPackage: SonartraAssessmentPackageV1 = {
+  ...normalizedPackage,
+  meta: { ...normalizedPackage.meta, versionLabel: '1.1.0' },
+  questions: [normalizedPackage.questions[0]],
+  normalization: {
+    scales: [
+      {
+        id: 'core-scale',
+        dimensionIds: ['drive'],
+        range: { min: 0, max: 10 },
+        bands: [
+          { key: 'low', min: 0, max: 4, labelKey: 'band.low.label' },
+          { key: 'high', min: 5, max: 10, labelKey: 'band.high.label' },
+        ],
+      },
+    ],
+  },
+  language: {
+    locales: [
+      {
+        locale: 'en',
+        text: {
+          'dimension.drive.label': 'Drive',
+          'question.q1.prompt': 'I naturally set the pace for the team.',
+          'question.q1.option.a': 'Rarely',
+          'question.q1.option.b': 'Often',
+          'band.low.label': 'Low',
+          'band.high.label': 'High',
+          'output.core-summary.label': 'Core summary',
+        },
+      },
+    ],
+  },
+}
 
 const registryData = {
   filters: {
@@ -57,12 +179,12 @@ const packageInfo = {
   importedByName: 'Rina Patel',
   sourceFilename: 'signals-v1.json',
   summary: {
-    dimensionsCount: 5,
-    questionsCount: 80,
-    optionsCount: 320,
-    scoringRuleCount: 5,
-    normalizationRuleCount: 4,
-    outputRuleCount: 3,
+    dimensionsCount: 2,
+    questionsCount: 2,
+    optionsCount: 4,
+    scoringRuleCount: 1,
+    normalizationRuleCount: 1,
+    outputRuleCount: 1,
     localeCount: 1,
   },
   errors: [],
@@ -94,6 +216,7 @@ const detailData = {
       hasDefinitionPayload: true,
       validationStatus: 'valid_with_warnings',
       packageInfo,
+      normalizedPackage,
       createdAt: '2026-03-10T09:00:00Z',
       updatedAt: '2026-03-21T09:00:00Z',
       publishedAt: '2026-03-21T09:00:00Z',
@@ -107,26 +230,60 @@ const detailData = {
       assessmentId: 'assessment-1',
       versionLabel: '1.3.0',
       lifecycleStatus: 'draft' as const,
-      sourceType: 'manual' as const,
+      sourceType: 'import' as const,
       notes: 'Next draft candidate',
-      hasDefinitionPayload: false,
-      validationStatus: 'invalid',
+      hasDefinitionPayload: true,
+      validationStatus: 'valid_with_warnings',
       packageInfo: {
         ...packageInfo,
-        status: 'invalid' as const,
         importedAt: '2026-03-22T09:00:00Z',
         importedByName: 'Noah Chen',
-        sourceFilename: null,
-        summary: null,
-        errors: [{ path: 'questions[0].dimensionId', message: 'Question references unknown dimension "missing".' }],
-        warnings: [],
+        sourceFilename: 'signals-v1.3.json',
       },
+      normalizedPackage,
       createdAt: '2026-03-22T09:00:00Z',
       updatedAt: '2026-03-22T09:00:00Z',
       publishedAt: null,
       archivedAt: null,
       createdByName: 'Noah Chen',
       updatedByName: 'Noah Chen',
+      publishedByName: null,
+    },
+    {
+      id: 'version-1',
+      assessmentId: 'assessment-1',
+      versionLabel: '1.1.0',
+      lifecycleStatus: 'archived' as const,
+      sourceType: 'import' as const,
+      notes: 'Prior baseline',
+      hasDefinitionPayload: true,
+      validationStatus: 'valid',
+      packageInfo: {
+        status: 'valid' as const,
+        schemaVersion: 'sonartra-assessment-package/v1',
+        sourceType: 'manual_import' as const,
+        importedAt: '2026-03-15T08:00:00Z',
+        importedByName: 'Rina Patel',
+        sourceFilename: 'signals-v1.1.json',
+        summary: {
+          dimensionsCount: 2,
+          questionsCount: 1,
+          optionsCount: 2,
+          scoringRuleCount: 1,
+          normalizationRuleCount: 1,
+          outputRuleCount: 1,
+          localeCount: 1,
+        },
+        errors: [],
+        warnings: [],
+      },
+      normalizedPackage: priorNormalizedPackage,
+      createdAt: '2026-03-15T09:00:00Z',
+      updatedAt: '2026-03-15T09:00:00Z',
+      publishedAt: null,
+      archivedAt: '2026-03-21T09:00:00Z',
+      createdByName: 'Rina Patel',
+      updatedByName: 'Rina Patel',
       publishedByName: null,
     },
   ],
@@ -147,7 +304,7 @@ const detailData = {
     {
       id: 'audit-2',
       eventType: 'assessment_package_imported',
-      summary: 'Assessment package imported for Sonartra Signals v1.2.0.',
+      summary: 'Assessment package imported for Sonartra Signals v1.2.0 · 2 questions · 2 dimensions · 1 warning(s).',
       actorId: 'admin-1',
       actorName: 'Rina Patel',
       happenedAt: '2026-03-21T08:00:00Z',
@@ -160,7 +317,7 @@ const detailData = {
     {
       id: 'audit-3',
       eventType: 'assessment_publish_blocked_invalid_package',
-      summary: 'Publish blocked for Sonartra Signals v1.3.0 because the attached package is missing or invalid.',
+      summary: 'Publish blocked for Sonartra Signals v1.3.0: Attach a package before publish.',
       actorId: 'admin-1',
       actorName: 'Rina Patel',
       happenedAt: '2026-03-22T09:00:00Z',
@@ -172,9 +329,9 @@ const detailData = {
     },
   ],
   diagnostics: {
-    versionCount: 2,
+    versionCount: 3,
     draftCount: 1,
-    archivedCount: 0,
+    archivedCount: 1,
     latestDraftVersionLabel: '1.3.0',
     latestPublishedVersionLabel: '1.2.0',
     latestVersionUpdatedAt: '2026-03-22T09:00:00Z',
@@ -207,18 +364,19 @@ test('assessment detail overview renders workspace tabs, metadata, and audit act
   assert.match(html, /\/admin\/audit\?entityType=assessment&amp;entityId=assessment-1/)
 })
 
-test('assessment versions workspace wires lifecycle controls and package operators', async () => {
+test('assessment versions workspace surfaces package evidence and diff snippets', async () => {
   const [surfaceSource, managerSource] = await Promise.all([
     readFile(new URL('../components/admin/surfaces/AdminAssessmentDetailSurface.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionsManager.tsx', import.meta.url), 'utf8'),
   ])
 
   assert.match(surfaceSource, /AdminAssessmentVersionsManager/)
-  assert.match(managerSource, /Create draft version/)
-  assert.match(managerSource, /Publish/)
-  assert.match(managerSource, /Archive/)
+  assert.match(surfaceSource, /currentPublishedVersionId/)
+  assert.match(managerSource, /Control-tower view of version package state/)
+  assert.match(managerSource, /getAdminAssessmentVersionControlTowerSummary/)
+  assert.match(managerSource, /Compared with v/)
+  assert.match(managerSource, /Ready with warnings/)
   assert.match(managerSource, /Import package/)
-  assert.match(managerSource, /Re-import package/)
 })
 
 test('assessment activity tab renders shared audit presentation and package events', () => {
@@ -241,20 +399,93 @@ test('assessment detail settings tab renders package-aware metadata and compiler
   assert.match(html, /Package normalization pipeline active/i)
 })
 
-test('assessment version detail surface shows package provenance and validation state', async () => {
-  const detailHtml = renderToStaticMarkup(<AdminAssessmentVersionDetailSurface detailData={detailData} version={detailData.versions[0]} />)
+test('assessment version detail surface renders package preview diff and readiness evidence', async () => {
+  const detailHtml = renderToStaticMarkup(<AdminAssessmentVersionDetailSurface detailData={detailData} version={detailData.versions[1]} />)
   const [versionSurfaceSource, importFormSource] = await Promise.all([
     readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionDetailSurface.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionPackageImportForm.tsx', import.meta.url), 'utf8'),
   ])
 
-  assert.match(detailHtml, /Version package state/)
-  assert.match(detailHtml, /Valid with warnings/)
-  assert.match(detailHtml, /signals-v1\.json/)
-  assert.match(detailHtml, /80 questions/)
+  assert.match(detailHtml, /Package Preview/)
+  assert.match(detailHtml, /Publish Readiness/)
+  assert.match(detailHtml, /Diff/)
+  assert.match(detailHtml, /signals-v1\.3\.json/)
+  assert.match(detailHtml, /q2/)
+  assert.match(detailHtml, /Structured comparison against v1.2.0 found operational package changes\./)
+  assert.match(detailHtml, /Ready with warnings/)
   assert.match(versionSurfaceSource, /Import assessment package/)
   assert.match(versionSurfaceSource, /Assessment package imported successfully\./)
   assert.match(importFormSource, /Validation results/)
+})
+
+test('assessment version detail surface renders clean no-package state', () => {
+  const html = renderToStaticMarkup(<AdminAssessmentVersionDetailSurface detailData={{
+    ...detailData,
+    versions: [{
+      ...detailData.versions[1],
+      id: 'version-4',
+      versionLabel: '1.4.0',
+      packageInfo: {
+        status: 'missing' as const,
+        schemaVersion: null,
+        sourceType: null,
+        importedAt: null,
+        importedByName: null,
+        sourceFilename: null,
+        summary: null,
+        errors: [],
+        warnings: [],
+      },
+      normalizedPackage: null,
+      hasDefinitionPayload: false,
+      validationStatus: null,
+    }],
+  }} version={{
+    ...detailData.versions[1],
+    id: 'version-4',
+    versionLabel: '1.4.0',
+    packageInfo: {
+      status: 'missing' as const,
+      schemaVersion: null,
+      sourceType: null,
+      importedAt: null,
+      importedByName: null,
+      sourceFilename: null,
+      summary: null,
+      errors: [],
+      warnings: [],
+    },
+    normalizedPackage: null,
+    hasDefinitionPayload: false,
+    validationStatus: null,
+  }} />)
+
+  assert.match(html, /No package attached/)
+  assert.match(html, /Blocked/)
+  assert.match(html, /First version|No prior version exists yet/)
+})
+
+test('assessment version detail surface renders invalid-package state cleanly', () => {
+  const invalidVersion = {
+    ...detailData.versions[1],
+    id: 'version-invalid',
+    versionLabel: '1.3.1',
+    packageInfo: {
+      ...detailData.versions[1].packageInfo,
+      status: 'invalid' as const,
+      summary: null,
+      errors: [{ path: 'questions[0].dimensionId', message: 'Question references unknown dimension "missing".' }],
+      warnings: [],
+    },
+    normalizedPackage: null,
+    hasDefinitionPayload: false,
+    validationStatus: 'invalid',
+  }
+  const html = renderToStaticMarkup(<AdminAssessmentVersionDetailSurface detailData={{ ...detailData, versions: [invalidVersion, detailData.versions[0]] }} version={invalidVersion} />)
+
+  assert.match(html, /Package preview unavailable/)
+  assert.match(html, /Question references unknown dimension/)
+  assert.match(html, /Blocked/)
 })
 
 test('assessment route helpers normalise tabs and registry filters', () => {
@@ -276,7 +507,8 @@ test('assessment version row mapping normalises audit-facing version state and p
     lifecycle_status: 'draft',
     source_type: 'manual',
     notes: 'Initial draft',
-    has_definition_payload: false,
+    has_definition_payload: true,
+    definition_payload: normalizedPackage,
     validation_status: 'invalid',
     package_status: 'invalid',
     package_schema_version: 'sonartra-assessment-package/v1',
@@ -286,12 +518,12 @@ test('assessment version row mapping normalises audit-facing version state and p
     package_imported_by_name: 'Noah Chen',
     package_validation_report_json: {
       summary: {
-        dimensionsCount: 1,
-        questionsCount: 0,
-        optionsCount: 0,
-        scoringRuleCount: 0,
-        normalizationRuleCount: 0,
-        outputRuleCount: 0,
+        dimensionsCount: 2,
+        questionsCount: 2,
+        optionsCount: 4,
+        scoringRuleCount: 1,
+        normalizationRuleCount: 1,
+        outputRuleCount: 1,
         localeCount: 1,
       },
       errors: [{ path: 'questions', message: 'At least one question is required.' }],
@@ -310,6 +542,7 @@ test('assessment version row mapping normalises audit-facing version state and p
   assert.equal(versions[0]?.lifecycleStatus, 'draft')
   assert.equal(versions[0]?.packageInfo.status, 'invalid')
   assert.equal(versions[0]?.packageInfo.importedByName, 'Noah Chen')
+  assert.equal(versions[0]?.normalizedPackage?.questions.length, 2)
 })
 
 test('assessment routes and actions wire server data loading, import workflow, and mutation surfaces', async () => {
@@ -341,6 +574,7 @@ test('assessment routes and actions wire server data loading, import workflow, a
   assert.match(versionRoute, /AdminAssessmentVersionDetailSurface/)
   assert.match(importRoute, /mode="import"/)
   assert.match(versionNotFoundSource, /Assessment version not found/)
-  assert.match(versionSurfaceSource, /Version package state/)
+  assert.match(versionSurfaceSource, /Package Preview/)
+  assert.match(versionSurfaceSource, /Publish Readiness/)
   assert.match(importFormSource, /Validate \+ attach package/)
 })

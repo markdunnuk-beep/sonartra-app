@@ -17,8 +17,10 @@ import {
   type AssessmentPackageStatus,
   type SonartraAssessmentPackageSummary,
   type SonartraAssessmentPackageValidationIssue,
+  parseStoredNormalizedAssessmentPackage,
   validateSonartraAssessmentPackage,
 } from '@/lib/admin/domain/assessment-package'
+import { getAdminAssessmentVersionReadiness } from '@/lib/admin/domain/assessment-package-review'
 import { queryDb, withTransaction, describeDatabaseError } from '@/lib/db'
 import { getScopedAdminAuditActivity, mapScopedAuditEventsToAssessmentActivity } from '@/lib/admin/server/audit-workspace'
 
@@ -58,6 +60,7 @@ interface AssessmentVersionRow {
   source_type: string | null
   notes: string | null
   has_definition_payload: boolean | null
+  definition_payload: unknown
   validation_status: string | null
   package_status: string | null
   package_schema_version: string | null
@@ -548,6 +551,7 @@ export function mapAssessmentVersionRows(rows: AssessmentVersionRow[]): AdminAss
       hasDefinitionPayload: Boolean(row.has_definition_payload),
       validationStatus: normaliseNullableField(row.validation_status),
       packageInfo: mapPackageInfo(row),
+      normalizedPackage: parseStoredNormalizedAssessmentPackage(row.definition_payload),
       createdAt,
       updatedAt,
       publishedAt: normaliseTimestamp(row.published_at),
@@ -692,6 +696,7 @@ export async function getAdminAssessmentDetailData(assessmentId: string): Promis
          av.source_type,
          av.notes,
          (av.definition_payload is not null) as has_definition_payload,
+         av.definition_payload,
          av.validation_status,
          av.package_status,
          av.package_schema_version,
@@ -1121,6 +1126,13 @@ export async function importAdminAssessmentPackage(
         updated_at: string | Date
         assessment_name: string
         package_status: string | null
+        package_schema_version: string | null
+        package_source_type: string | null
+        package_imported_at: string | Date | null
+        package_source_filename: string | null
+        package_imported_by_name: string | null
+        package_validation_report_json: unknown
+        definition_payload: unknown
       }>(
         `select
            av.id,
@@ -1129,9 +1141,17 @@ export async function importAdminAssessmentPackage(
            av.lifecycle_status,
            av.updated_at,
            av.package_status,
+           av.package_schema_version,
+           av.package_source_type,
+           av.package_imported_at,
+           av.package_source_filename,
+           package_imported_by.full_name as package_imported_by_name,
+           av.package_validation_report_json,
+           av.definition_payload,
            ad.name as assessment_name
          from assessment_versions av
          inner join assessment_definitions ad on ad.id = av.assessment_definition_id
+         left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
          where av.id = $1
            and av.assessment_definition_id = $2
          limit 1`,
@@ -1209,7 +1229,7 @@ export async function importAdminAssessmentPackage(
           actor,
           nowIso,
           eventType: 'assessment_package_validation_failed',
-          summary: `Assessment package import failed validation for ${version.assessment_name} v${version.version_label}.`,
+          summary: `Assessment package import failed validation for ${version.assessment_name} v${version.version_label} with ${validation.errors.length} blocking issue(s) and ${validation.warnings.length} warning(s).`,
           assessmentId: input.assessmentId,
           assessmentName: version.assessment_name,
           versionId: input.versionId,
@@ -1232,7 +1252,7 @@ export async function importAdminAssessmentPackage(
         actor,
         nowIso,
         eventType: version.package_status && version.package_status !== 'missing' ? 'assessment_package_replaced' : 'assessment_package_imported',
-        summary: `${version.package_status && version.package_status !== 'missing' ? 'Assessment package replaced' : 'Assessment package imported'} for ${version.assessment_name} v${version.version_label}.`,
+        summary: `${version.package_status && version.package_status !== 'missing' ? 'Assessment package replaced' : 'Assessment package imported'} for ${version.assessment_name} v${version.version_label} · ${validation.summary.questionsCount} questions · ${validation.summary.dimensionsCount} dimensions · ${validation.warnings.length} warning(s).`,
         assessmentId: input.assessmentId,
         assessmentName: version.assessment_name,
         versionId: input.versionId,
@@ -1287,6 +1307,13 @@ export async function publishAdminAssessmentVersion(
         updated_at: string | Date
         assessment_name: string
         package_status: string | null
+        package_schema_version: string | null
+        package_source_type: string | null
+        package_imported_at: string | Date | null
+        package_source_filename: string | null
+        package_imported_by_name: string | null
+        package_validation_report_json: unknown
+        definition_payload: unknown
       }>(
         `select
            av.id,
@@ -1295,9 +1322,17 @@ export async function publishAdminAssessmentVersion(
            av.lifecycle_status,
            av.updated_at,
            av.package_status,
+           av.package_schema_version,
+           av.package_source_type,
+           av.package_imported_at,
+           av.package_source_filename,
+           package_imported_by.full_name as package_imported_by_name,
+           av.package_validation_report_json,
+           av.definition_payload,
            ad.name as assessment_name
          from assessment_versions av
          inner join assessment_definitions ad on ad.id = av.assessment_definition_id
+         left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
          where av.id = $1
            and av.assessment_definition_id = $2
          limit 1`,
@@ -1325,27 +1360,48 @@ export async function publishAdminAssessmentVersion(
         }
       }
 
-      if (version.package_status !== 'valid' && version.package_status !== 'valid_with_warnings') {
+      const publishReadiness = getAdminAssessmentVersionReadiness({
+        packageInfo: {
+          status: isPackageStatus(version.package_status) ? version.package_status : 'missing',
+          schemaVersion: normaliseNullableField(version.package_schema_version),
+          sourceType: version.package_source_type === 'manual_import' ? 'manual_import' : null,
+          importedAt: normaliseTimestamp(version.package_imported_at),
+          importedByName: normaliseNullableField(version.package_imported_by_name),
+          sourceFilename: normaliseNullableField(version.package_source_filename),
+          summary: normalisePackageSummary(version.package_validation_report_json),
+          errors: normalisePackageIssues(version.package_validation_report_json, 'errors'),
+          warnings: normalisePackageIssues(version.package_validation_report_json, 'warnings'),
+        },
+        normalizedPackage: parseStoredNormalizedAssessmentPackage(version.definition_payload),
+      })
+
+      if (publishReadiness.verdict === 'blocked') {
         const actor = await deps.getActorIdentity(client)
         const nowIso = deps.now().toISOString()
+        const blockingSummary = publishReadiness.blockingIssues[0] ?? 'The attached package is missing or invalid.'
 
         await writeAssessmentAuditEvent(client, {
           createId: deps.createId,
           actor,
           nowIso,
           eventType: 'assessment_publish_blocked_invalid_package',
-          summary: `Publish blocked for ${version.assessment_name} v${version.version_label} because the attached package is missing or invalid.`,
+          summary: `Publish blocked for ${version.assessment_name} v${version.version_label}: ${blockingSummary}`,
           assessmentId: input.assessmentId,
           assessmentName: version.assessment_name,
           versionId: input.versionId,
           versionLabel: version.version_label,
-          metadata: { packageStatus: version.package_status ?? 'missing' },
+          metadata: {
+            packageStatus: version.package_status ?? 'missing',
+            readinessVerdict: publishReadiness.verdict,
+            blockingIssues: publishReadiness.blockingIssues,
+            warnings: publishReadiness.warnings,
+          },
         })
 
         return {
           ok: false,
           code: 'invalid_transition',
-          message: 'A draft version can only be published after a valid package is attached. Import a valid package first.',
+          message: 'A draft version can only be published after the package readiness blockers are resolved. Import or repair the package first.',
         }
       }
 
@@ -1466,6 +1522,7 @@ export async function archiveAdminAssessmentVersion(
            ad.name as assessment_name
          from assessment_versions av
          inner join assessment_definitions ad on ad.id = av.assessment_definition_id
+         left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
          where av.id = $1
            and av.assessment_definition_id = $2
          limit 1`,
