@@ -1,3 +1,5 @@
+import type { AdminAssessmentVersionPackageInfo } from '@/lib/admin/domain/assessment-package'
+
 export type AdminAssessmentLifecycleStatus = 'draft' | 'published' | 'archived'
 export type AdminAssessmentVersionSourceType = 'manual' | 'import' | 'system'
 export type AdminAssessmentDetailTab = 'overview' | 'versions' | 'settings' | 'activity'
@@ -64,6 +66,7 @@ export interface AdminAssessmentVersionRecord {
   notes: string | null
   hasDefinitionPayload: boolean
   validationStatus: string | null
+  packageInfo: AdminAssessmentVersionPackageInfo
   createdAt: string
   updatedAt: string
   publishedAt: string | null
@@ -130,6 +133,19 @@ export interface AdminAssessmentVersionMutationState {
     versionLabel?: string
     notes?: string
     confirmation?: string
+  }
+}
+
+export interface AdminAssessmentPackageImportState {
+  status: 'idle' | 'error'
+  message?: string
+  fieldErrors?: {
+    packageText?: string
+    packageFile?: string
+  }
+  validationResult?: {
+    errors: Array<{ path: string; message: string }>
+    warnings: Array<{ path: string; message: string }>
   }
 }
 

@@ -2,17 +2,22 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import type { AdminAssessmentVersionMutationState } from '@/lib/admin/domain/assessment-management'
+import type { AdminAssessmentPackageImportState, AdminAssessmentVersionMutationState } from '@/lib/admin/domain/assessment-management'
 import { buildAdminAssessmentVersionMutationState } from '@/lib/admin/domain/assessment-management'
 import {
   archiveAdminAssessmentVersion,
   createAdminAssessmentDraftVersion,
+  importAdminAssessmentPackage,
   publishAdminAssessmentVersion,
 } from '@/lib/admin/server/assessment-management'
 
-function revalidateAssessmentPaths(assessmentId: string) {
+function revalidateAssessmentPaths(assessmentId: string, versionLabel?: string) {
   revalidatePath('/admin/assessments')
   revalidatePath(`/admin/assessments/${assessmentId}`)
+  if (versionLabel) {
+    revalidatePath(`/admin/assessments/${assessmentId}/versions/${versionLabel}`)
+    revalidatePath(`/admin/assessments/${assessmentId}/versions/${versionLabel}/import`)
+  }
   revalidatePath('/admin/audit')
 }
 
@@ -84,4 +89,42 @@ export async function submitAdminAssessmentArchiveVersionAction(
 
   revalidateAssessmentPaths(assessmentId)
   redirect(`/admin/assessments/${assessmentId}?tab=versions&mutation=version-archived`)
+}
+
+export async function submitAdminAssessmentImportPackageAction(
+  _previousState: AdminAssessmentPackageImportState,
+  formData: FormData,
+): Promise<AdminAssessmentPackageImportState> {
+  const assessmentId = String(formData.get('assessmentId') ?? '')
+  const versionId = String(formData.get('versionId') ?? '')
+  const versionLabel = String(formData.get('versionLabel') ?? '')
+  const expectedUpdatedAt = String(formData.get('expectedUpdatedAt') ?? '')
+  const packageText = String(formData.get('packageText') ?? '')
+  const packageFile = formData.get('packageFile')
+  const uploadedFile = packageFile instanceof File && packageFile.size > 0 ? packageFile : null
+  const uploadedText = uploadedFile ? await uploadedFile.text() : ''
+
+  const result = await importAdminAssessmentPackage({
+    assessmentId,
+    versionId,
+    expectedUpdatedAt,
+    packageText: uploadedText || packageText,
+    sourceFilename: uploadedFile?.name ?? null,
+  })
+
+  if (!result.ok && result.code === 'permission_denied') {
+    redirect('/sign-in')
+  }
+
+  if (!result.ok) {
+    return {
+      status: 'error',
+      message: result.message,
+      fieldErrors: result.fieldErrors,
+      validationResult: result.validationResult,
+    }
+  }
+
+  revalidateAssessmentPaths(assessmentId, versionLabel)
+  redirect(`/admin/assessments/${assessmentId}/versions/${versionLabel}/import?mutation=package-imported`)
 }

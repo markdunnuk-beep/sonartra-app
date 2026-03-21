@@ -11,6 +11,7 @@ import {
   type AdminAssessmentVersionMutationState,
   type AdminAssessmentVersionRecord,
 } from '@/lib/admin/domain/assessment-management'
+import { getAssessmentPackageStatusLabel } from '@/lib/admin/domain/assessment-package'
 import { formatAdminRelativeTime, formatAdminTimestamp } from '@/lib/admin/wireframe'
 
 const INITIAL_STATE: AdminAssessmentVersionMutationState = { status: 'idle' }
@@ -104,12 +105,13 @@ export function AdminAssessmentVersionsManager({ assessmentId, versions }: { ass
 
         {versions.length ? (
           <Table
-            columns={["Version", "Lifecycle", "Definition readiness", "Created / updated", "Notes", "Actions"]}
+            columns={["Version", "Lifecycle", "Package state", "Created / updated", "Notes", "Actions"]}
             rows={versions.map((version) => [
               <div key={`${version.id}-version`} className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-semibold text-textPrimary">v{version.versionLabel}</p>
                   <Badge label={getAdminAssessmentVersionSourceLabel(version.sourceType)} tone="slate" />
+                  <Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}`} variant="ghost" className="min-h-8 px-2.5 py-1 text-[10px]">Open</Button>
                 </div>
                 <p className="text-xs text-textSecondary">Created by {version.createdByName ?? 'System'}{version.publishedByName ? ` · Published by ${version.publishedByName}` : ''}</p>
               </div>,
@@ -118,7 +120,8 @@ export function AdminAssessmentVersionsManager({ assessmentId, versions }: { ass
                 <p className="text-xs text-textSecondary">{version.publishedAt ? `Published ${formatAdminTimestamp(version.publishedAt)}` : version.archivedAt ? `Archived ${formatAdminTimestamp(version.archivedAt)}` : 'Not yet published'}</p>
               </div>,
               <div key={`${version.id}-payload`} className="space-y-2">
-                <Badge label={version.hasDefinitionPayload ? 'Definition attached' : 'Metadata only'} tone={version.hasDefinitionPayload ? 'emerald' : 'slate'} />
+                <Badge label={getAssessmentPackageStatusLabel(version.packageInfo.status)} tone={version.packageInfo.status === 'valid' ? 'emerald' : version.packageInfo.status === 'valid_with_warnings' ? 'amber' : version.packageInfo.status === 'invalid' ? 'rose' : 'slate'} />
+                <p className="text-xs text-textSecondary">{version.packageInfo.summary ? `${version.packageInfo.summary.questionsCount} questions · ${version.packageInfo.summary.dimensionsCount} dimensions` : 'No package summary recorded yet.'}</p>
                 <p className="text-xs text-textSecondary">{version.validationStatus ?? 'No validation run recorded yet.'}</p>
               </div>,
               <div key={`${version.id}-updated`} className="space-y-1">
@@ -130,6 +133,7 @@ export function AdminAssessmentVersionsManager({ assessmentId, versions }: { ass
                 <p className="text-sm leading-6 text-textPrimary">{version.notes ?? 'No notes recorded.'}</p>
               </div>,
               <div key={`${version.id}-actions`} className="flex flex-col gap-2">
+                <Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}/import`} variant="ghost">{version.packageInfo.status === 'missing' ? 'Import package' : 'Re-import package'}</Button>
                 <PublishVersionForm assessmentId={assessmentId} version={version} />
                 <ArchiveVersionForm assessmentId={assessmentId} version={version} />
               </div>,
