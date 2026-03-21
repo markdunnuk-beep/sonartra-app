@@ -67,20 +67,42 @@ const detailData = {
       summary: 'Adoption checkpoint completed for Northstar analyst scope.',
       actorName: 'Bianca Ng',
       happenedAt: '2026-03-20T07:00:00Z',
+      source: 'audit' as const,
+    },
+  ],
+  auditTrail: [
+    {
+      id: 'audit-1',
+      eventType: 'organisation_updated',
+      summary: 'Organisation record updated: slug to northstar-logistics.',
+      actorName: 'Rina Patel',
+      happenedAt: '2026-03-20T10:00:00Z',
+      source: 'audit' as const,
+    },
+    {
+      id: 'membership-1',
+      eventType: 'membership_joined',
+      summary: 'Alex Mercer joined with owner access.',
+      actorName: null,
+      happenedAt: '2026-03-01T10:00:00Z',
+      source: 'membership' as const,
     },
   ],
 }
 
-test('organisation detail overview renders production detail workspace sections', () => {
-  const html = renderToStaticMarkup(<AdminOrganisationDetailSurface detailData={detailData} activeTab="overview" />)
+test('organisation detail overview renders production detail workspace sections and live actions', () => {
+  const html = renderToStaticMarkup(<AdminOrganisationDetailSurface detailData={detailData} activeTab="overview" mutation="updated" />)
 
   assert.match(html, /Northstar Logistics/)
   assert.match(html, /northstar-logistics/)
   assert.match(html, /Overview/)
   assert.match(html, /Members/)
   assert.match(html, /Assessments/)
+  assert.match(html, /Activity/)
   assert.match(html, /Settings/)
-  assert.match(html, /Total members/)
+  assert.match(html, /Edit organisation/)
+  assert.match(html, /Deactivate organisation/)
+  assert.match(html, /Organisation changes saved successfully\./)
   assert.match(html, /Recent activity/)
   assert.match(html, /View audit trail/)
 })
@@ -93,6 +115,15 @@ test('organisation detail members tab renders the linked admin user roster', () 
   assert.match(html, /alex\.mercer@northstarlogistics\.com/)
   assert.match(html, /\/admin\/users\/30000000-0000-4000-8000-000000000005/)
   assert.match(html, /Joined/)
+})
+
+test('organisation detail activity tab renders scoped audit trail rows', () => {
+  const html = renderToStaticMarkup(<AdminOrganisationDetailSurface detailData={detailData} activeTab="activity" />)
+
+  assert.match(html, /Organisation audit trail/)
+  assert.match(html, /Organisation record updated/)
+  assert.match(html, /membership joined/i)
+  assert.match(html, /Open shared audit workspace/)
 })
 
 test('organisation detail settings tab renders safe metadata and future control placeholders', () => {
@@ -108,6 +139,7 @@ test('organisation detail settings tab renders safe metadata and future control 
 
 test('organisation detail route sanitises requested tabs', () => {
   assert.equal(getAdminOrganisationDetailTab('members'), 'members')
+  assert.equal(getAdminOrganisationDetailTab('activity'), 'activity')
   assert.equal(getAdminOrganisationDetailTab('not-real'), 'overview')
   assert.equal(getAdminOrganisationDetailTab(undefined), 'overview')
 })
@@ -160,6 +192,7 @@ test('organisation detail server mapping normalises summary, members, assessment
     summary: 'Checkpoint complete',
     actor_name: 'Bianca Ng',
     happened_at: '2026-03-20T07:00:00Z',
+    source: 'audit',
   }])
 
   assert.equal(summary?.assignedAssessments, 3)
@@ -167,19 +200,24 @@ test('organisation detail server mapping normalises summary, members, assessment
   assert.equal(members[0]?.email, 'alex@example.com')
   assert.equal(assessments[0]?.publishState, 'published')
   assert.equal(activity[0]?.actorName, 'Bianca Ng')
+  assert.equal(activity[0]?.source, 'audit')
 })
 
-test('organisation detail route and not found state wire server loading and operator fallback copy', async () => {
-  const [routeSource, notFoundSource, registrySource, layoutSource] = await Promise.all([
+test('organisation detail route and edit workspace wire server loading and operator controls', async () => {
+  const [routeSource, editRouteSource, actionSource, notFoundSource, registrySource, layoutSource] = await Promise.all([
     readFile(new URL('../app/admin/organisations/[organisationId]/page.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../app/admin/organisations/[organisationId]/edit/page.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../app/admin/organisations/[organisationId]/edit/actions.ts', import.meta.url), 'utf8'),
     readFile(new URL('../app/admin/organisations/[organisationId]/not-found.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../components/admin/surfaces/AdminOrganisationsRegistryClient.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../app/admin/layout.tsx', import.meta.url), 'utf8'),
   ])
 
   assert.match(routeSource, /getAdminOrganisationDetailData/)
-  assert.match(routeSource, /notFound\(\)/)
-  assert.match(routeSource, /AdminOrganisationDetailSurface/)
+  assert.match(routeSource, /mutation=updated|mutation/)
+  assert.match(editRouteSource, /AdminOrganisationEditForm/)
+  assert.match(actionSource, /updateAdminOrganisation/)
+  assert.match(actionSource, /transitionAdminOrganisationStatus/)
   assert.match(notFoundSource, /Organisation not found/)
   assert.match(registrySource, /\/admin\/organisations\/\$\{organisation\.id\}/)
   assert.match(layoutSource, /resolveAdminAccess/)

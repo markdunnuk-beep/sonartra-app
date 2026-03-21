@@ -8,7 +8,7 @@ export default async function AdminOrganisationDetailPage({
   searchParams,
 }: {
   params: { organisationId: string }
-  searchParams?: { tab?: string }
+  searchParams?: { tab?: string; mutation?: string }
 }) {
   const organisation = await getAdminOrganisationDetailData(params.organisationId)
 
@@ -20,6 +20,7 @@ export default async function AdminOrganisationDetailPage({
     <AdminOrganisationDetailSurface
       detailData={organisation}
       activeTab={getAdminOrganisationDetailTab(searchParams?.tab)}
+      mutation={searchParams?.mutation}
     />
   )
 }

@@ -56,6 +56,7 @@ interface OrganisationActivityRow {
   summary: string | null
   actor_name: string | null
   happened_at: string | Date | null
+  source: 'audit' | 'membership' | 'organisation' | null
 }
 
 type TimestampInput = string | Date | null | undefined
@@ -223,8 +224,89 @@ export function mapOrganisationActivityRows(rows: OrganisationActivityRow[]): Ad
       summary,
       actorName: normaliseOptionalString(row.actor_name),
       happenedAt,
+      source: row.source ?? 'audit',
     }]
   })
+}
+
+async function getOrganisationScopedActivity(organisationId: string): Promise<AdminOrganisationActivityRecord[]> {
+  const activityResult = await queryDb<OrganisationActivityRow>(
+    `with organisation_events as (
+       select
+         concat('organisation-created-', o.id::text) as id,
+         'organisation_created' as event_type,
+         'Organisation record created.' as summary,
+         null::text as actor_name,
+         o.created_at as happened_at,
+         'organisation'::text as source
+       from organisations o
+       where o.id = $1
+     ),
+     membership_events as (
+       -- Derived membership rows fill truthful gaps until all organisation events are written directly into access_audit_events.
+       select
+         concat('membership-', om.id::text, '-invited') as id,
+         'membership_invited' as event_type,
+         concat(ai.full_name, ' invited with ', om.membership_role, ' access.') as summary,
+         null::text as actor_name,
+         om.invited_at as happened_at,
+         'membership'::text as source
+       from organisation_memberships om
+       inner join admin_identities ai on ai.id = om.identity_id
+       where om.organisation_id = $1 and om.invited_at is not null
+
+       union all
+
+       select
+         concat('membership-', om.id::text, '-joined') as id,
+         'membership_joined' as event_type,
+         concat(ai.full_name, ' joined with ', om.membership_role, ' access.') as summary,
+         null::text as actor_name,
+         om.joined_at as happened_at,
+         'membership'::text as source
+       from organisation_memberships om
+       inner join admin_identities ai on ai.id = om.identity_id
+       where om.organisation_id = $1 and om.joined_at is not null
+
+       union all
+
+       select
+         concat('membership-', om.id::text, '-state') as id,
+         concat('membership_', om.membership_status) as event_type,
+         concat(ai.full_name, ' membership currently marked ', om.membership_status, '.') as summary,
+         null::text as actor_name,
+         coalesce(om.last_activity_at, om.joined_at, om.invited_at) as happened_at,
+         'membership'::text as source
+       from organisation_memberships om
+       inner join admin_identities ai on ai.id = om.identity_id
+       where om.organisation_id = $1 and om.membership_status in ('inactive', 'suspended')
+     ),
+     audit_events as (
+       select
+         id::text,
+         event_type,
+         event_summary as summary,
+         actor_name,
+         happened_at,
+         'audit'::text as source
+       from access_audit_events
+       where organisation_id = $1
+     )
+     select id, event_type, summary, actor_name, happened_at, source
+     from (
+       select * from organisation_events
+       union all
+       select * from membership_events
+       union all
+       select * from audit_events
+     ) scoped_activity
+     where happened_at is not null
+     order by happened_at desc, id desc
+     limit 40`,
+    [organisationId],
+  )
+
+  return mapOrganisationActivityRows(activityResult.rows ?? [])
 }
 
 export async function getAdminOrganisationDetailData(organisationId: string): Promise<AdminOrganisationDetailData | null> {
@@ -303,7 +385,7 @@ export async function getAdminOrganisationDetailData(organisationId: string): Pr
     return null
   }
 
-  const [membersResult, assessmentsResult, activityResult] = await Promise.all([
+  const [membersResult, assessmentsResult, auditTrail] = await Promise.all([
     queryDb<OrganisationMemberRow>(`
       select
         om.identity_id,
@@ -334,24 +416,14 @@ export async function getAdminOrganisationDetailData(organisationId: string): Pr
       group by av.id, av.name, av.key, av.is_active
       order by max(a.updated_at) desc nulls last, lower(av.name) asc
     `, [organisationId]),
-    queryDb<OrganisationActivityRow>(`
-      select
-        id,
-        event_type,
-        event_summary as summary,
-        actor_name,
-        happened_at
-      from access_audit_events
-      where organisation_id = $1
-      order by happened_at desc
-      limit 6
-    `, [organisationId]),
+    getOrganisationScopedActivity(organisationId),
   ])
 
   return {
     organisation,
     members: mapOrganisationMemberRows(membersResult.rows ?? []),
     assessments: mapOrganisationAssessmentRows(assessmentsResult.rows ?? []),
-    recentActivity: mapOrganisationActivityRows(activityResult.rows ?? []),
+    recentActivity: auditTrail.slice(0, 6),
+    auditTrail,
   }
 }
