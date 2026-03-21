@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { Search } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import {
@@ -149,7 +150,7 @@ function buildRows(organisations: OrganisationRegistryEntry[]) {
       return [
         <div key={`${organisation.id}-entity`}>
           <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-textPrimary">{organisation.name}</p>
+            <Link href={`/admin/organisations/${organisation.id}`} className="truncate text-sm font-semibold text-textPrimary hover:text-accent">{organisation.name}</Link>
             <Badge label={organisation.slug} tone="slate" className="max-w-[11rem] truncate" />
           </div>
           <p className="mt-1 text-sm text-textSecondary">{organisation.region}</p>
