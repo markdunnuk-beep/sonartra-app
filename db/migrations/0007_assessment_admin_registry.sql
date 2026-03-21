@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS assessment_definitions (
   name TEXT NOT NULL,
   category TEXT NOT NULL,
   description TEXT,
-  lifecycle_status TEXT NOT NULL DEFAULT 'draft' CHECK (lifecycle_status IN ('draft', 'published', 'archived')),
+  lifecycle_status TEXT NOT NULL DEFAULT 'draft'
+    CHECK (lifecycle_status IN ('draft', 'published', 'archived')),
   current_published_version_id UUID,
   settings_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   import_metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -38,6 +39,8 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
 ALTER TABLE assessment_versions
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   ADD COLUMN IF NOT EXISTS assessment_definition_id UUID REFERENCES assessment_definitions(id) ON DELETE CASCADE,
   ADD COLUMN IF NOT EXISTS version_label TEXT,
   ADD COLUMN IF NOT EXISTS lifecycle_status TEXT,
@@ -57,7 +60,10 @@ ALTER TABLE assessment_versions
   ALTER COLUMN source_type SET DEFAULT 'manual';
 
 UPDATE assessment_versions
-SET lifecycle_status = CASE WHEN is_active THEN 'published' ELSE 'archived' END
+SET lifecycle_status = CASE
+  WHEN is_active THEN 'published'
+  ELSE 'archived'
+END
 WHERE lifecycle_status IS NULL;
 
 UPDATE assessment_versions
@@ -78,40 +84,47 @@ WITH orphaned_versions AS (
     av.key,
     av.name,
     av.description,
-    av.created_at,
-    av.updated_at,
     av.lifecycle_status,
-    lower(regexp_replace(av.key, '[^a-zA-Z0-9]+', '-', 'g')) AS slug_candidate
+    CASE
+      WHEN trim(both '-' FROM lower(regexp_replace(av.key, '[^a-zA-Z0-9]+', '-', 'g'))) = ''
+      THEN 'assessment-' || left(replace(av.id::text, '-', ''), 12)
+      ELSE trim(both '-' FROM lower(regexp_replace(av.key, '[^a-zA-Z0-9]+', '-', 'g')))
+    END AS slug_candidate
   FROM assessment_versions av
   WHERE av.assessment_definition_id IS NULL
-), inserted AS (
-  INSERT INTO assessment_definitions (
-    id,
-    key,
-    slug,
-    name,
-    category,
-    description,
-    lifecycle_status,
-    current_published_version_id,
-    created_at,
-    updated_at
-  )
-  SELECT
-    gen_random_uuid(),
-    ov.key,
-    trim(both '-' from ov.slug_candidate),
-    ov.name,
-    'behavioural_intelligence',
-    ov.description,
-    CASE WHEN ov.lifecycle_status = 'published' THEN 'published' ELSE 'draft' END,
-    CASE WHEN ov.lifecycle_status = 'published' THEN ov.id ELSE NULL END,
-    ov.created_at,
-    ov.updated_at
-  FROM orphaned_versions ov
-  ON CONFLICT (key) DO NOTHING
-  RETURNING id, key
 )
+INSERT INTO assessment_definitions (
+  id,
+  key,
+  slug,
+  name,
+  category,
+  description,
+  lifecycle_status,
+  current_published_version_id,
+  created_at,
+  updated_at
+)
+SELECT
+  gen_random_uuid(),
+  ov.key,
+  ov.slug_candidate,
+  ov.name,
+  'behavioural_intelligence',
+  ov.description,
+  CASE
+    WHEN ov.lifecycle_status = 'published' THEN 'published'
+    ELSE 'draft'
+  END,
+  CASE
+    WHEN ov.lifecycle_status = 'published' THEN ov.id
+    ELSE NULL
+  END,
+  NOW(),
+  NOW()
+FROM orphaned_versions ov
+ON CONFLICT (key) DO NOTHING;
+
 UPDATE assessment_versions av
 SET assessment_definition_id = ad.id
 FROM assessment_definitions ad
@@ -147,7 +160,9 @@ BEGIN
   ) THEN
     ALTER TABLE assessment_definitions
       ADD CONSTRAINT assessment_definitions_current_published_version_id_fkey
-      FOREIGN KEY (current_published_version_id) REFERENCES assessment_versions(id) ON DELETE SET NULL;
+      FOREIGN KEY (current_published_version_id)
+      REFERENCES assessment_versions(id)
+      ON DELETE SET NULL;
   END IF;
 END $$;
 
