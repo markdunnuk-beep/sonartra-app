@@ -13,6 +13,7 @@ import {
 } from '@/lib/admin/domain/assessment-management'
 import { getAssessmentPackageStatusLabel } from '@/lib/admin/domain/assessment-package'
 import { getAdminAssessmentVersionControlTowerSummary } from '@/lib/admin/domain/assessment-package-review'
+import { getAdminAssessmentSimulationWorkspaceStatus } from '@/lib/admin/domain/assessment-simulation'
 import { formatAdminRelativeTime, formatAdminTimestamp } from '@/lib/admin/wireframe'
 
 const INITIAL_STATE: AdminAssessmentVersionMutationState = { status: 'idle' }
@@ -132,6 +133,7 @@ export function AdminAssessmentVersionsManager({
             columns={["Version", "Lifecycle", "Package evidence", "Readiness / diff", "Created / updated", "Actions"]}
             rows={versions.map((version) => {
               const controlTower = getAdminAssessmentVersionControlTowerSummary(version, versions, currentPublishedVersionId)
+              const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(version)
 
               return [
                 <div key={`${version.id}-version`} className="space-y-2">
@@ -158,6 +160,7 @@ export function AdminAssessmentVersionsManager({
                 <div key={`${version.id}-evidence`} className="space-y-2">
                   <p className="text-sm leading-6 text-textPrimary">{controlTower.snippet}</p>
                   <p className="text-xs text-textSecondary">{controlTower.diff.baseline ? `Compared with v${controlTower.diff.baseline.versionLabel}` : 'No baseline yet'}</p>
+                  <p className="text-xs text-textSecondary">Simulation: {simulationStatus.statusLabel.toLowerCase()}.</p>
                 </div>,
                 <div key={`${version.id}-updated`} className="space-y-1">
                   <p className="text-sm font-medium text-textPrimary">{formatAdminRelativeTime(version.updatedAt)}</p>
@@ -166,6 +169,7 @@ export function AdminAssessmentVersionsManager({
                 </div>,
                 <div key={`${version.id}-actions`} className="flex flex-col gap-2">
                   <Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}/import`} variant="ghost">{version.packageInfo.status === 'missing' ? 'Import package' : 'Re-import package'}</Button>
+                  <Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}/simulate`} variant="ghost">Simulate</Button>
                   <PublishVersionForm assessmentId={assessmentId} version={version} />
                   <ArchiveVersionForm assessmentId={assessmentId} version={version} />
                 </div>,
