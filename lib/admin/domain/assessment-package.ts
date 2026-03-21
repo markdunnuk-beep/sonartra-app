@@ -1,3 +1,5 @@
+import { isRecord, normalizeAuthoredInlineContent, type SonartraAssessmentPackageAuthoredContentReference, type SonartraAssessmentPackageAuthoredSectionContent, type SonartraAssessmentPackageOutputDimensionNarrative, type SonartraAssessmentPackageOutputRuleNarrative, type SonartraAssessmentPackageOutputRuleNarrativeVariant } from '@/lib/admin/domain/assessment-package-content'
+
 export const SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1 = 'sonartra-assessment-package/v1'
 
 export type AssessmentPackageImportSourceType = 'manual_import'
@@ -60,6 +62,7 @@ export interface SonartraAssessmentPackageOutputRule {
   labelKey: string
   dimensionIds: string[]
   normalizationScaleId?: string | null
+  narrative?: SonartraAssessmentPackageOutputRuleNarrative | null
 }
 
 export interface SonartraAssessmentPackageLocale {
@@ -139,10 +142,6 @@ export function parseStoredNormalizedAssessmentPackage(input: unknown): Sonartra
   return validation.ok ? validation.normalizedPackage : null
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
 function asTrimmedString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
@@ -169,6 +168,242 @@ function createEmptySummary(): SonartraAssessmentPackageSummary {
 
 function pushIssue(collection: SonartraAssessmentPackageValidationIssue[], path: string, message: string) {
   collection.push({ path, message })
+}
+
+function validateAuthoredContentReference(
+  input: unknown,
+  path: string,
+  languageKeys: Set<string>,
+  errors: SonartraAssessmentPackageValidationIssue[],
+): SonartraAssessmentPackageAuthoredContentReference | null {
+  if (!isRecord(input)) {
+    pushIssue(errors, path, 'Authored content references must be objects.')
+    return null
+  }
+
+  const key = asTrimmedString(input.key)
+  const inline = normalizeAuthoredInlineContent(input.inline)
+  if (!key && !inline) {
+    pushIssue(errors, path, 'Provide a language key, inline content, or both for authored content.')
+    return null
+  }
+
+  if (key) {
+    languageKeys.add(key)
+  }
+
+  if (input.inline !== undefined && !inline) {
+    pushIssue(errors, `${path}.inline`, 'Inline authored content must be a string or an object with default/locales text.')
+  }
+
+  return {
+    ...(key ? { key } : {}),
+    ...(inline ? { inline } : {}),
+  }
+}
+
+function validateAuthoredSectionContent(
+  input: unknown,
+  path: string,
+  languageKeys: Set<string>,
+  errors: SonartraAssessmentPackageValidationIssue[],
+): SonartraAssessmentPackageAuthoredSectionContent | null {
+  if (!isRecord(input)) {
+    pushIssue(errors, path, 'Narrative section content must be an object.')
+    return null
+  }
+
+  const title = input.title === undefined ? null : validateAuthoredContentReference(input.title, `${path}.title`, languageKeys, errors)
+  const body = input.body === undefined ? null : validateAuthoredContentReference(input.body, `${path}.body`, languageKeys, errors)
+  if (!title && !body) {
+    pushIssue(errors, path, 'Narrative section content must provide at least a title or body.')
+    return null
+  }
+
+  return {
+    ...(title ? { title } : {}),
+    ...(body ? { body } : {}),
+  }
+}
+
+function validateOutputDimensionNarratives(
+  input: unknown,
+  path: string,
+  dimensionIds: Set<string>,
+  normalizationScales: SonartraAssessmentPackageNormalizationScale[],
+  languageKeys: Set<string>,
+  errors: SonartraAssessmentPackageValidationIssue[],
+): SonartraAssessmentPackageOutputDimensionNarrative[] {
+  if (!Array.isArray(input)) {
+    pushIssue(errors, path, 'dimensionNarratives must be an array when provided.')
+    return []
+  }
+
+  const seenDimensionIds = new Set<string>()
+  return input.flatMap((entry, index) => {
+    const entryPath = `${path}[${index}]`
+    if (!isRecord(entry)) {
+      pushIssue(errors, entryPath, 'Each dimension narrative must be an object.')
+      return []
+    }
+
+    const dimensionId = asTrimmedString(entry.dimensionId) ?? ''
+    if (!dimensionId) {
+      pushIssue(errors, `${entryPath}.dimensionId`, 'dimensionId is required.')
+      return []
+    }
+    if (!dimensionIds.has(dimensionId)) {
+      pushIssue(errors, `${entryPath}.dimensionId`, `Dimension narrative references unknown dimension "${dimensionId}".`)
+    }
+    if (seenDimensionIds.has(dimensionId)) {
+      pushIssue(errors, `${entryPath}.dimensionId`, `Duplicate dimension narrative for "${dimensionId}".`)
+      return []
+    }
+    seenDimensionIds.add(dimensionId)
+
+    const title = entry.title === undefined ? null : validateAuthoredContentReference(entry.title, `${entryPath}.title`, languageKeys, errors)
+    const body = entry.body === undefined ? null : validateAuthoredContentReference(entry.body, `${entryPath}.body`, languageKeys, errors)
+    const availableBandKeys = new Set(normalizationScales.filter((scale) => scale.dimensionIds.includes(dimensionId)).flatMap((scale) => scale.bands.map((band) => band.key)))
+    const bandNarrativesInput = entry.bandNarratives
+    const bandNarratives = !Array.isArray(bandNarrativesInput) ? (() => {
+      if (bandNarrativesInput !== undefined) {
+        pushIssue(errors, `${entryPath}.bandNarratives`, 'bandNarratives must be an array when provided.')
+      }
+      return []
+    })() : bandNarrativesInput.flatMap((bandEntry, bandIndex) => {
+      const bandPath = `${entryPath}.bandNarratives[${bandIndex}]`
+      if (!isRecord(bandEntry)) {
+        pushIssue(errors, bandPath, 'Each band narrative must be an object.')
+        return []
+      }
+      const bandKey = asTrimmedString(bandEntry.bandKey) ?? ''
+      if (!bandKey) {
+        pushIssue(errors, `${bandPath}.bandKey`, 'bandKey is required.')
+        return []
+      }
+      if (availableBandKeys.size > 0 && !availableBandKeys.has(bandKey)) {
+        pushIssue(errors, `${bandPath}.bandKey`, `Band narrative references unknown band "${bandKey}" for dimension "${dimensionId}".`)
+      }
+      const bandTitle = bandEntry.title === undefined ? null : validateAuthoredContentReference(bandEntry.title, `${bandPath}.title`, languageKeys, errors)
+      const bandBody = bandEntry.body === undefined ? null : validateAuthoredContentReference(bandEntry.body, `${bandPath}.body`, languageKeys, errors)
+      if (!bandTitle && !bandBody) {
+        pushIssue(errors, bandPath, 'Band narratives must provide at least a title or body.')
+        return []
+      }
+      return [{
+        bandKey,
+        ...(bandTitle ? { title: bandTitle } : {}),
+        ...(bandBody ? { body: bandBody } : {}),
+      }]
+    })
+
+    if (!title && !body && bandNarratives.length === 0) {
+      pushIssue(errors, entryPath, 'Dimension narratives must provide authored content directly or through bandNarratives.')
+      return []
+    }
+
+    return [{
+      dimensionId,
+      ...(title ? { title } : {}),
+      ...(body ? { body } : {}),
+      ...(bandNarratives.length ? { bandNarratives } : {}),
+    }]
+  })
+}
+
+function validateOutputRuleNarrativeVariants(
+  input: unknown,
+  path: string,
+  availableBandKeys: Set<string>,
+  languageKeys: Set<string>,
+  errors: SonartraAssessmentPackageValidationIssue[],
+): SonartraAssessmentPackageOutputRuleNarrativeVariant[] {
+  if (!Array.isArray(input)) {
+    pushIssue(errors, path, 'variants must be an array when provided.')
+    return []
+  }
+
+  const seenBandKeys = new Set<string>()
+  return input.flatMap((entry, index) => {
+    const entryPath = `${path}[${index}]`
+    if (!isRecord(entry)) {
+      pushIssue(errors, entryPath, 'Each narrative variant must be an object.')
+      return []
+    }
+
+    const bandKey = asTrimmedString(entry.bandKey) ?? ''
+    if (!bandKey) {
+      pushIssue(errors, `${entryPath}.bandKey`, 'bandKey is required.')
+      return []
+    }
+    if (seenBandKeys.has(bandKey)) {
+      pushIssue(errors, `${entryPath}.bandKey`, `Duplicate narrative variant for band "${bandKey}".`)
+      return []
+    }
+    seenBandKeys.add(bandKey)
+    if (availableBandKeys.size > 0 && !availableBandKeys.has(bandKey)) {
+      pushIssue(errors, `${entryPath}.bandKey`, `Narrative variant references unknown band "${bandKey}".`)
+    }
+
+    const summaryHeadline = entry.summaryHeadline === undefined ? null : validateAuthoredContentReference(entry.summaryHeadline, `${entryPath}.summaryHeadline`, languageKeys, errors)
+    const summaryBody = entry.summaryBody === undefined ? null : validateAuthoredContentReference(entry.summaryBody, `${entryPath}.summaryBody`, languageKeys, errors)
+    const strengths = entry.strengths === undefined ? null : validateAuthoredSectionContent(entry.strengths, `${entryPath}.strengths`, languageKeys, errors)
+    const watchouts = entry.watchouts === undefined ? null : validateAuthoredSectionContent(entry.watchouts, `${entryPath}.watchouts`, languageKeys, errors)
+    const recommendations = entry.recommendations === undefined ? null : validateAuthoredSectionContent(entry.recommendations, `${entryPath}.recommendations`, languageKeys, errors)
+
+    if (!summaryHeadline && !summaryBody && !strengths && !watchouts && !recommendations) {
+      pushIssue(errors, entryPath, 'Narrative variants must provide at least one authored content block.')
+      return []
+    }
+
+    return [{
+      bandKey,
+      ...(summaryHeadline ? { summaryHeadline } : {}),
+      ...(summaryBody ? { summaryBody } : {}),
+      ...(strengths ? { strengths } : {}),
+      ...(watchouts ? { watchouts } : {}),
+      ...(recommendations ? { recommendations } : {}),
+    }]
+  })
+}
+
+function validateOutputRuleNarrative(
+  input: unknown,
+  path: string,
+  dimensionIds: Set<string>,
+  normalizationScales: SonartraAssessmentPackageNormalizationScale[],
+  referencedDimensionIds: string[],
+  languageKeys: Set<string>,
+  errors: SonartraAssessmentPackageValidationIssue[],
+): SonartraAssessmentPackageOutputRuleNarrative | null {
+  if (!isRecord(input)) {
+    pushIssue(errors, path, 'Narrative must be an object.')
+    return null
+  }
+
+  const summaryHeadline = input.summaryHeadline === undefined ? null : validateAuthoredContentReference(input.summaryHeadline, `${path}.summaryHeadline`, languageKeys, errors)
+  const summaryBody = input.summaryBody === undefined ? null : validateAuthoredContentReference(input.summaryBody, `${path}.summaryBody`, languageKeys, errors)
+  const strengths = input.strengths === undefined ? null : validateAuthoredSectionContent(input.strengths, `${path}.strengths`, languageKeys, errors)
+  const watchouts = input.watchouts === undefined ? null : validateAuthoredSectionContent(input.watchouts, `${path}.watchouts`, languageKeys, errors)
+  const recommendations = input.recommendations === undefined ? null : validateAuthoredSectionContent(input.recommendations, `${path}.recommendations`, languageKeys, errors)
+  const dimensionNarratives = input.dimensionNarratives === undefined ? [] : validateOutputDimensionNarratives(input.dimensionNarratives, `${path}.dimensionNarratives`, dimensionIds, normalizationScales, languageKeys, errors)
+  const availableBandKeys = new Set(normalizationScales.filter((scale) => referencedDimensionIds.some((dimensionId) => scale.dimensionIds.includes(dimensionId))).flatMap((scale) => scale.bands.map((band) => band.key)))
+  const variants = input.variants === undefined ? [] : validateOutputRuleNarrativeVariants(input.variants, `${path}.variants`, availableBandKeys, languageKeys, errors)
+
+  if (!summaryHeadline && !summaryBody && !strengths && !watchouts && !recommendations && dimensionNarratives.length === 0 && variants.length === 0) {
+    pushIssue(errors, path, 'Narrative must provide at least one authored content block.')
+    return null
+  }
+
+  return {
+    ...(summaryHeadline ? { summaryHeadline } : {}),
+    ...(summaryBody ? { summaryBody } : {}),
+    ...(strengths ? { strengths } : {}),
+    ...(watchouts ? { watchouts } : {}),
+    ...(recommendations ? { recommendations } : {}),
+    ...(dimensionNarratives.length ? { dimensionNarratives } : {}),
+    ...(variants.length ? { variants } : {}),
+  }
 }
 
 function isIdentifier(value: string): boolean {
@@ -513,9 +748,20 @@ export function validateSonartraAssessmentPackage(input: unknown): SonartraAsses
     if (normalizationScaleId && !normalizationScaleIds.has(normalizationScaleId)) {
       pushIssue(errors, `outputs.reportRules[${index}].normalizationScaleId`, `Output rule references unknown normalization scale "${normalizationScaleId}".`)
     }
+    const narrative = value.narrative === undefined
+      ? null
+      : validateOutputRuleNarrative(
+        value.narrative,
+        `outputs.reportRules[${index}].narrative`,
+        dimensionIds,
+        normalizedScales,
+        dimensionRefs,
+        languageKeys,
+        errors,
+      )
     if (labelKey) languageKeys.add(labelKey)
     outputRuleKeys.add(key)
-    normalizedOutputRules.push({ key, labelKey, dimensionIds: dimensionRefs, normalizationScaleId })
+    normalizedOutputRules.push({ key, labelKey, dimensionIds: dimensionRefs, normalizationScaleId, ...(narrative ? { narrative } : {}) })
   }
 
   const localesInput = Array.isArray(languageInput?.locales) ? languageInput?.locales : null

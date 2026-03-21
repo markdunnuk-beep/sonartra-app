@@ -5,6 +5,7 @@ import type {
   SonartraAssessmentPackageQuestionOption,
   SonartraAssessmentPackageV1,
 } from '@/lib/admin/domain/assessment-package'
+import { resolveAssessmentPackageLocaleContext } from '@/lib/admin/domain/assessment-package-content'
 import type { AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
 
 export type AdminAssessmentSimulationEligibility = 'eligible' | 'blocked'
@@ -148,25 +149,6 @@ function asTrimmedString(value: unknown): string | null {
 function roundMetric(value: number, precision = 2): number {
   const multiplier = 10 ** precision
   return Math.round(value * multiplier) / multiplier
-}
-
-function buildLocaleText(pkg: SonartraAssessmentPackageV1, locale: string): Record<string, string> {
-  return pkg.language.locales.find((entry) => entry.locale === locale)?.text
-    ?? pkg.language.locales.find((entry) => entry.locale === pkg.meta.defaultLocale)?.text
-    ?? pkg.language.locales[0]?.text
-    ?? {}
-}
-
-function resolveLocale(pkg: SonartraAssessmentPackageV1, requestedLocale?: string | null): string {
-  if (requestedLocale && pkg.language.locales.some((entry) => entry.locale === requestedLocale)) {
-    return requestedLocale
-  }
-
-  if (pkg.language.locales.some((entry) => entry.locale === pkg.meta.defaultLocale)) {
-    return pkg.meta.defaultLocale
-  }
-
-  return pkg.language.locales[0]?.locale ?? 'en'
 }
 
 function resolveText(text: Record<string, string>, key: string): string | null {
@@ -397,8 +379,9 @@ export function executeAdminAssessmentSimulation(
 ): AdminAssessmentSimulationExecutionResult {
   const errors: AdminAssessmentSimulationIssue[] = []
   const warnings: AdminAssessmentSimulationIssue[] = []
-  const locale = resolveLocale(pkg, request.locale)
-  const localeText = buildLocaleText(pkg, locale)
+  const localeContext = resolveAssessmentPackageLocaleContext(pkg, request.locale)
+  const locale = localeContext.locale
+  const localeText = localeContext.localeText
   const questionMap = new Map(pkg.questions.map((question) => [question.id, question]))
   const answerMap = new Map<string, string>()
 

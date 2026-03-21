@@ -45,7 +45,30 @@ const basePackage = {
   },
   outputs: {
     reportRules: [
-      { key: 'core-summary', labelKey: 'output.core-summary.label', dimensionIds: ['drive'], normalizationScaleId: 'core-scale' },
+      {
+        key: 'core-summary',
+        labelKey: 'output.core-summary.label',
+        dimensionIds: ['drive'],
+        normalizationScaleId: 'core-scale',
+        narrative: {
+          summaryHeadline: { key: 'output.core-summary.headline' },
+          summaryBody: { key: 'output.core-summary.body' },
+          strengths: { body: { key: 'output.core-summary.strengths.body' } },
+          recommendations: { body: { inline: { default: 'Keep reinforcing drive with deliberate pacing.' } } },
+          dimensionNarratives: [
+            {
+              dimensionId: 'drive',
+              body: { key: 'output.core-summary.dimension.drive.body' },
+              bandNarratives: [
+                { bandKey: 'high', body: { inline: { default: 'Drive is surfacing strongly in this sample profile.' } } },
+              ],
+            },
+          ],
+          variants: [
+            { bandKey: 'high', summaryBody: { key: 'output.core-summary.body.high' } },
+          ],
+        },
+      },
     ],
   },
   language: {
@@ -61,6 +84,11 @@ const basePackage = {
           'band.low.label': 'Low',
           'band.high.label': 'High',
           'output.core-summary.label': 'Summary',
+          'output.core-summary.headline': 'Ready to move',
+          'output.core-summary.body': 'This profile trends toward decisive forward motion.',
+          'output.core-summary.body.high': 'This profile shows especially strong forward momentum.',
+          'output.core-summary.strengths.body': 'Drive is a clear authored strength in this package.',
+          'output.core-summary.dimension.drive.body': 'Drive narrative from the package.',
         },
       },
     ],
@@ -122,4 +150,38 @@ test('validator rejects missing required sections and empty question sets', () =
   assert.ok(result.errors.some((issue) => issue.path === 'questions'))
   assert.ok(result.errors.some((issue) => issue.path === 'scoring.dimensionRules'))
   assert.ok(result.errors.some((issue) => issue.path === 'normalization.scales'))
+})
+
+
+test('validator accepts authored narrative structures without breaking v1 compatibility', () => {
+  const result = validateSonartraAssessmentPackage(basePackage)
+
+  assert.equal(result.ok, true)
+  assert.ok(result.normalizedPackage?.outputs?.reportRules[0]?.narrative)
+  assert.equal(result.normalizedPackage?.outputs?.reportRules[0]?.narrative?.summaryHeadline?.key, 'output.core-summary.headline')
+})
+
+test('validator rejects malformed authored narrative references cleanly', () => {
+  const result = validateSonartraAssessmentPackage({
+    ...basePackage,
+    outputs: {
+      reportRules: [{
+        ...basePackage.outputs.reportRules[0],
+        narrative: {
+          summaryHeadline: { key: 'missing.language.key' },
+          dimensionNarratives: [
+            { dimensionId: 'missing-dimension', body: { inline: { default: 'Broken dimension ref' } } },
+          ],
+          variants: [
+            { bandKey: 'missing-band', summaryBody: { inline: { default: 'Broken band ref' } } },
+          ],
+        },
+      }],
+    },
+  })
+
+  assert.equal(result.ok, false)
+  assert.ok(result.errors.some((issue) => issue.path.includes('missing.language.key')))
+  assert.ok(result.errors.some((issue) => /unknown dimension/i.test(issue.message)))
+  assert.ok(result.errors.some((issue) => /unknown band/i.test(issue.message)))
 })
