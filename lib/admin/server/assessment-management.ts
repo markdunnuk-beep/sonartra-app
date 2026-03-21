@@ -7,6 +7,9 @@ import {
   type AdminAssessmentDetailData,
   type AdminAssessmentLatestSuiteSnapshot,
   type AdminAssessmentLifecycleStatus,
+  type AdminAssessmentReleaseGovernance,
+  type AdminAssessmentReleaseReadinessStatus,
+  type AdminAssessmentReleaseSignOffStatus,
   type AdminAssessmentRegistryData,
   type AdminAssessmentRegistryFilters,
   type AdminAssessmentRegistryItem,
@@ -79,6 +82,15 @@ interface AssessmentVersionRow {
   package_source_filename: string | null
   package_imported_by_name: string | null
   package_validation_report_json: unknown
+  publish_readiness_status: string | null
+  readiness_check_summary_json: unknown
+  last_readiness_evaluated_at: string | Date | null
+  sign_off_status: string | null
+  sign_off_at: string | Date | null
+  sign_off_by_name: string | null
+  sign_off_material_updated_at: string | Date | null
+  release_notes: string | null
+  material_updated_at: string | Date | null
   created_at: string | Date | null
   updated_at: string | Date | null
   published_at: string | Date | null
@@ -338,6 +350,43 @@ function parseJsonObject<T extends Record<string, unknown>>(value: unknown): T |
 
 function isPackageStatus(value: string | null | undefined): value is AssessmentPackageStatus {
   return value === 'missing' || value === 'valid' || value === 'valid_with_warnings' || value === 'invalid'
+}
+
+function isReleaseReadinessStatus(value: string | null | undefined): value is AdminAssessmentReleaseReadinessStatus {
+  return value === 'not_ready' || value === 'ready_with_warnings' || value === 'ready'
+}
+
+function isReleaseSignOffStatus(value: string | null | undefined): value is AdminAssessmentReleaseSignOffStatus {
+  return value === 'unsigned' || value === 'signed_off'
+}
+
+function mapStoredReleaseGovernance(
+  row: Pick<AssessmentVersionRow, 'publish_readiness_status' | 'readiness_check_summary_json' | 'last_readiness_evaluated_at' | 'sign_off_status' | 'sign_off_at' | 'sign_off_by_name' | 'sign_off_material_updated_at' | 'release_notes' | 'material_updated_at'>,
+): Pick<AdminAssessmentVersionRecord, 'releaseGovernance' | 'materialUpdatedAt'> {
+  const materialUpdatedAt = normaliseTimestamp(row.material_updated_at) ?? normaliseTimestamp(row.sign_off_material_updated_at) ?? new Date(0).toISOString()
+  const storedSignOffStatus = isReleaseSignOffStatus(row.sign_off_status) ? row.sign_off_status : 'unsigned'
+  const signOffMaterialUpdatedAt = normaliseTimestamp(row.sign_off_material_updated_at)
+  const isStale = storedSignOffStatus === 'signed_off' && Boolean(signOffMaterialUpdatedAt) && signOffMaterialUpdatedAt !== materialUpdatedAt
+  const signOffStatus: AdminAssessmentReleaseSignOffStatus = storedSignOffStatus === 'signed_off' && !isStale ? 'signed_off' : 'unsigned'
+  const readinessStatus = isReleaseReadinessStatus(row.publish_readiness_status) ? row.publish_readiness_status : 'not_ready'
+  const summary = parseJsonObject<Record<string, unknown>>(row.readiness_check_summary_json)
+
+  return {
+    materialUpdatedAt,
+    releaseGovernance: {
+      readinessStatus,
+      readinessSummary: summary && Array.isArray(summary.checks) ? summary as unknown as AdminAssessmentReleaseGovernance['readinessSummary'] : null,
+      lastReadinessEvaluatedAt: normaliseTimestamp(row.last_readiness_evaluated_at),
+      signOff: {
+        status: signOffStatus,
+        signedOffBy: signOffStatus === 'signed_off' ? normaliseNullableField(row.sign_off_by_name) : null,
+        signedOffAt: signOffStatus === 'signed_off' ? normaliseTimestamp(row.sign_off_at) : null,
+        isStale,
+        staleReason: isStale ? 'A material package update occurred after the version was signed off.' : null,
+      },
+      releaseNotes: normaliseNullableField(row.release_notes),
+    },
+  }
 }
 
 function normalisePackageSummary(value: unknown): SonartraAssessmentPackageSummary | null {
@@ -628,6 +677,15 @@ function validateDraftVersionInput(input: AdminCreateAssessmentDraftVersionInput
   return Object.keys(fieldErrors).length ? fieldErrors : undefined
 }
 
+function validateReleaseNotesInput(releaseNotes: string): AdminAssessmentVersionMutationState['fieldErrors'] {
+  const notes = normaliseWhitespace(releaseNotes)
+  if (notes.length > 4000) {
+    return { releaseNotes: 'Release notes must be 4000 characters or fewer.' }
+  }
+
+  return undefined
+}
+
 function mapAssessmentRegistryRows(rows: AssessmentRegistryRow[]): AdminAssessmentRegistryItem[] {
   return (rows ?? []).flatMap((row) => {
     const id = normaliseRequiredString(row.id)
@@ -711,6 +769,8 @@ export function mapAssessmentVersionRows(
       return []
     }
 
+    const governance = mapStoredReleaseGovernance(row)
+
     return [{
       id,
       assessmentId,
@@ -730,6 +790,8 @@ export function mapAssessmentVersionRows(
       updatedByName: normaliseNullableField(row.updated_by_name),
       publishedByName: normaliseNullableField(row.published_by_name),
       latestSuiteSnapshot: mapLatestSuiteSnapshot(row.latest_regression_suite_snapshot_json),
+      releaseGovernance: governance.releaseGovernance,
+      materialUpdatedAt: governance.materialUpdatedAt,
       savedScenarios: scenariosByVersion.get(id) ?? [],
     }]
   })
@@ -952,6 +1014,15 @@ export async function getAdminAssessmentDetailData(assessmentId: string): Promis
          av.package_source_filename,
          package_imported_by.full_name as package_imported_by_name,
          av.package_validation_report_json,
+         av.publish_readiness_status,
+         av.readiness_check_summary_json,
+         av.last_readiness_evaluated_at,
+         av.sign_off_status,
+         av.sign_off_at,
+         sign_off_by.full_name as sign_off_by_name,
+         av.sign_off_material_updated_at,
+         av.release_notes,
+         av.material_updated_at,
          av.created_at,
          av.updated_at,
          av.published_at,
@@ -964,6 +1035,7 @@ export async function getAdminAssessmentDetailData(assessmentId: string): Promis
        left join admin_identities created_by on created_by.id = av.created_by_identity_id
        left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
        left join admin_identities published_by on published_by.id = av.published_by_identity_id
+       left join admin_identities sign_off_by on sign_off_by.id = av.sign_off_by_identity_id
        left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
        where av.assessment_definition_id = $1
        order by
@@ -1167,6 +1239,133 @@ function buildSuiteSnapshot(input: {
   }
 }
 
+function serializeReleaseReadiness(version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage' | 'savedScenarios' | 'latestSuiteSnapshot' | 'lifecycleStatus'>): NonNullable<AdminAssessmentReleaseGovernance['readinessSummary']> {
+  const readiness = getAdminAssessmentVersionReadiness(version)
+  return {
+    status: readiness.status,
+    summaryText: readiness.summaryText,
+    checks: readiness.checks,
+    blockingChecks: readiness.checks.filter((check) => check.status === 'fail'),
+    warningChecks: readiness.checks.filter((check) => check.status === 'warning'),
+  }
+}
+
+async function persistVersionReleaseReadiness(
+  client: PoolClient,
+  input: {
+    assessmentId: string
+    versionId: string
+    actor: ActorRow | null
+    nowIso: string
+    createId: () => string
+    reason: 'manual_refresh' | 'package_import' | 'scenario_change' | 'suite_snapshot' | 'publish_attempt'
+    emitAudit?: boolean
+  },
+): Promise<{ version: AdminAssessmentVersionRecord | null; summary: NonNullable<AdminAssessmentReleaseGovernance['readinessSummary']> | null }> {
+  const [versionRows, scenariosByVersion] = await Promise.all([
+    loadAssessmentVersionsForScenarioWork(client, input.assessmentId),
+    loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
+  ])
+  const version = mapAssessmentVersionRows(versionRows, scenariosByVersion).find((entry) => entry.id === input.versionId) ?? null
+
+  if (!version) {
+    return { version: null, summary: null }
+  }
+
+  const readinessSummary = serializeReleaseReadiness(version)
+  await client.query(
+    `update assessment_versions
+     set publish_readiness_status = $3,
+         readiness_check_summary_json = $4::jsonb,
+         last_readiness_evaluated_at = $5::timestamptz
+     where id = $1
+       and assessment_definition_id = $2`,
+    [input.versionId, input.assessmentId, readinessSummary.status, JSON.stringify(readinessSummary), input.nowIso],
+  )
+
+  if (input.emitAudit !== false) {
+    await writeAssessmentAuditEvent(client, {
+      createId: input.createId,
+      actor: input.actor,
+      nowIso: input.nowIso,
+      eventType: 'assessment_release_readiness_evaluated',
+      summary: `Release readiness evaluated for ${version.normalizedPackage?.meta.assessmentTitle ?? 'assessment'} v${version.versionLabel}: ${readinessSummary.summaryText}`,
+      assessmentId: input.assessmentId,
+      assessmentName: version.normalizedPackage?.meta.assessmentTitle ?? 'Assessment',
+      versionId: version.id,
+      versionLabel: version.versionLabel,
+      metadata: {
+        reason: input.reason,
+        readinessStatus: readinessSummary.status,
+        blockingChecks: readinessSummary.blockingChecks.map((check) => check.key),
+        warningChecks: readinessSummary.warningChecks.map((check) => check.key),
+      },
+    })
+  }
+
+  const existingGovernance = version.releaseGovernance ?? {
+    readinessStatus: 'not_ready' as const,
+    readinessSummary: null,
+    lastReadinessEvaluatedAt: null,
+    signOff: { status: 'unsigned' as const, signedOffBy: null, signedOffAt: null, isStale: false, staleReason: null },
+    releaseNotes: null,
+  }
+
+  return {
+    version: {
+      ...version,
+      releaseGovernance: {
+        ...existingGovernance,
+        readinessStatus: readinessSummary.status,
+        readinessSummary,
+        lastReadinessEvaluatedAt: input.nowIso,
+      },
+    },
+    summary: readinessSummary,
+  }
+}
+
+async function invalidateVersionSignOffIfStale(
+  client: PoolClient,
+  input: {
+    version: AdminAssessmentVersionRecord
+    assessmentName: string
+    assessmentId: string
+    actor: ActorRow | null
+    nowIso: string
+    createId: () => string
+    reason: 'material_update'
+  },
+): Promise<void> {
+  if ((input.version.releaseGovernance?.signOff.status ?? 'unsigned') !== 'signed_off') {
+    return
+  }
+
+  await client.query(
+    `update assessment_versions
+     set sign_off_status = 'unsigned',
+         sign_off_by_identity_id = null,
+         sign_off_at = null,
+         sign_off_material_updated_at = null
+     where id = $1
+       and assessment_definition_id = $2`,
+    [input.version.id, input.assessmentId],
+  )
+
+  await writeAssessmentAuditEvent(client, {
+    createId: input.createId,
+    actor: input.actor,
+    nowIso: input.nowIso,
+    eventType: 'assessment_release_sign_off_invalidated',
+    summary: `Release sign-off invalidated for ${input.assessmentName} v${input.version.versionLabel} after a material package update.`,
+    assessmentId: input.assessmentId,
+    assessmentName: input.assessmentName,
+    versionId: input.version.id,
+    versionLabel: input.version.versionLabel,
+    metadata: { reason: input.reason },
+  })
+}
+
 async function loadAssessmentVersionsForScenarioWork(
   client: PoolClient,
   assessmentId: string,
@@ -1203,6 +1402,7 @@ async function loadAssessmentVersionsForScenarioWork(
      left join admin_identities created_by on created_by.id = av.created_by_identity_id
      left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
      left join admin_identities published_by on published_by.id = av.published_by_identity_id
+     left join admin_identities sign_off_by on sign_off_by.id = av.sign_off_by_identity_id
      left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
      where av.assessment_definition_id = $1
      order by
@@ -1448,7 +1648,6 @@ export async function createAdminAssessmentDraftVersion(
          where id = $1`,
         [input.assessmentId, nowIso, actor?.id ?? null],
       )
-
       await writeAssessmentAuditEvent(client, {
         createId: deps.createId,
         actor,
@@ -1526,28 +1725,17 @@ export async function importAdminAssessmentPackage(
 
   try {
     return await deps.withTransaction(async (client) => {
-      const versionResult = await client.query<{
-        id: string
-        assessment_definition_id: string
-        version_label: string
-        lifecycle_status: string
-        updated_at: string | Date
-        assessment_name: string
-        package_status: string | null
-        package_schema_version: string | null
-        package_source_type: string | null
-        package_imported_at: string | Date | null
-        package_source_filename: string | null
-        package_imported_by_name: string | null
-        package_validation_report_json: unknown
-        definition_payload: unknown
-      }>(
+      const versionResult = await client.query<AssessmentVersionRow & { assessment_name: string }>(
         `select
            av.id,
            av.assessment_definition_id,
            av.version_label,
            av.lifecycle_status,
-           av.updated_at,
+           av.source_type,
+           av.notes,
+           (av.definition_payload is not null) as has_definition_payload,
+           av.definition_payload,
+           av.validation_status,
            av.package_status,
            av.package_schema_version,
            av.package_source_type,
@@ -1555,10 +1743,30 @@ export async function importAdminAssessmentPackage(
            av.package_source_filename,
            package_imported_by.full_name as package_imported_by_name,
            av.package_validation_report_json,
-           av.definition_payload,
+           av.publish_readiness_status,
+           av.readiness_check_summary_json,
+           av.last_readiness_evaluated_at,
+           av.sign_off_status,
+           av.sign_off_at,
+           sign_off_by.full_name as sign_off_by_name,
+           av.sign_off_material_updated_at,
+           av.release_notes,
+           av.material_updated_at,
+           av.created_at,
+           av.updated_at,
+           av.published_at,
+           av.archived_at,
+           created_by.full_name as created_by_name,
+           updated_by.full_name as updated_by_name,
+           published_by.full_name as published_by_name,
+           av.latest_regression_suite_snapshot_json,
            ad.name as assessment_name
          from assessment_versions av
          inner join assessment_definitions ad on ad.id = av.assessment_definition_id
+         left join admin_identities created_by on created_by.id = av.created_by_identity_id
+         left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
+         left join admin_identities published_by on published_by.id = av.published_by_identity_id
+         left join admin_identities sign_off_by on sign_off_by.id = av.sign_off_by_identity_id
          left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
          where av.id = $1
            and av.assessment_definition_id = $2
@@ -1566,6 +1774,7 @@ export async function importAdminAssessmentPackage(
         [input.versionId, input.assessmentId],
       )
       const version = versionResult.rows[0]
+      const existingVersion = version ? mapAssessmentVersionRows([version])[0] ?? null : null
 
       if (!version) {
         return { ok: false, code: 'not_found', message: 'Version not found.' }
@@ -1604,6 +1813,7 @@ export async function importAdminAssessmentPackage(
              package_validation_report_json = $10::jsonb,
              source_type = 'import',
              validation_status = $11,
+             material_updated_at = $8::timestamptz,
              updated_at = $8::timestamptz,
              updated_by_identity_id = $9
          where id = $1
@@ -1630,6 +1840,27 @@ export async function importAdminAssessmentPackage(
          where id = $1`,
         [input.assessmentId, nowIso, actor?.id ?? null],
       )
+
+      if (existingVersion) {
+        await invalidateVersionSignOffIfStale(client, {
+          version: existingVersion,
+          assessmentName: version.assessment_name,
+          assessmentId: input.assessmentId,
+          actor,
+          nowIso,
+          createId: deps.createId,
+          reason: 'material_update',
+        })
+      }
+
+      await persistVersionReleaseReadiness(client, {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+        actor,
+        nowIso,
+        createId: deps.createId,
+        reason: 'package_import',
+      })
 
       if (!validation.ok) {
         await writeAssessmentAuditEvent(client, {
@@ -2004,6 +2235,15 @@ export async function importAdminAssessmentSavedScenarios(
         [input.assessmentId, nowIso, actor?.id ?? null],
       )
 
+      await persistVersionReleaseReadiness(client, {
+        assessmentId: input.assessmentId,
+        versionId: targetVersion.id,
+        actor,
+        nowIso,
+        createId: deps.createId,
+        reason: 'scenario_change',
+      })
+
       await writeAssessmentAuditEvent(client, {
         createId: deps.createId,
         actor,
@@ -2272,6 +2512,15 @@ export async function runAdminAssessmentScenarioSuite(
         [input.assessmentId, nowIso, actor?.id ?? null],
       )
 
+      await persistVersionReleaseReadiness(client, {
+        assessmentId: input.assessmentId,
+        versionId: version.id,
+        actor,
+        nowIso,
+        createId: deps.createId,
+        reason: 'suite_snapshot',
+      })
+
       await writeAssessmentAuditEvent(client, {
         createId: deps.createId,
         actor,
@@ -2313,28 +2562,17 @@ export async function publishAdminAssessmentVersion(
 
   try {
     return await deps.withTransaction(async (client) => {
-      const versionResult = await client.query<{
-        id: string
-        assessment_definition_id: string
-        version_label: string
-        lifecycle_status: string
-        updated_at: string | Date
-        assessment_name: string
-        package_status: string | null
-        package_schema_version: string | null
-        package_source_type: string | null
-        package_imported_at: string | Date | null
-        package_source_filename: string | null
-        package_imported_by_name: string | null
-        package_validation_report_json: unknown
-        definition_payload: unknown
-      }>(
+      const versionResult = await client.query<AssessmentVersionRow & { assessment_name: string }>(
         `select
            av.id,
            av.assessment_definition_id,
            av.version_label,
            av.lifecycle_status,
-           av.updated_at,
+           av.source_type,
+           av.notes,
+           (av.definition_payload is not null) as has_definition_payload,
+           av.definition_payload,
+           av.validation_status,
            av.package_status,
            av.package_schema_version,
            av.package_source_type,
@@ -2342,23 +2580,43 @@ export async function publishAdminAssessmentVersion(
            av.package_source_filename,
            package_imported_by.full_name as package_imported_by_name,
            av.package_validation_report_json,
-           av.definition_payload,
+           av.publish_readiness_status,
+           av.readiness_check_summary_json,
+           av.last_readiness_evaluated_at,
+           av.sign_off_status,
+           av.sign_off_at,
+           sign_off_by.full_name as sign_off_by_name,
+           av.sign_off_material_updated_at,
+           av.release_notes,
+           av.material_updated_at,
+           av.created_at,
+           av.updated_at,
+           av.published_at,
+           av.archived_at,
+           created_by.full_name as created_by_name,
+           updated_by.full_name as updated_by_name,
+           published_by.full_name as published_by_name,
+           av.latest_regression_suite_snapshot_json,
            ad.name as assessment_name
          from assessment_versions av
          inner join assessment_definitions ad on ad.id = av.assessment_definition_id
+         left join admin_identities created_by on created_by.id = av.created_by_identity_id
+         left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
+         left join admin_identities published_by on published_by.id = av.published_by_identity_id
+         left join admin_identities sign_off_by on sign_off_by.id = av.sign_off_by_identity_id
          left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
          where av.id = $1
            and av.assessment_definition_id = $2
          limit 1`,
         [input.versionId, input.assessmentId],
       )
-      const version = versionResult.rows[0]
+      const versionRow = versionResult.rows[0]
 
-      if (!version) {
+      if (!versionRow) {
         return { ok: false, code: 'not_found', message: 'Version not found.' }
       }
 
-      if (version.lifecycle_status !== 'draft') {
+      if (versionRow.lifecycle_status !== 'draft') {
         return {
           ok: false,
           code: 'invalid_transition',
@@ -2366,7 +2624,7 @@ export async function publishAdminAssessmentVersion(
         }
       }
 
-      if (input.expectedUpdatedAt && normaliseTimestamp(version.updated_at) !== input.expectedUpdatedAt) {
+      if (input.expectedUpdatedAt && normaliseTimestamp(versionRow.updated_at) !== input.expectedUpdatedAt) {
         return {
           ok: false,
           code: 'concurrent_update',
@@ -2374,39 +2632,38 @@ export async function publishAdminAssessmentVersion(
         }
       }
 
-      const publishReadiness = getAdminAssessmentVersionReadiness({
-        packageInfo: {
-          status: isPackageStatus(version.package_status) ? version.package_status : 'missing',
-          schemaVersion: normaliseNullableField(version.package_schema_version),
-          sourceType: version.package_source_type === 'manual_import' ? 'manual_import' : null,
-          importedAt: normaliseTimestamp(version.package_imported_at),
-          importedByName: normaliseNullableField(version.package_imported_by_name),
-          sourceFilename: normaliseNullableField(version.package_source_filename),
-          summary: normalisePackageSummary(version.package_validation_report_json),
-          errors: normalisePackageIssues(version.package_validation_report_json, 'errors'),
-          warnings: normalisePackageIssues(version.package_validation_report_json, 'warnings'),
-        },
-        normalizedPackage: parseStoredNormalizedAssessmentPackage(version.definition_payload),
+      const actor = await deps.getActorIdentity(client)
+      const nowIso = deps.now().toISOString()
+      const readinessState = await persistVersionReleaseReadiness(client, {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+        actor,
+        nowIso,
+        createId: deps.createId,
+        reason: 'publish_attempt',
       })
+      const evaluatedVersion = readinessState.version
+      if (!evaluatedVersion) {
+        return { ok: false, code: 'not_found', message: 'Version not found.' }
+      }
+      const evaluatedSignOff = evaluatedVersion.releaseGovernance?.signOff ?? { status: 'unsigned' as const, signedOffBy: null, signedOffAt: null, isStale: false, staleReason: null }
+      const publishReadiness = getAdminAssessmentVersionReadiness(evaluatedVersion)
 
-      if (publishReadiness.verdict === 'blocked') {
-        const actor = await deps.getActorIdentity(client)
-        const nowIso = deps.now().toISOString()
+      if (publishReadiness.status === 'not_ready') {
         const blockingSummary = publishReadiness.blockingIssues[0] ?? 'The attached package is missing or invalid.'
 
         await writeAssessmentAuditEvent(client, {
           createId: deps.createId,
           actor,
           nowIso,
-          eventType: 'assessment_publish_blocked_invalid_package',
-          summary: `Publish blocked for ${version.assessment_name} v${version.version_label}: ${blockingSummary}`,
+          eventType: 'assessment_publish_blocked_release_governance',
+          summary: `Publish blocked for ${versionRow.assessment_name} v${evaluatedVersion.versionLabel}: ${blockingSummary}`,
           assessmentId: input.assessmentId,
-          assessmentName: version.assessment_name,
+          assessmentName: versionRow.assessment_name,
           versionId: input.versionId,
-          versionLabel: version.version_label,
+          versionLabel: evaluatedVersion.versionLabel,
           metadata: {
-            packageStatus: version.package_status ?? 'missing',
-            readinessVerdict: publishReadiness.verdict,
+            readinessStatus: publishReadiness.status,
             blockingIssues: publishReadiness.blockingIssues,
             warnings: publishReadiness.warnings,
           },
@@ -2415,12 +2672,34 @@ export async function publishAdminAssessmentVersion(
         return {
           ok: false,
           code: 'invalid_transition',
-          message: 'A draft version can only be published after the package readiness blockers are resolved. Import or repair the package first.',
+          message: `Publish blocked: ${blockingSummary}`,
         }
       }
 
-      const actor = await deps.getActorIdentity(client)
-      const nowIso = deps.now().toISOString()
+      if (publishReadiness.status === 'ready_with_warnings' && evaluatedSignOff.status !== 'signed_off') {
+        await writeAssessmentAuditEvent(client, {
+          createId: deps.createId,
+          actor,
+          nowIso,
+          eventType: 'assessment_publish_blocked_release_governance',
+          summary: `Publish blocked for ${versionRow.assessment_name} v${evaluatedVersion.versionLabel}: sign-off is required before publishing with warnings.`,
+          assessmentId: input.assessmentId,
+          assessmentName: versionRow.assessment_name,
+          versionId: input.versionId,
+          versionLabel: evaluatedVersion.versionLabel,
+          metadata: {
+            readinessStatus: publishReadiness.status,
+            warnings: publishReadiness.warnings,
+            signOffStatus: evaluatedSignOff.status,
+          },
+        })
+
+        return {
+          ok: false,
+          code: 'invalid_transition',
+          message: 'Publish is warning-gated: sign off this version before publishing while readiness warnings remain.',
+        }
+      }
 
       await client.query(
         `update assessment_versions
@@ -2471,12 +2750,17 @@ export async function publishAdminAssessmentVersion(
         actor,
         nowIso,
         eventType: 'assessment_version_published',
-        summary: `Version ${version.version_label} published for ${version.assessment_name}.`,
+        summary: `Version ${evaluatedVersion.versionLabel} published for ${versionRow.assessment_name}.`,
         assessmentId: input.assessmentId,
-        assessmentName: version.assessment_name,
+        assessmentName: versionRow.assessment_name,
         versionId: input.versionId,
-        versionLabel: version.version_label,
-        metadata: { lifecycleStatus: 'published' },
+        versionLabel: evaluatedVersion.versionLabel,
+        metadata: {
+          lifecycleStatus: 'published',
+          readinessStatus: publishReadiness.status,
+          warningChecks: publishReadiness.checks.filter((check) => check.status === 'warning').map((check) => check.key),
+          signOffStatus: evaluatedSignOff.status,
+        },
       })
 
       return {
@@ -2494,6 +2778,263 @@ export async function publishAdminAssessmentVersion(
       code: 'unknown_error',
       message: describeDatabaseError(error),
     }
+  }
+}
+
+
+export async function refreshAdminAssessmentVersionReleaseReadiness(
+  input: { assessmentId: string; versionId: string },
+  dependencies: Partial<AssessmentMutationDependencies> = {},
+): Promise<AdminAssessmentVersionMutationResult> {
+  const deps = { ...defaultDependencies, ...dependencies }
+  const denied = await requireAccess(deps)
+
+  if (denied) {
+    return denied
+  }
+
+  try {
+    return await deps.withTransaction(async (client) => {
+      const versionLookup = await client.query<{ id: string; version_label: string; assessment_name: string }>(
+        `select av.id, av.version_label, ad.name as assessment_name
+         from assessment_versions av
+         inner join assessment_definitions ad on ad.id = av.assessment_definition_id
+         where av.id = $1 and av.assessment_definition_id = $2
+         limit 1`,
+        [input.versionId, input.assessmentId],
+      )
+      const lookup = versionLookup.rows[0]
+      if (!lookup) {
+        return { ok: false, code: 'not_found', message: 'Version not found.' }
+      }
+
+      const actor = await deps.getActorIdentity(client)
+      const nowIso = deps.now().toISOString()
+      const refreshed = await persistVersionReleaseReadiness(client, {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+        actor,
+        nowIso,
+        createId: deps.createId,
+        reason: 'manual_refresh',
+      })
+
+      return {
+        ok: true,
+        code: 'created',
+        message: refreshed.summary ? `Readiness refreshed: ${refreshed.summary.summaryText}` : 'Release readiness refreshed.',
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+      }
+    })
+  } catch (error) {
+    console.error('[admin-assessment-management] Failed to refresh release readiness.', error)
+    return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
+  }
+}
+
+export async function signOffAdminAssessmentVersion(
+  input: { assessmentId: string; versionId: string },
+  dependencies: Partial<AssessmentMutationDependencies> = {},
+): Promise<AdminAssessmentVersionMutationResult> {
+  const deps = { ...defaultDependencies, ...dependencies }
+  const denied = await requireAccess(deps)
+
+  if (denied) {
+    return denied
+  }
+
+  try {
+    return await deps.withTransaction(async (client) => {
+      const [versionRows, scenariosByVersion] = await Promise.all([
+        loadAssessmentVersionsForScenarioWork(client, input.assessmentId),
+        loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
+      ])
+      const version = mapAssessmentVersionRows(versionRows, scenariosByVersion).find((entry) => entry.id === input.versionId) ?? null
+      if (!version) {
+        return { ok: false, code: 'not_found', message: 'Version not found.' }
+      }
+      if (version.lifecycleStatus !== 'draft') {
+        return { ok: false, code: 'invalid_transition', message: 'Only draft versions can be signed off.' }
+      }
+
+      const actor = await deps.getActorIdentity(client)
+      const nowIso = deps.now().toISOString()
+      const refreshed = await persistVersionReleaseReadiness(client, {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+        actor,
+        nowIso,
+        createId: deps.createId,
+        reason: 'manual_refresh',
+        emitAudit: false,
+      })
+      const evaluatedVersion = refreshed.version ?? version
+      const readiness = getAdminAssessmentVersionReadiness(evaluatedVersion)
+
+      if (readiness.status === 'not_ready') {
+        return { ok: false, code: 'invalid_transition', message: 'Resolve the failing readiness checks before signing off this version.' }
+      }
+
+      await client.query(
+        `update assessment_versions
+         set sign_off_status = 'signed_off',
+             sign_off_by_identity_id = $3,
+             sign_off_at = $4::timestamptz,
+             sign_off_material_updated_at = $5::timestamptz
+         where id = $1
+           and assessment_definition_id = $2`,
+        [input.versionId, input.assessmentId, actor?.id ?? null, nowIso, evaluatedVersion.materialUpdatedAt],
+      )
+
+      await writeAssessmentAuditEvent(client, {
+        createId: deps.createId,
+        actor,
+        nowIso,
+        eventType: 'assessment_release_sign_off_recorded',
+        summary: `Release sign-off recorded for ${version.normalizedPackage?.meta.assessmentTitle ?? 'assessment'} v${version.versionLabel}.`,
+        assessmentId: input.assessmentId,
+        assessmentName: version.normalizedPackage?.meta.assessmentTitle ?? 'Assessment',
+        versionId: version.id,
+        versionLabel: version.versionLabel,
+        metadata: { readinessStatus: readiness.status, materialUpdatedAt: evaluatedVersion.materialUpdatedAt },
+      })
+
+      return { ok: true, code: 'created', message: 'Version signed off.', assessmentId: input.assessmentId, versionId: input.versionId }
+    })
+  } catch (error) {
+    console.error('[admin-assessment-management] Failed to sign off version.', error)
+    return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
+  }
+}
+
+export async function removeAdminAssessmentVersionSignOff(
+  input: { assessmentId: string; versionId: string },
+  dependencies: Partial<AssessmentMutationDependencies> = {},
+): Promise<AdminAssessmentVersionMutationResult> {
+  const deps = { ...defaultDependencies, ...dependencies }
+  const denied = await requireAccess(deps)
+
+  if (denied) {
+    return denied
+  }
+
+  try {
+    return await deps.withTransaction(async (client) => {
+      const versionLookup = await client.query<{ id: string; version_label: string; assessment_name: string }>(
+        `select av.id, av.version_label, ad.name as assessment_name
+         from assessment_versions av
+         inner join assessment_definitions ad on ad.id = av.assessment_definition_id
+         where av.id = $1 and av.assessment_definition_id = $2
+         limit 1`,
+        [input.versionId, input.assessmentId],
+      )
+      const version = versionLookup.rows[0]
+      if (!version) {
+        return { ok: false, code: 'not_found', message: 'Version not found.' }
+      }
+
+      const actor = await deps.getActorIdentity(client)
+      const nowIso = deps.now().toISOString()
+      await client.query(
+        `update assessment_versions
+         set sign_off_status = 'unsigned',
+             sign_off_by_identity_id = null,
+             sign_off_at = null,
+             sign_off_material_updated_at = null
+         where id = $1
+           and assessment_definition_id = $2`,
+        [input.versionId, input.assessmentId],
+      )
+
+      await writeAssessmentAuditEvent(client, {
+        createId: deps.createId,
+        actor,
+        nowIso,
+        eventType: 'assessment_release_sign_off_removed',
+        summary: `Release sign-off removed for ${version.assessment_name} v${version.version_label}.`,
+        assessmentId: input.assessmentId,
+        assessmentName: version.assessment_name,
+        versionId: input.versionId,
+        versionLabel: version.version_label,
+      })
+
+      return { ok: true, code: 'created', message: 'Release sign-off removed.', assessmentId: input.assessmentId, versionId: input.versionId }
+    })
+  } catch (error) {
+    console.error('[admin-assessment-management] Failed to remove sign-off.', error)
+    return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
+  }
+}
+
+export async function updateAdminAssessmentVersionReleaseNotes(
+  input: { assessmentId: string; versionId: string; releaseNotes: string },
+  dependencies: Partial<AssessmentMutationDependencies> = {},
+): Promise<AdminAssessmentVersionMutationResult> {
+  const deps = { ...defaultDependencies, ...dependencies }
+  const denied = await requireAccess(deps)
+
+  if (denied) {
+    return denied
+  }
+
+  const fieldErrors = validateReleaseNotesInput(input.releaseNotes)
+  if (fieldErrors) {
+    return { ok: false, code: 'validation_error', message: 'Release notes are invalid.', fieldErrors }
+  }
+
+  try {
+    return await deps.withTransaction(async (client) => {
+      const versionLookup = await client.query<{ id: string; version_label: string; assessment_name: string }>(
+        `select av.id, av.version_label, ad.name as assessment_name
+         from assessment_versions av
+         inner join assessment_definitions ad on ad.id = av.assessment_definition_id
+         where av.id = $1 and av.assessment_definition_id = $2
+         limit 1`,
+        [input.versionId, input.assessmentId],
+      )
+      const version = versionLookup.rows[0]
+      if (!version) {
+        return { ok: false, code: 'not_found', message: 'Version not found.' }
+      }
+
+      const actor = await deps.getActorIdentity(client)
+      const nowIso = deps.now().toISOString()
+      await client.query(
+        `update assessment_versions
+         set release_notes = $3,
+             updated_by_identity_id = $4,
+             updated_at = $5::timestamptz
+         where id = $1
+           and assessment_definition_id = $2`,
+        [input.versionId, input.assessmentId, normaliseNullableField(input.releaseNotes), actor?.id ?? null, nowIso],
+      )
+      await client.query(
+        `update assessment_definitions
+         set updated_at = $2::timestamptz,
+             updated_by_identity_id = $3
+         where id = $1`,
+        [input.assessmentId, nowIso, actor?.id ?? null],
+      )
+
+      await writeAssessmentAuditEvent(client, {
+        createId: deps.createId,
+        actor,
+        nowIso,
+        eventType: 'assessment_release_notes_updated',
+        summary: `Release notes updated for ${version.assessment_name} v${version.version_label}.`,
+        assessmentId: input.assessmentId,
+        assessmentName: version.assessment_name,
+        versionId: input.versionId,
+        versionLabel: version.version_label,
+        metadata: { hasReleaseNotes: Boolean(normaliseNullableField(input.releaseNotes)) },
+      })
+
+      return { ok: true, code: 'created', message: 'Release notes saved.', assessmentId: input.assessmentId, versionId: input.versionId }
+    })
+  } catch (error) {
+    console.error('[admin-assessment-management] Failed to update release notes.', error)
+    return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
   }
 }
 

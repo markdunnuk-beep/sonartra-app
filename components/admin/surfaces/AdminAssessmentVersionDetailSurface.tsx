@@ -1,4 +1,5 @@
 import React from 'react'
+import dynamic from 'next/dynamic'
 import { Activity, ArrowLeft, FileJson2, FlaskConical, GitCompareArrows, ShieldCheck } from 'lucide-react'
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
 import { AdminAssessmentVersionPackageImportForm } from '@/components/admin/surfaces/AdminAssessmentVersionPackageImportForm'
@@ -29,8 +30,8 @@ function getPackageTone(status: AdminAssessmentVersionRecord['packageInfo']['sta
   }
 }
 
-function getReadinessTone(verdict: 'ready' | 'ready_with_warnings' | 'blocked') {
-  switch (verdict) {
+function getReadinessTone(status: 'ready' | 'ready_with_warnings' | 'not_ready') {
+  switch (status) {
     case 'ready':
       return 'emerald' as const
     case 'ready_with_warnings':
@@ -48,13 +49,15 @@ function getMutationMessage(mutation?: string) {
   return null
 }
 
-function formatReadinessLabel(verdict: 'ready' | 'ready_with_warnings' | 'blocked') {
-  return verdict === 'ready_with_warnings' ? 'Ready with warnings' : verdict === 'ready' ? 'Ready' : 'Blocked'
+function formatReadinessLabel(status: 'ready' | 'ready_with_warnings' | 'not_ready') {
+  return status === 'ready_with_warnings' ? 'Ready with warnings' : status === 'ready' ? 'Ready' : 'Not ready'
 }
 
 function getSuiteSnapshotTone(status: NonNullable<AdminAssessmentVersionRecord['latestSuiteSnapshot']>['overallStatus']) {
   return status === 'pass' ? 'emerald' as const : status === 'warning' ? 'amber' as const : 'rose' as const
 }
+
+const AdminAssessmentVersionReleaseControls = dynamic(() => import('@/components/admin/surfaces/AdminAssessmentVersionReleaseControls').then((module) => module.AdminAssessmentVersionReleaseControls), { ssr: false })
 
 function EvidenceList({ items, tone }: { items: string[]; tone: 'rose' | 'amber' }) {
   if (!items.length) {
@@ -89,6 +92,21 @@ export function AdminAssessmentVersionDetailSurface({
   const packageSummary = packageInfo.summary
   const preview = getAdminAssessmentPackagePreviewSummary(version)
   const readiness = getAdminAssessmentVersionReadiness(version)
+  const releaseGovernance = version.releaseGovernance ?? {
+    readinessStatus: readiness.status,
+    readinessSummary: null,
+    lastReadinessEvaluatedAt: null,
+    signOff: { status: 'unsigned' as const, signedOffBy: null, signedOffAt: null, isStale: false, staleReason: null },
+    releaseNotes: null,
+  }
+  const storedReadiness = releaseGovernance.readinessSummary
+  const publishGateMessage = readiness.status === 'not_ready'
+    ? `Publish is blocked until ${readiness.blockingIssues[0] ?? 'the failing readiness checks are resolved'}.`
+    : readiness.status === 'ready_with_warnings' && releaseGovernance.signOff.status !== 'signed_off'
+      ? 'Publish is warning-gated: record release sign-off before publishing while warnings remain.'
+      : readiness.status === 'ready_with_warnings'
+        ? 'Publish is allowed because a release sign-off is recorded for the current warning set.'
+        : 'Publish is currently allowed.'
   const diff = getAdminAssessmentVersionDiff(version, detailData.versions, detailData.assessment.currentPublishedVersionId)
   const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(version)
   const reportPreviewStatus = getAdminAssessmentReportPreviewWorkspaceStatus(version)
@@ -119,7 +137,7 @@ export function AdminAssessmentVersionDetailSurface({
       <div className="grid gap-4 xl:grid-cols-4">
         <div className="rounded-[1.25rem] border border-white/[0.08] bg-panel/60 p-4">
           <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Publish readiness</p>
-          <div className="mt-3 flex items-center gap-2"><Badge label={formatReadinessLabel(readiness.verdict)} tone={getReadinessTone(readiness.verdict)} /><ShieldCheck className="h-4 w-4 text-textSecondary" /></div>
+          <div className="mt-3 flex items-center gap-2"><Badge label={formatReadinessLabel(readiness.status)} tone={getReadinessTone(readiness.status)} /><ShieldCheck className="h-4 w-4 text-textSecondary" /></div>
           <p className="mt-3 text-sm leading-6 text-textSecondary">{readiness.summary}</p>
         </div>
         <div className="rounded-[1.25rem] border border-white/[0.08] bg-panel/60 p-4">
@@ -138,6 +156,48 @@ export function AdminAssessmentVersionDetailSurface({
           <p className="mt-3 text-sm leading-6 text-textSecondary">{packageSummary ? `${preview.metrics.dimensionsCount} dimensions · ${preview.metrics.optionsCount} options · ${preview.metrics.outputRuleCount} output rules.` : 'Summary metrics populate after a valid import.'}</p>
         </div>
       </div>
+
+      <SurfaceSection
+        title="Release control"
+        eyebrow="Governance"
+        description="Compact release governance for publish readiness, explicit sign-off, release notes, and truthful publish gating."
+      >
+        <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge label={formatReadinessLabel(readiness.status)} tone={getReadinessTone(readiness.status)} />
+              <Badge label={releaseGovernance.signOff.status === 'signed_off' ? 'Signed off' : 'Unsigned'} tone={releaseGovernance.signOff.status === 'signed_off' ? 'emerald' : 'slate'} />
+              {latestSuiteSnapshot ? <Badge label={`Suite ${latestSuiteSnapshot.overallStatus}`} tone={getSuiteSnapshotTone(latestSuiteSnapshot.overallStatus)} /> : <Badge label="No suite snapshot" tone="slate" />}
+            </div>
+
+            <MetaGrid
+              columns={2}
+              items={[
+                { label: 'Last readiness evaluation', value: formatAdminTimestamp(releaseGovernance.lastReadinessEvaluatedAt) },
+                { label: 'Stored readiness status', value: formatReadinessLabel(releaseGovernance.readinessStatus) },
+                { label: 'Sign-off', value: releaseGovernance.signOff.status === 'signed_off' ? 'Signed off' : 'Unsigned' },
+                { label: 'Signed off by', value: releaseGovernance.signOff.signedOffBy ?? '—' },
+                { label: 'Signed off at', value: formatAdminTimestamp(releaseGovernance.signOff.signedOffAt) },
+                { label: 'Material package updated', value: formatAdminTimestamp(version.materialUpdatedAt ?? version.updatedAt) },
+              ]}
+            />
+
+            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Publish gating</p>
+              <p className="mt-3 text-sm leading-6 text-textPrimary">{publishGateMessage}</p>
+              {releaseGovernance.signOff.isStale ? <p className="mt-2 text-xs text-amber-200">{releaseGovernance.signOff.staleReason}</p> : null}
+              {storedReadiness ? <p className="mt-2 text-xs text-textSecondary">Last stored summary: {storedReadiness.summaryText}</p> : null}
+            </div>
+
+            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Release notes preview</p>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-textPrimary">{releaseGovernance.releaseNotes ?? 'No internal release notes recorded yet.'}</p>
+            </div>
+          </div>
+
+          <AdminAssessmentVersionReleaseControls assessmentId={detailData.assessment.id} version={version} />
+        </div>
+      </SurfaceSection>
 
       <SurfaceSection
         title="Latest regression suite snapshot"
@@ -178,7 +238,7 @@ export function AdminAssessmentVersionDetailSurface({
           columns={4}
           items={[
             { label: 'Lifecycle', value: version.lifecycleStatus },
-            { label: 'Readiness verdict', value: formatReadinessLabel(readiness.verdict) },
+            { label: 'Readiness verdict', value: formatReadinessLabel(readiness.status) },
             { label: 'Package state', value: getAssessmentPackageStatusLabel(packageInfo.status) },
             { label: 'Schema version', value: preview.schemaVersion ?? 'None' },
             { label: 'Source type', value: packageInfo.sourceType ?? 'None' },
@@ -263,13 +323,13 @@ export function AdminAssessmentVersionDetailSurface({
         <SurfaceSection title="Publish Readiness" eyebrow="Evidence checklist" description="Readiness goes beyond schema validation to show what is publishable now and what still needs attention.">
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge label={formatReadinessLabel(readiness.verdict)} tone={getReadinessTone(readiness.verdict)} />
+              <Badge label={formatReadinessLabel(readiness.status)} tone={getReadinessTone(readiness.status)} />
               <p className="text-sm text-textSecondary">{readiness.summary}</p>
             </div>
 
             <Table
               columns={['Check', 'Status', 'Detail']}
-              rows={readiness.checklist.map((item) => [
+              rows={readiness.checks.map((item) => [
                 <p key={`${item.key}-label`} className="text-sm font-medium text-textPrimary">{item.label}</p>,
                 <Badge key={`${item.key}-status`} label={item.status} tone={item.status === 'pass' ? 'emerald' : item.status === 'warning' ? 'amber' : 'rose'} />,
                 <p key={`${item.key}-detail`} className="text-sm text-textPrimary">{item.detail}</p>,

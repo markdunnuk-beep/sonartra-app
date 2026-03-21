@@ -140,6 +140,36 @@ const publishedVersion = {
     warnings: [],
   },
   normalizedPackage: baselinePackage,
+  latestSuiteSnapshot: {
+    executedAt: '2026-03-20T01:00:00.000Z',
+    executedBy: 'Rina Patel',
+    baselineVersionId: null,
+    baselineVersionLabel: null,
+    totalScenarios: 2,
+    passedCount: 2,
+    warningCount: 0,
+    failedCount: 0,
+    overallStatus: 'pass' as const,
+    summaryText: '2/2 passed.',
+  },
+  savedScenarios: [{
+    id: 'scenario-1',
+    versionId: 'version-1',
+    versionLabel: '1.0.0',
+    name: 'Baseline',
+    description: null,
+    status: 'active' as const,
+    payload: '{}',
+    sourceVersionId: null,
+    sourceVersionLabel: null,
+    sourceScenarioId: null,
+    provenanceSummary: null,
+    createdAt: '2026-03-20T00:00:00.000Z',
+    updatedAt: '2026-03-20T00:00:00.000Z',
+    archivedAt: null,
+    createdByName: 'Rina Patel',
+    updatedByName: 'Rina Patel',
+  }],
 }
 
 const draftVersion = {
@@ -167,6 +197,36 @@ const draftVersion = {
     warnings: [{ path: 'scoring.dimensionRules', message: 'Not every dimension has an explicit scoring rule.' }],
   },
   normalizedPackage: draftPackage,
+  latestSuiteSnapshot: {
+    executedAt: '2026-03-21T01:00:00.000Z',
+    executedBy: 'Noah Chen',
+    baselineVersionId: 'version-1',
+    baselineVersionLabel: '1.0.0',
+    totalScenarios: 1,
+    passedCount: 0,
+    warningCount: 1,
+    failedCount: 0,
+    overallStatus: 'warning' as const,
+    summaryText: '0/1 passed · 1 warning(s).',
+  },
+  savedScenarios: [{
+    id: 'scenario-2',
+    versionId: 'version-2',
+    versionLabel: '1.1.0',
+    name: 'Warning case',
+    description: null,
+    status: 'active' as const,
+    payload: '{}',
+    sourceVersionId: null,
+    sourceVersionLabel: null,
+    sourceScenarioId: null,
+    provenanceSummary: null,
+    createdAt: '2026-03-21T00:00:00.000Z',
+    updatedAt: '2026-03-21T00:00:00.000Z',
+    archivedAt: null,
+    createdByName: 'Noah Chen',
+    updatedByName: 'Noah Chen',
+  }],
 }
 
 test('package preview summarises normalized dimensions, questions, and coverage', () => {
@@ -182,6 +242,7 @@ test('package preview summarises normalized dimensions, questions, and coverage'
 test('readiness returns ready_with_warnings and blocked states truthfully', () => {
   const withWarnings = getAdminAssessmentVersionReadiness(draftVersion)
   const blocked = getAdminAssessmentVersionReadiness({
+    lifecycleStatus: 'draft',
     packageInfo: {
       ...draftVersion.packageInfo,
       status: 'invalid',
@@ -192,10 +253,44 @@ test('readiness returns ready_with_warnings and blocked states truthfully', () =
     normalizedPackage: null,
   })
 
+  assert.equal(withWarnings.status, 'ready_with_warnings')
   assert.equal(withWarnings.verdict, 'ready_with_warnings')
   assert.ok(withWarnings.warnings.length >= 1)
+  assert.equal(blocked.status, 'not_ready')
   assert.equal(blocked.verdict, 'blocked')
   assert.ok(blocked.blockingIssues.some((issue) => /unknown dimension|missing|invalid/i.test(issue)))
+})
+
+
+test('readiness returns ready when package, scenarios, and suite snapshot are all clean', () => {
+  const cleanPackage: SonartraAssessmentPackageV1 = {
+    ...draftPackage,
+    scoring: {
+      dimensionRules: [
+        { dimensionId: 'drive', aggregation: 'sum' as const },
+        { dimensionId: 'focus', aggregation: 'sum' as const },
+      ],
+    },
+    outputs: {
+      reportRules: [{ key: 'summary', labelKey: 'output.summary.label', dimensionIds: ['drive', 'focus'], normalizationScaleId: 'scale-1' }],
+    },
+  }
+
+  const ready = getAdminAssessmentVersionReadiness({
+    ...draftVersion,
+    packageInfo: { ...draftVersion.packageInfo, status: 'valid', warnings: [] },
+    normalizedPackage: cleanPackage,
+    latestSuiteSnapshot: {
+      ...draftVersion.latestSuiteSnapshot,
+      overallStatus: 'pass' as const,
+      warningCount: 0,
+      summaryText: '1/1 passed.',
+    },
+  })
+
+  assert.equal(ready.status, 'ready')
+  assert.equal(ready.blockingIssues.length, 0)
+  assert.equal(ready.warnings.length, 0)
 })
 
 test('diff compares draft against the published baseline and reports material changes', () => {

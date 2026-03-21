@@ -20,8 +20,12 @@ import {
   importAdminAssessmentPackage,
   importAdminAssessmentSavedScenarios,
   publishAdminAssessmentVersion,
+  refreshAdminAssessmentVersionReleaseReadiness,
+  removeAdminAssessmentVersionSignOff,
   runAdminAssessmentScenarioSuite,
+  signOffAdminAssessmentVersion,
   simulateAdminAssessmentVersion,
+  updateAdminAssessmentVersionReleaseNotes,
 } from '@/lib/admin/server/assessment-management'
 
 function revalidateAssessmentPaths(assessmentId: string, versionLabel?: string) {
@@ -191,6 +195,79 @@ export async function submitAdminAssessmentCreateDraftVersionAction(
 
   revalidateAssessmentPaths(assessmentId)
   redirect(`/admin/assessments/${assessmentId}?tab=versions&mutation=version-created`)
+}
+
+
+export async function submitAdminAssessmentRefreshReadinessAction(
+  _previousState: AdminAssessmentVersionMutationState,
+  formData: FormData,
+): Promise<AdminAssessmentVersionMutationState> {
+  const assessmentId = String(formData.get('assessmentId') ?? '')
+  const versionId = String(formData.get('versionId') ?? '')
+  const versionLabel = String(formData.get('versionLabel') ?? '')
+  const result = await refreshAdminAssessmentVersionReleaseReadiness({ assessmentId, versionId })
+
+  if (!result.ok && result.code === 'permission_denied') {
+    redirect('/sign-in')
+  }
+
+  revalidateAssessmentPaths(assessmentId, versionLabel)
+  return result.ok ? { status: 'success', message: result.message } : buildAdminAssessmentVersionMutationState(result.message, result.fieldErrors)
+}
+
+export async function submitAdminAssessmentSignOffAction(
+  _previousState: AdminAssessmentVersionMutationState,
+  formData: FormData,
+): Promise<AdminAssessmentVersionMutationState> {
+  const assessmentId = String(formData.get('assessmentId') ?? '')
+  const versionId = String(formData.get('versionId') ?? '')
+  const versionLabel = String(formData.get('versionLabel') ?? '')
+  const result = await signOffAdminAssessmentVersion({ assessmentId, versionId })
+
+  if (!result.ok && result.code === 'permission_denied') {
+    redirect('/sign-in')
+  }
+
+  revalidateAssessmentPaths(assessmentId, versionLabel)
+  return result.ok ? { status: 'success', message: result.message } : buildAdminAssessmentVersionMutationState(result.message, result.fieldErrors)
+}
+
+export async function submitAdminAssessmentRemoveSignOffAction(
+  _previousState: AdminAssessmentVersionMutationState,
+  formData: FormData,
+): Promise<AdminAssessmentVersionMutationState> {
+  const assessmentId = String(formData.get('assessmentId') ?? '')
+  const versionId = String(formData.get('versionId') ?? '')
+  const versionLabel = String(formData.get('versionLabel') ?? '')
+  const result = await removeAdminAssessmentVersionSignOff({ assessmentId, versionId })
+
+  if (!result.ok && result.code === 'permission_denied') {
+    redirect('/sign-in')
+  }
+
+  revalidateAssessmentPaths(assessmentId, versionLabel)
+  return result.ok ? { status: 'success', message: result.message } : buildAdminAssessmentVersionMutationState(result.message, result.fieldErrors)
+}
+
+export async function submitAdminAssessmentReleaseNotesAction(
+  _previousState: AdminAssessmentVersionMutationState,
+  formData: FormData,
+): Promise<AdminAssessmentVersionMutationState> {
+  const assessmentId = String(formData.get('assessmentId') ?? '')
+  const versionId = String(formData.get('versionId') ?? '')
+  const versionLabel = String(formData.get('versionLabel') ?? '')
+  const result = await updateAdminAssessmentVersionReleaseNotes({
+    assessmentId,
+    versionId,
+    releaseNotes: String(formData.get('releaseNotes') ?? ''),
+  })
+
+  if (!result.ok && result.code === 'permission_denied') {
+    redirect('/sign-in')
+  }
+
+  revalidateAssessmentPaths(assessmentId, versionLabel)
+  return result.ok ? { status: 'success', message: result.message } : buildAdminAssessmentVersionMutationState(result.message, result.fieldErrors)
 }
 
 export async function submitAdminAssessmentPublishVersionAction(

@@ -4,10 +4,15 @@ import type {
   SonartraAssessmentPackageQuestion,
   SonartraAssessmentPackageV1,
 } from '@/lib/admin/domain/assessment-package'
-import type { AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
+import type {
+  AdminAssessmentReleaseCheck,
+  AdminAssessmentReleaseCheckStatus,
+  AdminAssessmentReleaseReadinessStatus,
+  AdminAssessmentVersionRecord,
+} from '@/lib/admin/domain/assessment-management'
 
 export type AdminAssessmentPublishReadinessVerdict = 'ready' | 'ready_with_warnings' | 'blocked'
-export type AdminAssessmentEvidenceStatus = 'pass' | 'warning' | 'fail'
+export type AdminAssessmentEvidenceStatus = AdminAssessmentReleaseCheckStatus
 export type AdminAssessmentDiffBaselineReason = 'published_baseline' | 'previous_version' | 'most_recent_other' | 'first_version'
 
 export interface AdminAssessmentPackagePreviewSectionDimension {
@@ -52,18 +57,16 @@ export interface AdminAssessmentPackagePreviewSummary {
   }
 }
 
-export interface AdminAssessmentReadinessChecklistItem {
-  key: string
-  label: string
-  status: AdminAssessmentEvidenceStatus
-  detail: string
-}
+export interface AdminAssessmentReadinessChecklistItem extends AdminAssessmentReleaseCheck {}
 
 export interface AdminAssessmentVersionReadiness {
+  status: AdminAssessmentReleaseReadinessStatus
   verdict: AdminAssessmentPublishReadinessVerdict
   blockingIssues: string[]
   warnings: string[]
+  checks: AdminAssessmentReadinessChecklistItem[]
   checklist: AdminAssessmentReadinessChecklistItem[]
+  summaryText: string
   summary: string
 }
 
@@ -304,15 +307,17 @@ export function getAdminAssessmentPackagePreviewSummary(version: Pick<AdminAsses
   }
 }
 
-export function getAdminAssessmentVersionReadiness(version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage'>): AdminAssessmentVersionReadiness {
+export function getAdminAssessmentVersionReadiness(
+  version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage' | 'lifecycleStatus'> & Partial<Pick<AdminAssessmentVersionRecord, 'savedScenarios' | 'latestSuiteSnapshot'>>,
+): AdminAssessmentVersionReadiness {
   const packageInfo = version.packageInfo
   const pkg = version.normalizedPackage
-  const checklist: AdminAssessmentReadinessChecklistItem[] = []
+  const checks: AdminAssessmentReadinessChecklistItem[] = []
   const blockingIssues: string[] = []
   const warnings = [...getPackageWarningMessages(packageInfo)]
 
   const addCheck = (key: string, label: string, status: AdminAssessmentEvidenceStatus, detail: string) => {
-    checklist.push({ key, label, status, detail })
+    checks.push({ key, label, status, detail })
     if (status === 'fail') {
       blockingIssues.push(detail)
     }
@@ -321,20 +326,36 @@ export function getAdminAssessmentVersionReadiness(version: Pick<AdminAssessment
     }
   }
 
+  addCheck(
+    'lifecycle_state',
+    'Lifecycle state allows publish',
+    version.lifecycleStatus === 'archived' ? 'fail' : version.lifecycleStatus === 'published' ? 'warning' : 'pass',
+    version.lifecycleStatus === 'archived'
+      ? 'Archived versions cannot be published directly.'
+      : version.lifecycleStatus === 'published'
+        ? 'This version is already published; republishing should be an explicit operator decision.'
+        : 'Draft lifecycle state is eligible for publish review.',
+  )
+
   const packageAttached = packageInfo.status !== 'missing'
   addCheck('package_attached', 'Package attached', packageAttached ? 'pass' : 'fail', packageAttached ? 'A package payload is attached to the version record.' : 'Attach a package before publish.')
 
   const structurallyValid = (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings') && Boolean(pkg)
-  addCheck('package_valid', 'Structural validation', structurallyValid ? 'pass' : 'fail', structurallyValid ? 'The latest package passed structural validation.' : 'The latest package is missing, invalid, or has no normalized payload.')
+  addCheck('package_valid', 'Executable normalized package', structurallyValid ? 'pass' : 'fail', structurallyValid ? 'The latest package validated and produced a normalized executable payload.' : 'The latest package is missing, invalid, or has no normalized payload.')
 
   if (!pkg) {
-    const verdict: AdminAssessmentPublishReadinessVerdict = blockingIssues.length > 0 ? 'blocked' : warnings.length > 0 ? 'ready_with_warnings' : 'ready'
+    const status: AdminAssessmentReleaseReadinessStatus = blockingIssues.length > 0 ? 'not_ready' : warnings.length > 0 ? 'ready_with_warnings' : 'ready'
+    const verdict: AdminAssessmentPublishReadinessVerdict = status === 'not_ready' ? 'blocked' : status
+    const summaryText = status === 'not_ready' ? 'Publish is blocked until a valid normalized package is attached.' : 'Review the package evidence before publish.'
     return {
+      status,
       verdict,
       blockingIssues: [...new Set([...blockingIssues, ...getPackageErrorMessages(packageInfo)])],
       warnings: [...new Set(warnings)],
-      checklist,
-      summary: verdict === 'blocked' ? 'Publish is blocked until a valid normalized package is attached.' : 'Review the package evidence before publish.',
+      checks,
+      checklist: checks,
+      summaryText,
+      summary: summaryText,
     }
   }
 
@@ -384,6 +405,16 @@ export function getAdminAssessmentVersionReadiness(version: Pick<AdminAssessment
       : 'At least one populated locale is required.',
   )
 
+  const activeScenarios = (version.savedScenarios ?? []).filter((scenario) => scenario.status === 'active')
+  addCheck(
+    'active_scenarios',
+    'Saved QA scenarios available',
+    activeScenarios.length > 0 ? 'pass' : 'warning',
+    activeScenarios.length > 0
+      ? `${formatCount(activeScenarios.length, 'active saved scenario')} available for deterministic QA.`
+      : 'No active saved QA scenarios are attached; publish may still be acceptable with manual judgement.',
+  )
+
   const outputCoverage = getOutputCoverage(pkg)
   addCheck(
     'output_consistency',
@@ -401,22 +432,50 @@ export function getAdminAssessmentVersionReadiness(version: Pick<AdminAssessment
     packageInfo.errors.length === 0 ? 'No blocking validation errors remain.' : `${formatCount(packageInfo.errors.length, 'blocking error')} still recorded on the package.`,
   )
 
-  const verdict: AdminAssessmentPublishReadinessVerdict = blockingIssues.length > 0
-    ? 'blocked'
+  const latestSuiteSnapshot = version.latestSuiteSnapshot ?? null
+  addCheck(
+    'suite_snapshot_exists',
+    'Latest regression suite snapshot recorded',
+    latestSuiteSnapshot ? 'pass' : 'warning',
+    latestSuiteSnapshot
+      ? `Latest suite snapshot recorded at ${latestSuiteSnapshot.executedAt}.`
+      : 'No latest regression suite snapshot is stored; publish may still proceed with human judgement.',
+  )
+
+  if (latestSuiteSnapshot) {
+    addCheck(
+      'suite_snapshot_status',
+      'Latest regression suite snapshot status',
+      latestSuiteSnapshot.overallStatus === 'fail' ? 'fail' : latestSuiteSnapshot.overallStatus === 'warning' ? 'warning' : 'pass',
+      latestSuiteSnapshot.overallStatus === 'fail'
+        ? `Latest suite snapshot failed: ${latestSuiteSnapshot.summaryText}`
+        : latestSuiteSnapshot.overallStatus === 'warning'
+          ? `Latest suite snapshot has warnings: ${latestSuiteSnapshot.summaryText}`
+          : `Latest suite snapshot passed: ${latestSuiteSnapshot.summaryText}`,
+    )
+  }
+
+  const status: AdminAssessmentReleaseReadinessStatus = blockingIssues.length > 0
+    ? 'not_ready'
     : warnings.length > 0
       ? 'ready_with_warnings'
       : 'ready'
+  const verdict: AdminAssessmentPublishReadinessVerdict = status === 'not_ready' ? 'blocked' : status
+  const summaryText = status === 'ready'
+    ? 'Ready to publish: the attached package and release evidence meet the current governance checks.'
+    : status === 'ready_with_warnings'
+      ? 'Ready with warnings: publish can proceed only with operator review of the flagged release evidence.'
+      : 'Publish is blocked until the failing release-governance checks are resolved.'
 
   return {
+    status,
     verdict,
     blockingIssues: [...new Set([...blockingIssues, ...getPackageErrorMessages(packageInfo)])],
     warnings: [...new Set(warnings)],
-    checklist,
-    summary: verdict === 'ready'
-      ? 'Ready to publish: the attached package has the required structural and operational evidence.'
-      : verdict === 'ready_with_warnings'
-        ? 'Ready with warnings: publish can proceed, but review the flagged evidence gaps first.'
-        : 'Publish is blocked until the blocking package evidence gaps are resolved.',
+    checks,
+    checklist: checks,
+    summaryText,
+    summary: summaryText,
   }
 }
 
