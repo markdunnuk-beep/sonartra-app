@@ -37,10 +37,17 @@ export interface AdminAssessmentRegistryPagination {
 }
 
 
+export interface AdminAssessmentRegistryNotice {
+  kind: 'setup_required' | 'degraded'
+  title: string
+  detail: string
+}
+
 export interface AdminAssessmentRegistryData {
   filters: AdminAssessmentRegistryFilters
   entries: AdminAssessmentRegistryItem[]
   pagination: AdminAssessmentRegistryPagination
+  notice?: AdminAssessmentRegistryNotice | null
 }
 
 export interface AdminAssessmentRegistryItem {

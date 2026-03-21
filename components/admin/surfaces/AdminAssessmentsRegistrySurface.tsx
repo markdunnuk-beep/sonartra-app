@@ -11,6 +11,19 @@ import {
 } from '@/lib/admin/domain/assessment-management'
 import { formatAdminRelativeTime, formatAdminTimestamp } from '@/lib/admin/wireframe'
 
+function RegistryNotice({ data }: { data: AdminAssessmentRegistryData }) {
+  if (!data.notice) {
+    return null
+  }
+
+  return (
+    <div className="rounded-[1.25rem] border border-amber-400/25 bg-amber-400/[0.08] px-4 py-3 text-sm text-amber-100">
+      <p className="font-semibold">{data.notice.title}</p>
+      <p className="mt-1 leading-6 text-amber-50/90">{data.notice.detail}</p>
+    </div>
+  )
+}
+
 function Filters({ data }: { data: AdminAssessmentRegistryData }) {
   const { filters } = data
 
@@ -78,9 +91,11 @@ function Pagination({ data }: { data: AdminAssessmentRegistryData }) {
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-white/[0.08] bg-panel/35 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="text-sm text-textSecondary">
-        {pagination.totalCount
-          ? `Showing ${pagination.windowStart}-${pagination.windowEnd} of ${pagination.totalCount} assessments.`
-          : 'No assessment records are currently indexed.'}
+        {data.notice
+          ? data.notice.detail
+          : pagination.totalCount
+            ? `Showing ${pagination.windowStart}-${pagination.windowEnd} of ${pagination.totalCount} assessments.`
+            : 'No assessment records are currently indexed.'}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button href={buildAdminAssessmentRegistryHref({ ...filters, page: Math.max(1, pagination.page - 1) })} variant="ghost" disabled={!pagination.hasPreviousPage}>Previous</Button>
@@ -93,15 +108,23 @@ function Pagination({ data }: { data: AdminAssessmentRegistryData }) {
 
 function RegistryRows({ data }: { data: AdminAssessmentRegistryData }) {
   if (!data.entries.length) {
+    const hasFilters = Boolean(data.filters.query || data.filters.lifecycle !== 'all' || data.filters.category !== 'all')
+
     return (
       <EmptyState
-        title={data.filters.query || data.filters.lifecycle !== 'all' || data.filters.category !== 'all'
-          ? 'No assessments match the current filters'
-          : 'No assessments are registered yet'}
-        detail={data.filters.query || data.filters.lifecycle !== 'all' || data.filters.category !== 'all'
-          ? 'Adjust the query, lifecycle, or category filters to widen the registry slice.'
-          : 'Create the first stable assessment record so future import packages have a governed destination.'}
-        action={<Button href="/admin/assessments/new" variant="secondary">Create assessment record</Button>}
+        title={data.notice
+          ? data.notice.title
+          : hasFilters
+            ? 'No assessments match the current filters'
+            : 'No assessments are registered yet'}
+        detail={data.notice
+          ? data.notice.detail
+          : hasFilters
+            ? 'Adjust the query, lifecycle, or category filters to widen the registry slice.'
+            : 'Create the first stable assessment record so future import packages have a governed destination.'}
+        action={data.notice
+          ? <Button href="/admin/assessments" variant="secondary">Retry registry load</Button>
+          : <Button href="/admin/assessments/new" variant="secondary">Create assessment record</Button>}
       />
     )
   }
@@ -184,6 +207,7 @@ export function AdminAssessmentsRegistrySurface({ data }: { data: AdminAssessmen
         description="Server-rendered list view with URL-driven filters, bounded pagination, and direct drill-in to each assessment workspace."
       >
         <div className="space-y-4">
+          <RegistryNotice data={data} />
           <Filters data={data} />
           <RegistryRows data={data} />
           <Pagination data={data} />

@@ -6,8 +6,10 @@ import {
   type AdminAssessmentCreateState,
   type AdminAssessmentDetailData,
   type AdminAssessmentLifecycleStatus,
+  type AdminAssessmentRegistryData,
   type AdminAssessmentRegistryFilters,
   type AdminAssessmentRegistryItem,
+  type AdminAssessmentRegistryNotice,
   type AdminAssessmentVersionMutationState,
   type AdminAssessmentVersionRecord,
 } from '@/lib/admin/domain/assessment-management'
@@ -90,19 +92,12 @@ interface ActorRow {
   full_name: string
 }
 
-export interface AdminAssessmentRegistryData {
-  filters: AdminAssessmentRegistryFilters
-  entries: AdminAssessmentRegistryItem[]
-  pagination: {
-    page: number
-    pageSize: number
-    totalCount: number
-    totalPages: number
-    hasPreviousPage: boolean
-    hasNextPage: boolean
-    windowStart: number
-    windowEnd: number
-  }
+interface AssessmentRegistryQueryDependencies {
+  queryDb: typeof queryDb
+}
+
+const defaultAssessmentRegistryQueryDependencies: AssessmentRegistryQueryDependencies = {
+  queryDb,
 }
 
 export interface AdminCreateAssessmentInput {
@@ -595,77 +590,12 @@ function buildRegistryOrderClause(sort: AdminAssessmentRegistryFilters['sort']):
   }
 }
 
-export async function getAdminAssessmentRegistryData(
-  searchParams?: Record<string, string | string[] | undefined>,
-): Promise<AdminAssessmentRegistryData> {
-  const filters = getAdminAssessmentRegistryFilters(searchParams)
-  const params = [
-    filters.lifecycle === 'all' ? null : filters.lifecycle,
-    filters.category === 'all' ? null : filters.category,
-    toPattern(filters.query),
-    filters.pageSize,
-    (filters.page - 1) * filters.pageSize,
-  ]
-  const orderClause = buildRegistryOrderClause(filters.sort)
-
-  const baseQuery = `
-    with version_stats as (
-      select
-        av.assessment_definition_id,
-        count(*)::int as version_count,
-        max(av.updated_at) as latest_version_updated_at,
-        max(av.version_label) filter (where av.lifecycle_status = 'published') as current_published_version_label
-      from assessment_versions av
-      group by av.assessment_definition_id
-    )
-  `
-
-  const whereClause = `
-    from assessment_definitions ad
-    left join version_stats vs on vs.assessment_definition_id = ad.id
-    where ($1::text is null or ad.lifecycle_status = $1::text)
-      and ($2::text is null or ad.category = $2::text)
-      and (
-        $3::text is null
-        or ad.name ilike $3 escape '\\'
-        or ad.key ilike $3 escape '\\'
-        or ad.slug ilike $3 escape '\\'
-        or coalesce(ad.description, '') ilike $3 escape '\\'
-      )
-  `
-
-  const [rowsResult, countResult] = await Promise.all([
-    queryDb<AssessmentRegistryRow>(
-      `${baseQuery}
-       select
-         ad.id,
-         ad.key,
-         ad.slug,
-         ad.name,
-         ad.category,
-         ad.description,
-         ad.lifecycle_status,
-         coalesce(current_version.version_label, vs.current_published_version_label) as current_published_version_label,
-         coalesce(vs.version_count, 0) as version_count,
-         ad.created_at,
-         ad.updated_at
-       ${whereClause}
-       left join assessment_versions current_version on current_version.id = ad.current_published_version_id
-       order by ${orderClause}
-       limit $4
-       offset $5`,
-      params,
-    ),
-    queryDb<{ total_count: number | string | null }>(
-      `${baseQuery}
-       select count(*)::int as total_count
-       ${whereClause}`,
-      params.slice(0, 3),
-    ),
-  ])
-
-  const entries = mapAssessmentRegistryRows(rowsResult.rows ?? [])
-  const totalCount = normaliseCount(countResult.rows[0]?.total_count)
+function buildAdminAssessmentRegistryData(
+  filters: AdminAssessmentRegistryFilters,
+  entries: AdminAssessmentRegistryItem[],
+  totalCount: number,
+  notice: AdminAssessmentRegistryNotice | null = null,
+): AdminAssessmentRegistryData {
   const totalPages = Math.max(1, Math.ceil(totalCount / filters.pageSize))
   const page = Math.min(filters.page, totalPages)
 
@@ -682,6 +612,146 @@ export async function getAdminAssessmentRegistryData(
       windowStart: totalCount === 0 ? 0 : (page - 1) * filters.pageSize + 1,
       windowEnd: totalCount === 0 ? 0 : Math.min(totalCount, (page - 1) * filters.pageSize + entries.length),
     },
+    notice,
+  }
+}
+
+function unwrapErrorCause(error: unknown): unknown {
+  let current = error
+
+  while (current && typeof current === 'object' && 'cause' in current) {
+    const cause = (current as { cause?: unknown }).cause
+    if (!cause) {
+      break
+    }
+
+    current = cause
+  }
+
+  return current
+}
+
+function extractDatabaseFailureDetails(error: unknown): { code: string | null; message: string } {
+  const raw = unwrapErrorCause(error)
+  const code = raw && typeof raw === 'object' && 'code' in raw && typeof (raw as { code?: unknown }).code === 'string'
+    ? (raw as { code: string }).code
+    : null
+  const message = raw instanceof Error
+    ? raw.message
+    : typeof raw === 'object' && raw && 'message' in raw && typeof (raw as { message?: unknown }).message === 'string'
+      ? (raw as { message: string }).message
+      : error instanceof Error
+        ? error.message
+        : 'Unknown database error.'
+
+  return { code, message }
+}
+
+function classifyAssessmentRegistryLoadFailure(error: unknown): AdminAssessmentRegistryNotice {
+  const { code, message } = extractDatabaseFailureDetails(error)
+  const normalizedMessage = message.toLowerCase()
+  const missingRegistrySchema = code === '42P01' || code === '42703' || [
+    'assessment_definitions',
+    'assessment_versions',
+    'current_published_version_id',
+    'assessment_definition_id',
+    'package_schema_version',
+    'package_validation_report_json',
+  ].some((token) => normalizedMessage.includes(token.toLowerCase()))
+
+  if (missingRegistrySchema) {
+    return {
+      kind: 'setup_required',
+      title: 'Assessment registry setup is incomplete',
+      detail: 'The assessment admin schema is missing or behind the current code. Apply migrations 0007_assessment_admin_registry.sql and 0008_assessment_version_packages.sql, then reload this page.',
+    }
+  }
+
+  return {
+    kind: 'degraded',
+    title: 'Assessment registry is temporarily unavailable',
+    detail: 'The registry query failed before data could be rendered. Review the deployment logs and database health, then retry.',
+  }
+}
+
+export async function getAdminAssessmentRegistryData(
+  searchParams?: Record<string, string | string[] | undefined>,
+  deps: AssessmentRegistryQueryDependencies = defaultAssessmentRegistryQueryDependencies,
+): Promise<AdminAssessmentRegistryData> {
+  const filters = getAdminAssessmentRegistryFilters(searchParams)
+  const sharedParams = [
+    filters.lifecycle === 'all' ? null : filters.lifecycle,
+    filters.category === 'all' ? null : filters.category,
+    toPattern(filters.query),
+  ]
+  const orderClause = buildRegistryOrderClause(filters.sort)
+
+  const baseQuery = `
+    with version_stats as (
+      select
+        av.assessment_definition_id,
+        count(*)::int as version_count,
+        max(av.updated_at) as latest_version_updated_at,
+        max(av.version_label) filter (where av.lifecycle_status = 'published') as current_published_version_label
+      from assessment_versions av
+      group by av.assessment_definition_id
+    )
+  `
+
+  const fromClause = `
+    from assessment_definitions ad
+    left join version_stats vs on vs.assessment_definition_id = ad.id
+    left join assessment_versions current_version on current_version.id = ad.current_published_version_id
+    where ($1::text is null or ad.lifecycle_status = $1::text)
+      and ($2::text is null or ad.category = $2::text)
+      and (
+        $3::text is null
+        or ad.name ilike $3 escape '\\'
+        or ad.key ilike $3 escape '\\'
+        or ad.slug ilike $3 escape '\\'
+        or coalesce(ad.description, '') ilike $3 escape '\\'
+      )
+  `
+
+  try {
+    const countResult = await deps.queryDb<{ total_count: number | string | null }>(
+      `${baseQuery}
+       select count(*)::int as total_count
+       ${fromClause}`,
+      sharedParams,
+    )
+
+    const totalCount = normaliseCount(countResult.rows[0]?.total_count)
+    const totalPages = Math.max(1, Math.ceil(totalCount / filters.pageSize))
+    const page = Math.min(filters.page, totalPages)
+    const rowsResult = await deps.queryDb<AssessmentRegistryRow>(
+      `${baseQuery}
+       select
+         ad.id,
+         ad.key,
+         ad.slug,
+         ad.name,
+         ad.category,
+         ad.description,
+         ad.lifecycle_status,
+         coalesce(current_version.version_label, vs.current_published_version_label) as current_published_version_label,
+         coalesce(vs.version_count, 0) as version_count,
+         ad.created_at,
+         ad.updated_at
+       ${fromClause}
+       order by ${orderClause}
+       limit $4
+       offset $5`,
+      [...sharedParams, filters.pageSize, (page - 1) * filters.pageSize],
+    )
+
+    const entries = mapAssessmentRegistryRows(rowsResult.rows ?? [])
+
+    return buildAdminAssessmentRegistryData({ ...filters, page }, entries, totalCount)
+  } catch (error) {
+    const notice = classifyAssessmentRegistryLoadFailure(error)
+    console.error('Admin assessment registry load failed:', notice.title, describeDatabaseError(error))
+    return buildAdminAssessmentRegistryData(filters, [], 0, notice)
   }
 }
 
