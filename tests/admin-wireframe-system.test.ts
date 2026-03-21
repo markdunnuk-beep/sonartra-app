@@ -126,7 +126,7 @@ test('user access helpers expose role, risk, activity, and history for operator 
 })
 
 test('wireframe surface files remain server-safe and avoid client directives', async () => {
-  const files = ['../components/admin/surfaces/AdminWireframePrimitives.tsx', '../components/admin/surfaces/AdminWireframeSurfaces.tsx']
+  const files = ['../components/admin/surfaces/AdminWireframePrimitives.tsx', '../components/admin/surfaces/AdminWireframeSurfaces.tsx', '../components/admin/surfaces/AdminOrganisationDetailSurface.tsx']
 
   for (const file of files) {
     const source = await readFile(new URL(file, import.meta.url), 'utf8')
@@ -139,7 +139,7 @@ test('admin routes point to the shared high-fidelity wireframe surfaces', async 
     '../app/admin/page.tsx',
     '../app/admin/dashboard/page.tsx',
     '../app/admin/organisations/page.tsx',
-    '../app/admin/organisations/[slug]/page.tsx',
+    '../app/admin/organisations/[organisationId]/page.tsx',
     '../app/admin/users/page.tsx',
     '../app/admin/users/[id]/page.tsx',
     '../app/admin/assessments/page.tsx',
@@ -153,7 +153,7 @@ test('admin routes point to the shared high-fidelity wireframe surfaces', async 
 
   for (const route of routes) {
     const source = await readFile(new URL(route, import.meta.url), 'utf8')
-    assert.match(source, /Admin.*WireframePage/)
+    assert.match(source, /Admin.*(WireframePage|DetailSurface)/)
   }
 })
 
