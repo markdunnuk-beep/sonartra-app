@@ -34,3 +34,11 @@ test('admin navigation items expose permission-ready metadata', () => {
   assert.equal(items.every((item) => item.requiredRoles.length > 0), true)
   assert.equal(items.every((item) => item.requiredCapabilities.length > 0), true)
 })
+
+
+test('assessment navigation item points to the canonical assessments route', () => {
+  const assessmentItem = getAdminNavigationItems(access).find((item) => item.label === 'Assessments')
+
+  assert.equal(assessmentItem?.href, '/admin/assessments')
+  assert.equal(assessmentItem?.startsWith, '/admin/assessments')
+})

@@ -61,3 +61,10 @@ test('dashboard model can be recomputed with alternative timestamps without muta
   assert.equal(snapshot.recentActivity[0]?.id, 'audit-1008')
   assert.equal(adminUsers[0]?.id, 'user-admin-rina')
 })
+
+
+test('dashboard assessment queue item routes into the canonical assessments workspace', () => {
+  const assessmentQueueItem = adminDashboardModel.controlQueue.find((item) => item.id === 'awaiting-validation')
+
+  assert.equal(assessmentQueueItem?.href, '/admin/assessments')
+})
