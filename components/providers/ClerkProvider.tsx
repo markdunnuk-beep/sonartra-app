@@ -1,12 +1,14 @@
 'use client'
 
-import React, { useEffect } from 'react'
+import React, { type ReactNode, useEffect } from 'react'
 import { ClerkProvider as ClerkRootProvider } from '@clerk/nextjs'
-import { ReactNode } from 'react'
 
-import { formatGenericAuthRedirectOverrideWarning, getGenericAuthFallbackRedirectUrl } from '@/lib/auth-redirects'
+import {
+  formatGenericAuthRedirectOverrideWarning,
+  getGenericAuthFallbackRedirectUrl,
+} from '@/lib/auth-redirects'
 
-function getClerkPublishableKey() {
+function getClerkPublishableKey(): string {
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim()
 
   if (!publishableKey) {
