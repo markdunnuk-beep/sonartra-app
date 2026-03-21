@@ -99,12 +99,14 @@ export function AdminAssessmentSimulationWorkspace({
   relatedVersions = [],
   workspaceCopy,
   renderPostResults,
+  initialRequestPayload,
 }: {
   assessmentId: string
   version: AdminAssessmentVersionRecord
   relatedVersions?: AdminAssessmentVersionRecord[]
   workspaceCopy?: AdminAssessmentSimulationWorkspaceCopy
   renderPostResults?: (result: AdminAssessmentSimulationResult) => React.ReactNode
+  initialRequestPayload?: string | null
 }) {
   const [state, action] = useFormState(submitAdminAssessmentSimulationAction, INITIAL_STATE)
   const [importState, importAction] = useFormState(submitAdminAssessmentScenarioImportAction, INITIAL_IMPORT_STATE)
@@ -125,10 +127,14 @@ export function AdminAssessmentSimulationWorkspace({
   const defaultBaseline = relatedVersions.find((entry) => entry.id !== version.id && entry.lifecycleStatus === 'published') ?? relatedVersions.find((entry) => entry.id !== version.id) ?? null
   const scenarioOptions = getAdminAssessmentSimulationScenarioOptions(version.normalizedPackage)
   const initialScenario = scenarioOptions.find((scenario) => scenario.key === 'sensible_defaults')?.request
-  const initialPayload = initialScenario ? buildAdminAssessmentSimulationPayloadText(initialScenario) : '{\n  "answers": []\n}'
+  const initialPayload = initialRequestPayload ?? (initialScenario ? buildAdminAssessmentSimulationPayloadText(initialScenario) : '{\n  "answers": []\n}')
   const [mode, setMode] = React.useState<FormMode>('generated_form')
   const [answers, setAnswers] = React.useState<Record<string, string>>(() => Object.fromEntries(initialScenario?.answers.map((answer) => [answer.questionId, answer.optionId]) ?? []))
   const [payloadText, setPayloadText] = React.useState(initialPayload)
+
+  React.useEffect(() => {
+    setPayloadText(initialPayload)
+  }, [initialPayload])
 
   React.useEffect(() => {
     if (mode !== 'generated_form') {

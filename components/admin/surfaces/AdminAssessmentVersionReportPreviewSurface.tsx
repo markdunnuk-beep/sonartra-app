@@ -31,9 +31,11 @@ function getReadinessTone(verdict: 'ready' | 'ready_with_warnings' | 'blocked') 
 export function AdminAssessmentVersionReportPreviewSurface({
   detailData,
   version,
+  selectedScenarioPayload,
 }: {
   detailData: AdminAssessmentDetailData
   version: AdminAssessmentVersionRecord
+  selectedScenarioPayload?: string | null
 }) {
   const readiness = getAdminAssessmentVersionReadiness(version)
   const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(version)
@@ -49,6 +51,7 @@ export function AdminAssessmentVersionReportPreviewSurface({
           <div className="flex flex-wrap gap-2">
             <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}`} variant="ghost"><ArrowLeft className="mr-2 h-4 w-4" />Back to version</Button>
             <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/simulate`} variant="ghost"><FlaskConical className="mr-2 h-4 w-4" />Simulation workspace</Button>
+            <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/scenarios`} variant="ghost">Scenario library</Button>
             <Button href={buildAdminAuditHref({ entityType: 'assessment_version', entityId: version.id })} variant="ghost"><Activity className="mr-2 h-4 w-4" />Version audit</Button>
           </div>
         )}
@@ -114,6 +117,7 @@ export function AdminAssessmentVersionReportPreviewSurface({
             resultsDescription: 'After the sample scenario runs, this section shows the structured summary model, PDF-ready content blocks, traceability, warnings, and output-quality evidence.',
           }}
           renderPostResults={(result) => <AdminAssessmentReportOutputPreviewPanel version={version} simulationResult={result} />}
+          initialRequestPayload={selectedScenarioPayload}
         />
       ) : (
         <SurfaceSection
