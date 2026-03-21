@@ -21,6 +21,12 @@ import {
   validateSonartraAssessmentPackage,
 } from '@/lib/admin/domain/assessment-package'
 import { getAdminAssessmentVersionReadiness } from '@/lib/admin/domain/assessment-package-review'
+import {
+  executeAdminAssessmentSimulation,
+  getAdminAssessmentSimulationWorkspaceStatus,
+  parseAdminAssessmentSimulationPayload,
+  type AdminAssessmentSimulationActionState,
+} from '@/lib/admin/domain/assessment-simulation'
 import { queryDb, withTransaction, describeDatabaseError } from '@/lib/db'
 import { getScopedAdminAuditActivity, mapScopedAuditEventsToAssessmentActivity } from '@/lib/admin/server/audit-workspace'
 
@@ -169,6 +175,19 @@ export interface AdminAssessmentPackageImportResult {
     packageText?: string
     packageFile?: string
   }
+}
+
+export interface AdminAssessmentVersionSimulationInput {
+  assessmentId: string
+  versionId: string
+  responsePayload: string
+}
+
+export interface AdminAssessmentVersionSimulationResult {
+  ok: boolean
+  code: 'simulated' | 'validation_error' | 'blocked' | 'permission_denied' | 'not_found' | 'unknown_error'
+  message: string
+  state: AdminAssessmentSimulationActionState
 }
 
 interface VersionTransitionInput {
@@ -1282,6 +1301,208 @@ export async function importAdminAssessmentPackage(
       ok: false,
       code: 'unknown_error',
       message: describeDatabaseError(error),
+    }
+  }
+}
+
+export async function simulateAdminAssessmentVersion(
+  input: AdminAssessmentVersionSimulationInput,
+  dependencies: Partial<AssessmentMutationDependencies> = {},
+): Promise<AdminAssessmentVersionSimulationResult> {
+  const deps = { ...defaultDependencies, ...dependencies }
+  const denied = await requireAccess(deps)
+
+  if (denied) {
+    return {
+      ok: false,
+      code: 'permission_denied',
+      message: denied.message,
+      state: {
+        status: 'blocked',
+        message: denied.message,
+      },
+    }
+  }
+
+  const payloadValidation = parseAdminAssessmentSimulationPayload(input.responsePayload)
+
+  if (!payloadValidation.ok || !payloadValidation.normalizedRequest) {
+    return {
+      ok: false,
+      code: 'validation_error',
+      message: 'Simulation payload is invalid.',
+      state: {
+        status: 'error',
+        message: 'Simulation payload is invalid. Resolve the input errors and try again.',
+        fieldErrors: {
+          responsePayload: payloadValidation.errors[0]?.message ?? 'Simulation payload is invalid.',
+        },
+      },
+    }
+  }
+
+  try {
+    return await deps.withTransaction(async (client) => {
+      const versionResult = await client.query<AssessmentVersionRow & { assessment_name: string | null }>(
+        `select
+           av.id,
+           av.assessment_definition_id,
+           av.version_label,
+           av.lifecycle_status,
+           av.source_type,
+           av.notes,
+           (av.definition_payload is not null) as has_definition_payload,
+           av.definition_payload,
+           av.validation_status,
+           av.package_status,
+           av.package_schema_version,
+           av.package_source_type,
+           av.package_imported_at,
+           av.package_source_filename,
+           package_imported_by.full_name as package_imported_by_name,
+           av.package_validation_report_json,
+           av.created_at,
+           av.updated_at,
+           av.published_at,
+           av.archived_at,
+           created_by.full_name as created_by_name,
+           updated_by.full_name as updated_by_name,
+           published_by.full_name as published_by_name,
+           ad.name as assessment_name
+         from assessment_versions av
+         inner join assessment_definitions ad on ad.id = av.assessment_definition_id
+         left join admin_identities created_by on created_by.id = av.created_by_identity_id
+         left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
+         left join admin_identities published_by on published_by.id = av.published_by_identity_id
+         left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
+         where av.id = $1
+           and av.assessment_definition_id = $2
+         limit 1`,
+        [input.versionId, input.assessmentId],
+      )
+      const version = mapAssessmentVersionRows(versionResult.rows ?? [])[0]
+      const assessmentName = normaliseNullableField(versionResult.rows[0]?.assessment_name) ?? 'Assessment'
+
+      if (!version) {
+        return {
+          ok: false,
+          code: 'not_found',
+          message: 'Version not found.',
+          state: {
+            status: 'blocked',
+            message: 'The assessment version could not be found.',
+          },
+        }
+      }
+
+      const workspaceStatus = getAdminAssessmentSimulationWorkspaceStatus(version)
+      if (!workspaceStatus.canRunSimulation || !version.normalizedPackage) {
+        const actor = await deps.getActorIdentity(client)
+        const nowIso = deps.now().toISOString()
+
+        await writeAssessmentAuditEvent(client, {
+          createId: deps.createId,
+          actor,
+          nowIso,
+          eventType: 'assessment_simulation_blocked',
+          summary: `Simulation blocked for ${assessmentName} v${version.versionLabel}: ${workspaceStatus.blockingReason ?? 'package is not eligible for simulation'}.`,
+          assessmentId: input.assessmentId,
+          assessmentName,
+          versionId: input.versionId,
+          versionLabel: version.versionLabel,
+          metadata: {
+            packageStatus: version.packageInfo.status,
+            simulationEligibility: workspaceStatus.eligibility,
+          },
+        })
+
+        return {
+          ok: false,
+          code: 'blocked',
+          message: workspaceStatus.blockingReason ?? 'This version is not eligible for simulation.',
+          state: {
+            status: 'blocked',
+            message: workspaceStatus.blockingReason ?? 'This version is not eligible for simulation.',
+          },
+        }
+      }
+
+      const normalizedSimulationRequest = payloadValidation.normalizedRequest
+      if (!normalizedSimulationRequest) {
+        return {
+          ok: false,
+          code: 'validation_error',
+          message: 'Simulation payload is invalid.',
+          state: {
+            status: 'error',
+            message: 'Simulation payload is invalid.',
+            fieldErrors: {
+              responsePayload: 'Simulation payload is invalid.',
+            },
+          },
+        }
+      }
+      const simulation = executeAdminAssessmentSimulation(version.normalizedPackage, normalizedSimulationRequest)
+      if (!simulation.ok || !simulation.result) {
+        return {
+          ok: false,
+          code: 'validation_error',
+          message: 'Simulation could not be executed because the sample responses are invalid.',
+          state: {
+            status: 'error',
+            message: 'Simulation could not be executed because the sample responses are invalid.',
+            fieldErrors: {
+              responsePayload: simulation.errors[0]?.message ?? 'Simulation input is invalid.',
+            },
+          },
+        }
+      }
+
+      const actor = await deps.getActorIdentity(client)
+      const nowIso = deps.now().toISOString()
+
+      await writeAssessmentAuditEvent(client, {
+        createId: deps.createId,
+        actor,
+        nowIso,
+        eventType: simulation.warnings.length > 0 ? 'assessment_simulation_completed_with_warnings' : 'assessment_simulation_completed',
+        summary: `Simulation executed for ${assessmentName} v${version.versionLabel} · ${simulation.result.responseSummary.answeredCount} answers · ${simulation.result.outputs.filter((output) => output.triggered).length} outputs fired${simulation.warnings.length > 0 ? ` · ${simulation.warnings.length} warning(s)` : ''}.`,
+        assessmentId: input.assessmentId,
+        assessmentName,
+        versionId: input.versionId,
+        versionLabel: version.versionLabel,
+        metadata: {
+          answeredCount: simulation.result.responseSummary.answeredCount,
+          outputCount: simulation.result.outputs.filter((output) => output.triggered).length,
+          warningCount: simulation.warnings.length,
+          source: simulation.result.responseSummary.source,
+          scenarioKey: simulation.result.responseSummary.scenarioKey,
+        },
+      })
+
+      return {
+        ok: true,
+        code: 'simulated',
+        message: 'Simulation completed successfully.',
+        state: {
+          status: 'success',
+          message: simulation.warnings.length > 0
+            ? 'Simulation completed with warnings. Review the evidence before publish.'
+            : 'Simulation completed successfully.',
+          result: simulation.result,
+        },
+      }
+    })
+  } catch (error) {
+    console.error('[admin-assessment-management] Failed to simulate version.', error)
+    return {
+      ok: false,
+      code: 'unknown_error',
+      message: describeDatabaseError(error),
+      state: {
+        status: 'error',
+        message: describeDatabaseError(error),
+      },
     }
   }
 }

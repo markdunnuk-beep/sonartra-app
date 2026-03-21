@@ -1,5 +1,5 @@
 import React from 'react'
-import { Activity, ArrowLeft, FileJson2, GitCompareArrows, ShieldCheck } from 'lucide-react'
+import { Activity, ArrowLeft, FileJson2, FlaskConical, GitCompareArrows, ShieldCheck } from 'lucide-react'
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
 import { AdminAssessmentVersionPackageImportForm } from '@/components/admin/surfaces/AdminAssessmentVersionPackageImportForm'
 import { Badge, EmptyState, MetaGrid, SurfaceSection, Table } from '@/components/admin/surfaces/AdminWireframePrimitives'
@@ -12,6 +12,7 @@ import {
   getAdminAssessmentVersionDiff,
   getAdminAssessmentVersionReadiness,
 } from '@/lib/admin/domain/assessment-package-review'
+import { getAdminAssessmentSimulationWorkspaceStatus } from '@/lib/admin/domain/assessment-simulation'
 import { formatAdminRelativeTime, formatAdminTimestamp } from '@/lib/admin/wireframe'
 
 function getPackageTone(status: AdminAssessmentVersionRecord['packageInfo']['status']) {
@@ -84,6 +85,7 @@ export function AdminAssessmentVersionDetailSurface({
   const preview = getAdminAssessmentPackagePreviewSummary(version)
   const readiness = getAdminAssessmentVersionReadiness(version)
   const diff = getAdminAssessmentVersionDiff(version, detailData.versions, detailData.assessment.currentPublishedVersionId)
+  const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(version)
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -97,6 +99,7 @@ export function AdminAssessmentVersionDetailSurface({
           <div className="flex flex-wrap gap-2">
             <Button href={`/admin/assessments/${detailData.assessment.id}?tab=versions`} variant="ghost"><ArrowLeft className="mr-2 h-4 w-4" />Back to versions</Button>
             {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/import`} variant="secondary"><FileJson2 className="mr-2 h-4 w-4" />Import package</Button> : null}
+            {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/simulate`} variant="ghost"><FlaskConical className="mr-2 h-4 w-4" />Simulate</Button> : null}
             <Button href={buildAdminAuditHref({ entityType: 'assessment_version', entityId: version.id })} variant="ghost"><Activity className="mr-2 h-4 w-4" />View audit</Button>
           </div>
         )}
@@ -248,6 +251,16 @@ export function AdminAssessmentVersionDetailSurface({
                 <EvidenceList items={readiness.warnings} tone="amber" />
               </div>
             ) : null}
+
+            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge label={simulationStatus.statusLabel} tone={simulationStatus.canRunSimulation ? 'sky' : 'rose'} />
+                <p className="text-sm text-textSecondary">{simulationStatus.summary}</p>
+              </div>
+              <div className="mt-4">
+                <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/simulate`} variant="secondary">Open simulation workspace</Button>
+              </div>
+            </div>
           </div>
         </SurfaceSection>
       </div>

@@ -4,11 +4,13 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { AdminAssessmentPackageImportState, AdminAssessmentVersionMutationState } from '@/lib/admin/domain/assessment-management'
 import { buildAdminAssessmentVersionMutationState } from '@/lib/admin/domain/assessment-management'
+import type { AdminAssessmentSimulationActionState } from '@/lib/admin/domain/assessment-simulation'
 import {
   archiveAdminAssessmentVersion,
   createAdminAssessmentDraftVersion,
   importAdminAssessmentPackage,
   publishAdminAssessmentVersion,
+  simulateAdminAssessmentVersion,
 } from '@/lib/admin/server/assessment-management'
 
 function revalidateAssessmentPaths(assessmentId: string, versionLabel?: string) {
@@ -17,8 +19,32 @@ function revalidateAssessmentPaths(assessmentId: string, versionLabel?: string) 
   if (versionLabel) {
     revalidatePath(`/admin/assessments/${assessmentId}/versions/${versionLabel}`)
     revalidatePath(`/admin/assessments/${assessmentId}/versions/${versionLabel}/import`)
+    revalidatePath(`/admin/assessments/${assessmentId}/versions/${versionLabel}/simulate`)
   }
   revalidatePath('/admin/audit')
+}
+
+export async function submitAdminAssessmentSimulationAction(
+  _previousState: AdminAssessmentSimulationActionState,
+  formData: FormData,
+): Promise<AdminAssessmentSimulationActionState> {
+  const assessmentId = String(formData.get('assessmentId') ?? '')
+  const versionId = String(formData.get('versionId') ?? '')
+  const result = await simulateAdminAssessmentVersion({
+    assessmentId,
+    versionId,
+    responsePayload: String(formData.get('responsePayload') ?? ''),
+  })
+
+  if (!result.ok && result.code === 'permission_denied') {
+    redirect('/sign-in')
+  }
+
+  if (result.ok) {
+    revalidatePath('/admin/audit')
+  }
+
+  return result.state
 }
 
 export async function submitAdminAssessmentCreateDraftVersionAction(
