@@ -130,8 +130,18 @@ interface AssessmentRegistryQueryDependencies {
   queryDb: typeof queryDb
 }
 
+interface AssessmentDetailQueryDependencies {
+  queryDb: typeof queryDb
+  getScopedAdminAuditActivity: typeof getScopedAdminAuditActivity
+}
+
 const defaultAssessmentRegistryQueryDependencies: AssessmentRegistryQueryDependencies = {
   queryDb,
+}
+
+const defaultAssessmentDetailQueryDependencies: AssessmentDetailQueryDependencies = {
+  queryDb,
+  getScopedAdminAuditActivity,
 }
 
 export interface AdminCreateAssessmentInput {
@@ -894,6 +904,54 @@ function classifyAssessmentRegistryLoadFailure(error: unknown): AdminAssessmentR
   }
 }
 
+function isMissingRelationError(error: unknown, relationName: string): boolean {
+  const { code, message } = extractDatabaseFailureDetails(error)
+  return code === '42P01' && message.toLowerCase().includes(`relation "${relationName.toLowerCase()}" does not exist`)
+}
+
+async function loadAssessmentSavedScenarioRows(
+  assessmentId: string,
+  query: typeof queryDb,
+): Promise<AssessmentSavedScenarioRow[]> {
+  try {
+    const result = await query<AssessmentSavedScenarioRow>(
+      `select
+         scenarios.id,
+         scenarios.assessment_version_id,
+         av.version_label,
+         scenarios.name,
+         scenarios.description,
+         scenarios.scenario_payload,
+         scenarios.status,
+         scenarios.source_version_id,
+         source_version.version_label as source_version_label,
+         scenarios.source_scenario_id,
+         scenarios.provenance_json,
+         scenarios.created_at,
+         scenarios.updated_at,
+         scenarios.archived_at,
+         created_by.full_name as created_by_name,
+         updated_by.full_name as updated_by_name
+       from assessment_version_saved_scenarios scenarios
+       inner join assessment_versions av on av.id = scenarios.assessment_version_id
+       left join assessment_versions source_version on source_version.id = scenarios.source_version_id
+       left join admin_identities created_by on created_by.id = scenarios.created_by_identity_id
+       left join admin_identities updated_by on updated_by.id = scenarios.updated_by_identity_id
+       where av.assessment_definition_id = $1
+       order by av.version_label desc, lower(scenarios.name) asc`,
+      [assessmentId],
+    )
+
+    return result.rows ?? []
+  } catch (error) {
+    if (isMissingRelationError(error, 'assessment_version_saved_scenarios')) {
+      return []
+    }
+
+    throw error
+  }
+}
+
 export async function getAdminAssessmentRegistryData(
   searchParams?: Record<string, string | string[] | undefined>,
   deps: AssessmentRegistryQueryDependencies = defaultAssessmentRegistryQueryDependencies,
@@ -975,9 +1033,12 @@ export async function getAdminAssessmentRegistryData(
   }
 }
 
-export async function getAdminAssessmentDetailData(assessmentId: string): Promise<AdminAssessmentDetailData | null> {
+export async function getAdminAssessmentDetailData(
+  assessmentId: string,
+  deps: AssessmentDetailQueryDependencies = defaultAssessmentDetailQueryDependencies,
+): Promise<AdminAssessmentDetailData | null> {
   const [summaryResult, versionsResult, savedScenariosResult, activity] = await Promise.all([
-    queryDb<AssessmentSummaryRow>(
+    deps.queryDb<AssessmentSummaryRow>(
       `select
          ad.id,
          ad.key,
@@ -993,10 +1054,10 @@ export async function getAdminAssessmentDetailData(assessmentId: string): Promis
        from assessment_definitions ad
        left join assessment_versions current_version on current_version.id = ad.current_published_version_id
        where ad.id = $1
-       limit 1`,
+      limit 1`,
       [assessmentId],
     ),
-    queryDb<AssessmentVersionRow>(
+    deps.queryDb<AssessmentVersionRow>(
       `select
          av.id,
          av.assessment_definition_id,
@@ -1044,34 +1105,8 @@ export async function getAdminAssessmentDetailData(assessmentId: string): Promis
          av.version_label desc`,
       [assessmentId],
     ),
-    queryDb<AssessmentSavedScenarioRow>(
-      `select
-         scenarios.id,
-         scenarios.assessment_version_id,
-         av.version_label,
-         scenarios.name,
-         scenarios.description,
-         scenarios.scenario_payload,
-         scenarios.status,
-         scenarios.source_version_id,
-         source_version.version_label as source_version_label,
-         scenarios.source_scenario_id,
-         scenarios.provenance_json,
-         scenarios.created_at,
-         scenarios.updated_at,
-         scenarios.archived_at,
-         created_by.full_name as created_by_name,
-         updated_by.full_name as updated_by_name
-       from assessment_version_saved_scenarios scenarios
-       inner join assessment_versions av on av.id = scenarios.assessment_version_id
-       left join assessment_versions source_version on source_version.id = scenarios.source_version_id
-       left join admin_identities created_by on created_by.id = scenarios.created_by_identity_id
-       left join admin_identities updated_by on updated_by.id = scenarios.updated_by_identity_id
-       where av.assessment_definition_id = $1
-       order by av.version_label desc, lower(scenarios.name) asc`,
-      [assessmentId],
-    ),
-    getScopedAdminAuditActivity({ entityType: 'assessment', entityId: assessmentId, includeSecondaryEntityType: 'assessment_version', limit: 40 }),
+    loadAssessmentSavedScenarioRows(assessmentId, deps.queryDb),
+    deps.getScopedAdminAuditActivity({ entityType: 'assessment', entityId: assessmentId, includeSecondaryEntityType: 'assessment_version', limit: 40 }),
   ])
 
   const assessment = mapAssessmentSummaryRow(summaryResult.rows[0])
@@ -1080,7 +1115,7 @@ export async function getAdminAssessmentDetailData(assessmentId: string): Promis
     return null
   }
 
-  const versions = mapAssessmentVersionRows(versionsResult.rows ?? [], mapSavedScenarioRows(savedScenariosResult.rows ?? []))
+  const versions = mapAssessmentVersionRows(versionsResult.rows ?? [], mapSavedScenarioRows(savedScenariosResult))
   const latestDraft = versions.find((version) => version.lifecycleStatus === 'draft') ?? null
   const latestPublished = versions.find((version) => version.lifecycleStatus === 'published') ?? null
   const latestVersionUpdatedAt = versions[0]?.updatedAt ?? null
@@ -1416,35 +1451,7 @@ async function loadAssessmentVersionsForScenarioWork(
 }
 
 async function loadAssessmentSavedScenariosForAssessment(client: PoolClient, assessmentId: string): Promise<Map<string, AdminAssessmentSavedScenarioRecord[]>> {
-  const result = await client.query<AssessmentSavedScenarioRow>(
-    `select
-       scenarios.id,
-       scenarios.assessment_version_id,
-       av.version_label,
-       scenarios.name,
-       scenarios.description,
-       scenarios.scenario_payload,
-       scenarios.status,
-       scenarios.source_version_id,
-       source_version.version_label as source_version_label,
-       scenarios.source_scenario_id,
-       scenarios.provenance_json,
-       scenarios.created_at,
-       scenarios.updated_at,
-       scenarios.archived_at,
-       created_by.full_name as created_by_name,
-       updated_by.full_name as updated_by_name
-     from assessment_version_saved_scenarios scenarios
-     inner join assessment_versions av on av.id = scenarios.assessment_version_id
-     left join assessment_versions source_version on source_version.id = scenarios.source_version_id
-     left join admin_identities created_by on created_by.id = scenarios.created_by_identity_id
-     left join admin_identities updated_by on updated_by.id = scenarios.updated_by_identity_id
-     where av.assessment_definition_id = $1
-     order by av.version_label desc, lower(scenarios.name) asc`,
-    [assessmentId],
-  )
-
-  return mapSavedScenarioRows(result.rows ?? [])
+  return mapSavedScenarioRows(await loadAssessmentSavedScenarioRows(assessmentId, client.query.bind(client)))
 }
 
 async function loadExistingScenarioNames(client: PoolClient, versionId: string): Promise<Set<string>> {
