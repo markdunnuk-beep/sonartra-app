@@ -331,6 +331,7 @@ export function AdminDashboardSurface() {
         eyebrow="Administrator platform"
         title="Operational control for Sonartra platform state"
         description="A high-signal command layer for tenant oversight, assessment release readiness, access posture, and audit evidence across Sonartra operations."
+        showDashboardButton={false}
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <div className="rounded-2xl border border-border/75 bg-bg/45 px-4 py-3 text-right">
