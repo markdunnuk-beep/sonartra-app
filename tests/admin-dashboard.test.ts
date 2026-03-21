@@ -68,3 +68,9 @@ test('dashboard assessment queue item routes into the canonical assessments work
 
   assert.equal(assessmentQueueItem?.href, '/admin/assessments')
 })
+
+test('dashboard audit queue item routes into the canonical audit workspace', () => {
+  const auditQueueItem = adminDashboardModel.controlQueue.find((item) => item.id === 'audit-sensitive')
+
+  assert.equal(auditQueueItem?.href, '/admin/audit')
+})

@@ -42,3 +42,10 @@ test('assessment navigation item points to the canonical assessments route', () 
   assert.equal(assessmentItem?.href, '/admin/assessments')
   assert.equal(assessmentItem?.startsWith, '/admin/assessments')
 })
+
+test('audit navigation item points to the canonical audit route', () => {
+  const auditItem = getAdminNavigationItems(access).find((item) => item.label === 'Audit')
+
+  assert.equal(auditItem?.href, '/admin/audit')
+  assert.equal(auditItem?.startsWith, '/admin/audit')
+})
