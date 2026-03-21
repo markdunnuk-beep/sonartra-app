@@ -50,9 +50,15 @@ export interface AdminOrganisationActivityRecord {
   id: string
   eventType: string
   summary: string
+  actorId?: string | null
   actorName: string | null
   happenedAt: string
   source: 'audit' | 'membership' | 'organisation'
+  organisationId?: string | null
+  organisationName?: string | null
+  entityType?: 'organisation' | 'membership' | 'user' | 'admin_access'
+  entityId?: string | null
+  entityName?: string | null
 }
 
 export interface AdminOrganisationDetailData {

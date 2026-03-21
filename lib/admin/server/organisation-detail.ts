@@ -1,4 +1,5 @@
 import { queryDb } from '@/lib/db'
+import { getOrganisationAuditActivity, mapAdminAuditEventRows } from '@/lib/admin/server/audit-workspace'
 import type {
   AdminOrganisationActivityRecord,
   AdminOrganisationAssessmentRecord,
@@ -56,8 +57,16 @@ interface OrganisationActivityRow {
   event_type: string | null
   summary: string | null
   actor_name: string | null
+  actor_id?: string | null
   happened_at: string | Date | null
   source: 'audit' | 'membership' | 'organisation' | null
+  organisation_id?: string | null
+  organisation_name?: string | null
+  entity_type?: string | null
+  entity_id?: string | null
+  entity_name?: string | null
+  entity_secondary?: string | null
+  is_derived?: boolean | null
 }
 
 type TimestampInput = string | Date | null | undefined
@@ -207,109 +216,30 @@ export function mapOrganisationAssessmentRows(rows: OrganisationAssessmentRow[])
 }
 
 export function mapOrganisationActivityRows(rows: OrganisationActivityRow[]): AdminOrganisationActivityRecord[] {
-  return (rows ?? []).flatMap((row) => {
-    const id = normaliseRequiredString(row.id, 'activity.id', { row })
-    const eventType = normaliseRequiredString(row.event_type, 'activity.event_type', { row })
-    const summary = normaliseRequiredString(row.summary, 'activity.summary', { row })
-    const happenedAt = normaliseTimestamp(row.happened_at)
-
-    if (!id || !eventType || !summary || !happenedAt) {
-      if (!happenedAt) {
-        logOrganisationDetailInvariant('Missing or invalid activity.happened_at while assembling organisation detail data.', { row })
-      }
-
-      return []
-    }
-
-    return [{
-      id,
-      eventType,
-      summary,
-      actorName: normaliseOptionalString(row.actor_name),
-      happenedAt,
-      source: row.source ?? 'audit',
-    }]
-  })
-}
-
-async function getOrganisationScopedActivity(organisationId: string): Promise<AdminOrganisationActivityRecord[]> {
-  const activityResult = await queryDb<OrganisationActivityRow>(
-    `with organisation_events as (
-       select
-         concat('organisation-created-', o.id::text) as id,
-         'organisation_created' as event_type,
-         'Organisation record created.' as summary,
-         null::text as actor_name,
-         o.created_at as happened_at,
-         'organisation'::text as source
-       from organisations o
-       where o.id = $1
-     ),
-     membership_events as (
-       -- Derived membership rows fill truthful gaps until all organisation events are written directly into access_audit_events.
-       select
-         concat('membership-', om.id::text, '-invited') as id,
-         'membership_invited' as event_type,
-         concat(ai.full_name, ' invited with ', om.membership_role, ' access.') as summary,
-         null::text as actor_name,
-         om.invited_at as happened_at,
-         'membership'::text as source
-       from organisation_memberships om
-       inner join admin_identities ai on ai.id = om.identity_id
-       where om.organisation_id = $1 and om.invited_at is not null
-
-       union all
-
-       select
-         concat('membership-', om.id::text, '-joined') as id,
-         'membership_joined' as event_type,
-         concat(ai.full_name, ' joined with ', om.membership_role, ' access.') as summary,
-         null::text as actor_name,
-         om.joined_at as happened_at,
-         'membership'::text as source
-       from organisation_memberships om
-       inner join admin_identities ai on ai.id = om.identity_id
-       where om.organisation_id = $1 and om.joined_at is not null
-
-       union all
-
-       select
-         concat('membership-', om.id::text, '-state') as id,
-         concat('membership_', om.membership_status) as event_type,
-         concat(ai.full_name, ' membership currently marked ', om.membership_status, '.') as summary,
-         null::text as actor_name,
-         coalesce(om.last_activity_at, om.joined_at, om.invited_at) as happened_at,
-         'membership'::text as source
-       from organisation_memberships om
-       inner join admin_identities ai on ai.id = om.identity_id
-       where om.organisation_id = $1 and om.membership_status in ('inactive', 'suspended')
-     ),
-     audit_events as (
-       select
-         id::text,
-         event_type,
-         event_summary as summary,
-         actor_name,
-         happened_at,
-         'audit'::text as source
-       from access_audit_events
-       where organisation_id = $1
-     )
-     select id, event_type, summary, actor_name, happened_at, source
-     from (
-       select * from organisation_events
-       union all
-       select * from membership_events
-       union all
-       select * from audit_events
-     ) scoped_activity
-     where happened_at is not null
-     order by happened_at desc, id desc
-     limit 40`,
-    [organisationId],
-  )
-
-  return mapOrganisationActivityRows(activityResult.rows ?? [])
+  return mapAdminAuditEventRows((rows ?? []).map((row) => ({
+    ...row,
+    actor_id: row.actor_id ?? null,
+    organisation_id: row.organisation_id ?? null,
+    organisation_name: row.organisation_name ?? null,
+    entity_type: row.entity_type ?? (row.source === 'organisation' ? 'organisation' : row.source === 'membership' ? 'membership' : 'user'),
+    entity_id: row.entity_id ?? null,
+    entity_name: row.entity_name ?? null,
+    entity_secondary: row.entity_secondary ?? null,
+    is_derived: row.is_derived ?? (row.source === 'audit' ? false : true),
+  })) as Parameters<typeof mapAdminAuditEventRows>[0]).map((event) => ({
+    id: event.id,
+    eventType: event.eventType,
+    summary: event.summary,
+    actorId: event.actorId,
+    actorName: event.actorName,
+    happenedAt: event.happenedAt,
+    source: event.source,
+    organisationId: event.organisationId,
+    organisationName: event.organisationName,
+    entityType: event.entityType,
+    entityId: event.entityId,
+    entityName: event.entityName,
+  }))
 }
 
 export async function getAdminOrganisationDetailData(organisationId: string): Promise<AdminOrganisationDetailData | null> {
@@ -420,7 +350,7 @@ export async function getAdminOrganisationDetailData(organisationId: string): Pr
       group by av.id, av.name, av.key, av.is_active
       order by max(a.updated_at) desc nulls last, lower(av.name) asc
     `, [organisationId]),
-    getOrganisationScopedActivity(organisationId),
+    getOrganisationAuditActivity(organisationId),
   ])
 
   return {

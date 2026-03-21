@@ -28,6 +28,7 @@ import {
   type AdminOrganisationMemberFilters,
 } from '@/lib/admin/domain/organisation-memberships'
 import { formatAdminRelativeTime, formatAdminTimestamp } from '@/lib/admin/wireframe'
+import { buildAdminAuditHref, getAdminAuditEventLabel, getAdminAuditEventTone } from '@/lib/admin/domain/audit'
 
 function getTabHref(organisationId: string, tab: AdminOrganisationDetailTab): string {
   return tab === 'overview'
@@ -35,21 +36,6 @@ function getTabHref(organisationId: string, tab: AdminOrganisationDetailTab): st
     : `/admin/organisations/${organisationId}?tab=${tab}`
 }
 
-function getActivityTone(eventType: string) {
-  if (/invite|pending/i.test(eventType)) {
-    return 'amber' as const
-  }
-
-  if (/flag|suspend|archive|deactiv/i.test(eventType)) {
-    return 'rose' as const
-  }
-
-  if (/sign_in|checkpoint|review|confirm|created|joined|reactivat/i.test(eventType)) {
-    return 'sky' as const
-  }
-
-  return 'slate' as const
-}
 
 function getFlashMessage(mutation?: string | null): string | null {
   switch (mutation) {
@@ -91,7 +77,7 @@ function ActivityList({ activity, emptyCopy }: { activity: AdminOrganisationActi
       {activity.map((event) => (
         <div key={event.id} className="rounded-2xl border border-white/[0.07] bg-bg/55 px-4 py-3.5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge label={event.eventType.replace(/_/g, ' ')} tone={getActivityTone(event.eventType)} />
+            <Badge label={getAdminAuditEventLabel(event.eventType)} tone={getAdminAuditEventTone(event.eventType, event.source)} />
             <Badge label={event.source} tone="slate" />
             <span className="text-xs text-textSecondary">{event.actorName ?? 'System'}</span>
             <span className="text-xs text-textSecondary">{formatAdminTimestamp(event.happenedAt)}</span>
@@ -133,7 +119,7 @@ function HeaderMetadata({ detailData }: { detailData: AdminOrganisationDetailDat
             <Archive className="mr-2 h-4 w-4" />
             {organisation.status === 'suspended' ? 'Restore lifecycle' : 'Deactivate organisation'}
           </Button>
-          <Button href={getTabHref(organisation.id, 'activity')} variant="ghost">
+          <Button href={buildAdminAuditHref({ organisationId: organisation.id })} variant="ghost">
             <Activity className="mr-2 h-4 w-4" />
             View audit trail
           </Button>
@@ -203,7 +189,7 @@ function OverviewTab({ detailData }: { detailData: AdminOrganisationDetailData }
                 value: (
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge label={event.eventType.replace(/_/g, ' ')} tone={getActivityTone(event.eventType)} />
+                      <Badge label={getAdminAuditEventLabel(event.eventType)} tone={getAdminAuditEventTone(event.eventType, event.source)} />
                       <Badge label={event.source} tone="slate" />
                       <span className="text-xs text-textSecondary">{event.actorName ?? 'System'}</span>
                     </div>
@@ -287,7 +273,7 @@ function ActivityTab({ detailData }: { detailData: AdminOrganisationDetailData }
       title="Organisation audit trail"
       eyebrow="Scoped activity"
       description="Audit, lifecycle, creation, and derived membership events filtered to the selected organisation."
-      actions={<Button href="/admin/audit" variant="ghost">Open shared audit workspace</Button>}
+      actions={<Button href={buildAdminAuditHref({ organisationId: detailData.organisation.id })} variant="ghost">Open shared audit workspace</Button>}
     >
       <ActivityList
         activity={detailData.auditTrail}

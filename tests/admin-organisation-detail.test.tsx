@@ -106,6 +106,7 @@ test('organisation detail overview renders production detail workspace sections 
   assert.match(html, /Organisation changes saved successfully\./)
   assert.match(html, /Recent activity/)
   assert.match(html, /View audit trail/)
+  assert.match(html, /\/admin\/audit\?organisationId=20000000-0000-4000-8000-000000000001/)
 })
 
 test('organisation members management surface wires roster operations and direct user links', async () => {
@@ -132,6 +133,7 @@ test('organisation detail activity tab renders scoped audit trail rows', () => {
   assert.match(html, /Organisation record updated/)
   assert.match(html, /membership joined/i)
   assert.match(html, /Open shared audit workspace/)
+  assert.match(html, /\/admin\/audit\?organisationId=20000000-0000-4000-8000-000000000001/)
 })
 
 test('organisation detail settings tab renders safe metadata and future control placeholders', () => {
