@@ -1,4 +1,4 @@
-import { Building2, ClipboardCheck, LayoutDashboard, Lock, Settings, UserSquare2 } from 'lucide-react';
+import { Building2, ClipboardCheck, LayoutDashboard, Lock, Settings, Shield, UserSquare2 } from 'lucide-react';
 
 export interface SidebarLink {
   href: string;
@@ -9,7 +9,7 @@ export interface SidebarLink {
   badge?: string;
 }
 
-export function getSidebarLinks(hasCompletedAssessment: boolean): SidebarLink[] {
+export function getSidebarLinks(hasCompletedAssessment: boolean, adminHref?: string | null): SidebarLink[] {
   const links: SidebarLink[] = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/assessment', label: 'Assessment', icon: ClipboardCheck },
@@ -17,6 +17,10 @@ export function getSidebarLinks(hasCompletedAssessment: boolean): SidebarLink[] 
 
   if (hasCompletedAssessment) {
     links.push({ href: '/results/individual', label: 'Individual Results', icon: UserSquare2, startsWith: '/results/individual' });
+  }
+
+  if (adminHref) {
+    links.push({ href: adminHref, label: 'Admin', icon: Shield, startsWith: adminHref });
   }
 
   links.push({ href: '/organisation', label: 'Organisation', icon: Building2, startsWith: '/organisation', locked: true, badge: 'Premium' });

@@ -29,11 +29,13 @@ export interface AdminNavigationItem {
   requiredCapabilities: AdminCapability[]
 }
 
+export const canonicalAdminLandingHref = '/admin'
+
 export const adminNavigationItems: AdminNavigationItem[] = [
   {
     key: AdminModuleKey.Dashboard,
     label: 'Dashboard',
-    href: '/admin',
+    href: canonicalAdminLandingHref,
     iconKey: 'dashboard',
     description: 'Control overview for tenant posture, release readiness, and audit signals.',
     requiredRoles: Object.values(InternalAdminRole),
