@@ -30,6 +30,7 @@ interface OrganisationSummaryRow {
 }
 
 interface OrganisationMemberRow {
+  membership_id: string | null
   identity_id: string | null
   full_name: string | null
   email: string | null
@@ -158,17 +159,19 @@ export function mapOrganisationSummaryRow(row: OrganisationSummaryRow): AdminOrg
 
 export function mapOrganisationMemberRows(rows: OrganisationMemberRow[]): AdminOrganisationMemberRecord[] {
   return (rows ?? []).flatMap((row) => {
+    const membershipId = normaliseRequiredString(row.membership_id, 'member.membership_id', { row })
     const identityId = normaliseRequiredString(row.identity_id, 'member.identity_id', { row })
     const fullName = normaliseRequiredString(row.full_name, 'member.full_name', { row })
     const email = normaliseRequiredString(row.email, 'member.email', { row })
     const role = normaliseRequiredString(row.role, 'member.role', { row })
     const accessStatus = normaliseRequiredString(row.access_status, 'member.access_status', { row })
 
-    if (!identityId || !fullName || !email || !role || !accessStatus) {
+    if (!membershipId || !identityId || !fullName || !email || !role || !accessStatus) {
       return []
     }
 
     return [{
+      membershipId,
       identityId,
       fullName,
       email,
@@ -388,6 +391,7 @@ export async function getAdminOrganisationDetailData(organisationId: string): Pr
   const [membersResult, assessmentsResult, auditTrail] = await Promise.all([
     queryDb<OrganisationMemberRow>(`
       select
+        om.id as membership_id,
         om.identity_id,
         ai.full_name,
         ai.email,

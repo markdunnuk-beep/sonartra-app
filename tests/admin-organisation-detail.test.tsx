@@ -39,6 +39,7 @@ const detailData = {
   },
   members: [
     {
+      membershipId: '50000000-0000-4000-8000-000000000001',
       identityId: '30000000-0000-4000-8000-000000000005',
       fullName: 'Alex Mercer',
       email: 'alex.mercer@northstarlogistics.com',
@@ -107,14 +108,21 @@ test('organisation detail overview renders production detail workspace sections 
   assert.match(html, /View audit trail/)
 })
 
-test('organisation detail members tab renders the linked admin user roster', () => {
-  const html = renderToStaticMarkup(<AdminOrganisationDetailSurface detailData={detailData} activeTab="members" />)
+test('organisation members management surface wires roster operations and direct user links', async () => {
+  const [surfaceSource, managerSource] = await Promise.all([
+    readFile(new URL('../components/admin/surfaces/AdminOrganisationDetailSurface.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/admin/surfaces/AdminOrganisationMembersManager.tsx', import.meta.url), 'utf8'),
+  ])
 
-  assert.match(html, /Tenant membership roster/)
-  assert.match(html, /Alex Mercer/)
-  assert.match(html, /alex\.mercer@northstarlogistics\.com/)
-  assert.match(html, /\/admin\/users\/30000000-0000-4000-8000-000000000005/)
-  assert.match(html, /Joined/)
+  assert.match(surfaceSource, /AdminOrganisationMembersManager/)
+  assert.match(managerSource, /\/admin\/users\/\$\{member\.identityId\}/)
+  assert.match(managerSource, /Update role/)
+  assert.match(managerSource, /Suspend/)
+  assert.match(managerSource, /Remove/)
+  assert.match(managerSource, /Add member \/ invite/)
+  assert.match(managerSource, /membersSearch/)
+  assert.match(managerSource, /memberStatus/)
+  assert.match(managerSource, /memberRole/)
 })
 
 test('organisation detail activity tab renders scoped audit trail rows', () => {
@@ -168,6 +176,7 @@ test('organisation detail server mapping normalises summary, members, assessment
     last_operational_activity_at: '2026-03-20T09:00:00Z',
   })
   const members = mapOrganisationMemberRows([{
+    membership_id: 'membership-1',
     identity_id: 'identity-1',
     full_name: 'Alex Mercer',
     email: 'alex@example.com',
@@ -197,6 +206,7 @@ test('organisation detail server mapping normalises summary, members, assessment
 
   assert.equal(summary?.assignedAssessments, 3)
   assert.equal(summary?.assessmentCatalogCount, 1)
+  assert.equal(members[0]?.membershipId, 'membership-1')
   assert.equal(members[0]?.email, 'alex@example.com')
   assert.equal(assessments[0]?.publishState, 'published')
   assert.equal(activity[0]?.actorName, 'Bianca Ng')
@@ -204,10 +214,12 @@ test('organisation detail server mapping normalises summary, members, assessment
 })
 
 test('organisation detail route and edit workspace wire server loading and operator controls', async () => {
-  const [routeSource, editRouteSource, actionSource, notFoundSource, registrySource, layoutSource] = await Promise.all([
+  const [routeSource, editRouteSource, actionSource, membershipActionSource, memberNewRouteSource, notFoundSource, registrySource, layoutSource] = await Promise.all([
     readFile(new URL('../app/admin/organisations/[organisationId]/page.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../app/admin/organisations/[organisationId]/edit/page.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../app/admin/organisations/[organisationId]/edit/actions.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../app/admin/organisations/[organisationId]/members/actions.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../app/admin/organisations/[organisationId]/members/new/page.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../app/admin/organisations/[organisationId]/not-found.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../components/admin/surfaces/AdminOrganisationsRegistryClient.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../app/admin/layout.tsx', import.meta.url), 'utf8'),
@@ -218,6 +230,11 @@ test('organisation detail route and edit workspace wire server loading and opera
   assert.match(editRouteSource, /AdminOrganisationEditForm/)
   assert.match(actionSource, /updateAdminOrganisation/)
   assert.match(actionSource, /transitionAdminOrganisationStatus/)
+  assert.match(membershipActionSource, /addAdminOrganisationMembership/)
+  assert.match(membershipActionSource, /inviteAdminOrganisationMember/)
+  assert.match(membershipActionSource, /updateAdminOrganisationMembershipRole/)
+  assert.match(membershipActionSource, /updateAdminOrganisationMembershipStatus/)
+  assert.match(memberNewRouteSource, /getAdminOrganisationMembershipCandidates/)
   assert.match(notFoundSource, /Organisation not found/)
   assert.match(registrySource, /\/admin\/organisations\/\$\{organisation\.id\}/)
   assert.match(layoutSource, /resolveAdminAccess/)

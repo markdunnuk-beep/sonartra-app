@@ -1,5 +1,4 @@
 import React from 'react'
-import Link from 'next/link'
 import { Activity, Archive, PencilLine } from 'lucide-react'
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
 import {
@@ -13,6 +12,7 @@ import {
   Table,
   Tabs,
 } from '@/components/admin/surfaces/AdminWireframePrimitives'
+import { AdminOrganisationMembersManager } from '@/components/admin/surfaces/AdminOrganisationMembersManager'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import {
@@ -23,6 +23,10 @@ import {
   type AdminOrganisationDetailData,
   type AdminOrganisationDetailTab,
 } from '@/lib/admin/domain/organisation-detail'
+import {
+  filterAdminOrganisationMembers,
+  type AdminOrganisationMemberFilters,
+} from '@/lib/admin/domain/organisation-memberships'
 import { formatAdminRelativeTime, formatAdminTimestamp } from '@/lib/admin/wireframe'
 
 function getTabHref(organisationId: string, tab: AdminOrganisationDetailTab): string {
@@ -55,6 +59,18 @@ function getFlashMessage(mutation?: string | null): string | null {
       return 'Organisation moved to the suspended lifecycle state.'
     case 'reactivated':
       return 'Organisation restored to an active lifecycle state.'
+    case 'member-added':
+      return 'Organisation membership created successfully.'
+    case 'member-invited':
+      return 'Invitation recorded successfully. No email has been sent from this admin surface yet.'
+    case 'member-role-updated':
+      return 'Organisation membership role updated successfully.'
+    case 'member-suspended':
+      return 'Organisation membership suspended successfully.'
+    case 'member-restored':
+      return 'Organisation membership restored successfully.'
+    case 'member-removed':
+      return 'Organisation membership removed without deleting the underlying user.'
     default:
       return null
   }
@@ -206,48 +222,16 @@ function OverviewTab({ detailData }: { detailData: AdminOrganisationDetailData }
   )
 }
 
-function MembersTab({ detailData }: { detailData: AdminOrganisationDetailData }) {
-  const { members, organisation } = detailData
+function MembersTab({ detailData, filters }: { detailData: AdminOrganisationDetailData; filters: AdminOrganisationMemberFilters }) {
+  const filteredMembers = filterAdminOrganisationMembers(detailData.members, filters)
 
   return (
-    <SurfaceSection
-      title="Members"
-      eyebrow="Directory"
-      description="Tenant membership roster with role, access state, invitation timing, and most recent activity signal."
-    >
-      {members.length ? (
-        <Table
-          columns={["Name", "Role", "Access status", "Joined / invited", "Last activity"]}
-          rows={members.map((member) => [
-            <div key={`${member.identityId}-name`} className="space-y-1">
-              <Link href={`/admin/users/${member.identityId}`} className="block truncate text-sm font-semibold text-textPrimary hover:text-accent">
-                {member.fullName}
-              </Link>
-              <p className="break-all text-xs text-textSecondary">{member.email}</p>
-            </div>,
-            <div key={`${member.identityId}-role`}>
-              <StatusBadge status={member.role} />
-            </div>,
-            <div key={`${member.identityId}-status`} className="space-y-2">
-              <StatusBadge status={member.accessStatus} />
-            </div>,
-            <div key={`${member.identityId}-joined`} className="space-y-1">
-              <p className="text-sm font-medium text-textPrimary">{formatAdminTimestamp(member.joinedAt ?? member.invitedAt)}</p>
-              <p className="text-xs text-textSecondary">{member.joinedAt ? 'Joined' : 'Invited'} {formatAdminRelativeTime(member.joinedAt ?? member.invitedAt)}</p>
-            </div>,
-            <div key={`${member.identityId}-last-activity`} className="space-y-1">
-              <p className="text-sm font-medium text-textPrimary">{formatAdminRelativeTime(member.lastActivityAt)}</p>
-              <p className="text-xs text-textSecondary">{formatAdminTimestamp(member.lastActivityAt)}</p>
-            </div>,
-          ])}
-        />
-      ) : (
-        <EmptyState
-          title="No members are linked to this organisation"
-          detail={`No organisation membership rows were returned for ${organisation.name}. Once memberships exist they will appear here with role and access state metadata.`}
-        />
-      )}
-    </SurfaceSection>
+    <AdminOrganisationMembersManager
+      organisationId={detailData.organisation.id}
+      organisationName={detailData.organisation.name}
+      members={filteredMembers}
+      filters={filters}
+    />
   )
 }
 
@@ -364,10 +348,12 @@ export function AdminOrganisationDetailSurface({
   detailData,
   activeTab = 'overview',
   mutation,
+  memberFilters = { search: '', role: 'all', status: 'all' },
 }: {
   detailData: AdminOrganisationDetailData
   activeTab?: AdminOrganisationDetailTab
   mutation?: string | null
+  memberFilters?: AdminOrganisationMemberFilters
 }) {
   const resolvedTab = getAdminOrganisationDetailTab(activeTab)
   const { organisation } = detailData
@@ -412,7 +398,7 @@ export function AdminOrganisationDetailSurface({
       </div>
 
       {resolvedTab === 'overview' ? <OverviewTab detailData={detailData} /> : null}
-      {resolvedTab === 'members' ? <MembersTab detailData={detailData} /> : null}
+      {resolvedTab === 'members' ? <MembersTab detailData={detailData} filters={memberFilters} /> : null}
       {resolvedTab === 'assessments' ? <AssessmentsTab detailData={detailData} /> : null}
       {resolvedTab === 'activity' ? <ActivityTab detailData={detailData} /> : null}
       {resolvedTab === 'settings' ? <SettingsTab detailData={detailData} /> : null}
