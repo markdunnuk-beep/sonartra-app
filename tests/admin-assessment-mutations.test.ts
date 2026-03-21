@@ -2,10 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   archiveAdminAssessmentVersion,
+  cloneAdminAssessmentSavedScenario,
   createAdminAssessment,
   createAdminAssessmentDraftVersion,
   importAdminAssessmentPackage,
+  importAdminAssessmentSavedScenarios,
   publishAdminAssessmentVersion,
+  runAdminAssessmentScenarioSuite,
 } from '../lib/admin/server/assessment-management'
 
 function createBaseAccess(allowed = true) {
@@ -337,6 +340,412 @@ test('package import persists validation failure for missing sections and broken
   assert.equal(result.code, 'validation_error')
   assert.ok((result.validationResult?.errors.length ?? 0) >= 4)
   assert.deepEqual(auditEvents, ['assessment_package_validation_failed', 'assessment_package_validation_failed'])
+})
+
+test('bulk scenario copy-forward imports valid scenarios, skips invalid ones, and suffixes duplicate names', async () => {
+  const insertedNames: string[] = []
+  const auditEvents: string[] = []
+  const validScenarioPayload = JSON.stringify({
+    answers: [{ questionId: 'q1', optionId: 'q1.b' }],
+    locale: 'en',
+    source: 'manual_json',
+    scenarioKey: null,
+  })
+  const invalidScenarioPayload = '{"answers":[{"questionId":"q1"}]}'
+
+  const result = await importAdminAssessmentSavedScenarios({
+    assessmentId: 'assessment-1',
+    targetVersionId: 'version-3',
+    sourceVersionId: 'version-2',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        if (/from assessment_versions av/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'version-3',
+                assessment_definition_id: 'assessment-1',
+                version_label: '1.3.0',
+                lifecycle_status: 'draft',
+                source_type: 'import',
+                notes: 'Draft',
+                has_definition_payload: true,
+                definition_payload: JSON.parse(validPackage),
+                validation_status: 'valid',
+                package_status: 'valid',
+                package_schema_version: 'sonartra-assessment-package/v1',
+                package_source_type: 'manual_import',
+                package_imported_at: '2026-03-21T09:00:00.000Z',
+                package_source_filename: 'draft.json',
+                package_imported_by_name: 'Rina Patel',
+                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 2, scoringRuleCount: 1, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
+                created_at: '2026-03-21T09:00:00.000Z',
+                updated_at: '2026-03-21T09:00:00.000Z',
+                published_at: null,
+                archived_at: null,
+                created_by_name: 'Rina Patel',
+                updated_by_name: 'Rina Patel',
+                published_by_name: null,
+                latest_regression_suite_snapshot_json: null,
+              },
+              {
+                id: 'version-2',
+                assessment_definition_id: 'assessment-1',
+                version_label: '1.2.0',
+                lifecycle_status: 'published',
+                source_type: 'import',
+                notes: 'Published',
+                has_definition_payload: true,
+                definition_payload: JSON.parse(validPackage),
+                validation_status: 'valid',
+                package_status: 'valid',
+                package_schema_version: 'sonartra-assessment-package/v1',
+                package_source_type: 'manual_import',
+                package_imported_at: '2026-03-20T09:00:00.000Z',
+                package_source_filename: 'published.json',
+                package_imported_by_name: 'Rina Patel',
+                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 2, scoringRuleCount: 1, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
+                created_at: '2026-03-20T09:00:00.000Z',
+                updated_at: '2026-03-20T09:00:00.000Z',
+                published_at: '2026-03-20T09:00:00.000Z',
+                archived_at: null,
+                created_by_name: 'Rina Patel',
+                updated_by_name: 'Rina Patel',
+                published_by_name: 'Rina Patel',
+                latest_regression_suite_snapshot_json: null,
+              },
+            ],
+          }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'scenario-valid',
+                assessment_version_id: 'version-2',
+                version_label: '1.2.0',
+                name: 'Leadership baseline',
+                description: 'Valid scenario',
+                scenario_payload: JSON.parse(validScenarioPayload),
+                status: 'active',
+                source_version_id: null,
+                source_version_label: null,
+                source_scenario_id: null,
+                provenance_json: {},
+                created_at: '2026-03-20T09:00:00.000Z',
+                updated_at: '2026-03-20T09:00:00.000Z',
+                archived_at: null,
+                created_by_name: 'Rina Patel',
+                updated_by_name: 'Rina Patel',
+              },
+              {
+                id: 'scenario-invalid',
+                assessment_version_id: 'version-2',
+                version_label: '1.2.0',
+                name: 'Broken legacy scenario',
+                description: 'Invalid scenario',
+                scenario_payload: invalidScenarioPayload,
+                status: 'active',
+                source_version_id: null,
+                source_version_label: null,
+                source_scenario_id: null,
+                provenance_json: {},
+                created_at: '2026-03-20T09:00:00.000Z',
+                updated_at: '2026-03-20T09:00:00.000Z',
+                archived_at: null,
+                created_by_name: 'Rina Patel',
+                updated_by_name: 'Rina Patel',
+              },
+            ],
+          }
+        }
+
+        if (/select name\s+from assessment_version_saved_scenarios/i.test(sql)) {
+          return { rows: [{ name: 'Leadership baseline' }] }
+        }
+
+        if (/insert into assessment_version_saved_scenarios/i.test(sql)) {
+          insertedNames.push(String(params[2]))
+          return { rows: [] }
+        }
+
+        if (/update assessment_definitions/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/insert into access_audit_events/i.test(sql)) {
+          auditEvents.push(String(params[1]))
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-21T11:00:00.000Z'),
+    createId: (() => {
+      const ids = ['new-scenario-1', 'new-scenario-2', 'audit-1', 'audit-2']
+      return () => ids.shift() ?? 'audit-3'
+    })(),
+  } as never)
+
+  assert.equal(result.ok, true)
+  assert.equal(result.importedCount, 1)
+  assert.equal(result.skippedCount, 1)
+  assert.deepEqual(insertedNames, ['Leadership baseline (copy 2)'])
+  assert.match(result.skipped[0]?.reason ?? '', /optionId is required/i)
+  assert.deepEqual(auditEvents, ['assessment_saved_scenarios_imported', 'assessment_saved_scenarios_imported'])
+})
+
+test('single scenario clone rejects incompatible payloads for the target version', async () => {
+  const incompatiblePayload = JSON.stringify({
+    answers: [{ questionId: 'missing-question', optionId: 'q1.b' }],
+    locale: 'en',
+    source: 'manual_json',
+    scenarioKey: null,
+  })
+
+  const result = await cloneAdminAssessmentSavedScenario({
+    assessmentId: 'assessment-1',
+    targetVersionId: 'version-3',
+    sourceScenarioId: 'scenario-incompatible',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string) => {
+        if (/from assessment_versions av/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'version-3',
+                assessment_definition_id: 'assessment-1',
+                version_label: '1.3.0',
+                lifecycle_status: 'draft',
+                source_type: 'import',
+                notes: 'Draft',
+                has_definition_payload: true,
+                definition_payload: JSON.parse(validPackage),
+                validation_status: 'valid',
+                package_status: 'valid',
+                package_schema_version: 'sonartra-assessment-package/v1',
+                package_source_type: 'manual_import',
+                package_imported_at: '2026-03-21T09:00:00.000Z',
+                package_source_filename: 'draft.json',
+                package_imported_by_name: 'Rina Patel',
+                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 2, scoringRuleCount: 1, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
+                created_at: '2026-03-21T09:00:00.000Z',
+                updated_at: '2026-03-21T09:00:00.000Z',
+                published_at: null,
+                archived_at: null,
+                created_by_name: 'Rina Patel',
+                updated_by_name: 'Rina Patel',
+                published_by_name: null,
+                latest_regression_suite_snapshot_json: null,
+              },
+              {
+                id: 'version-2',
+                assessment_definition_id: 'assessment-1',
+                version_label: '1.2.0',
+                lifecycle_status: 'published',
+                source_type: 'import',
+                notes: 'Published',
+                has_definition_payload: true,
+                definition_payload: JSON.parse(validPackage),
+                validation_status: 'valid',
+                package_status: 'valid',
+                package_schema_version: 'sonartra-assessment-package/v1',
+                package_source_type: 'manual_import',
+                package_imported_at: '2026-03-20T09:00:00.000Z',
+                package_source_filename: 'published.json',
+                package_imported_by_name: 'Rina Patel',
+                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 2, scoringRuleCount: 1, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
+                created_at: '2026-03-20T09:00:00.000Z',
+                updated_at: '2026-03-20T09:00:00.000Z',
+                published_at: '2026-03-20T09:00:00.000Z',
+                archived_at: null,
+                created_by_name: 'Rina Patel',
+                updated_by_name: 'Rina Patel',
+                published_by_name: 'Rina Patel',
+                latest_regression_suite_snapshot_json: null,
+              },
+            ],
+          }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return {
+            rows: [{
+              id: 'scenario-incompatible',
+              assessment_version_id: 'version-2',
+              version_label: '1.2.0',
+              name: 'Incompatible scenario',
+              description: 'Invalid for target',
+              scenario_payload: incompatiblePayload,
+              status: 'active',
+              source_version_id: null,
+              source_version_label: null,
+              source_scenario_id: null,
+              provenance_json: {},
+              created_at: '2026-03-20T09:00:00.000Z',
+              updated_at: '2026-03-20T09:00:00.000Z',
+              archived_at: null,
+              created_by_name: 'Rina Patel',
+              updated_by_name: 'Rina Patel',
+            }],
+          }
+        }
+
+        if (/insert into assessment_version_saved_scenarios/i.test(sql) || /insert into access_audit_events/i.test(sql) || /update assessment_definitions/i.test(sql)) {
+          throw new Error(`Unexpected write query: ${sql}`)
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'validation_error')
+  assert.match(result.message, /does not exist in the normalized package|requires a selected option/i)
+})
+
+test('suite snapshot persists latest full-run summary without using single simulation state', async () => {
+  const versionUpdates: unknown[][] = []
+  const auditEvents: string[] = []
+  const scenarioPayload = JSON.stringify({
+    answers: [{ questionId: 'q1', optionId: 'q1.b' }],
+    locale: 'en',
+    source: 'manual_json',
+    scenarioKey: null,
+  })
+
+  const result = await runAdminAssessmentScenarioSuite({
+    assessmentId: 'assessment-1',
+    versionId: 'version-3',
+    baselineVersionId: 'version-2',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        if (/from assessment_versions av/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'version-3',
+                assessment_definition_id: 'assessment-1',
+                version_label: '1.3.0',
+                lifecycle_status: 'draft',
+                source_type: 'import',
+                notes: 'Draft',
+                has_definition_payload: true,
+                definition_payload: JSON.parse(validPackage),
+                validation_status: 'valid',
+                package_status: 'valid',
+                package_schema_version: 'sonartra-assessment-package/v1',
+                package_source_type: 'manual_import',
+                package_imported_at: '2026-03-21T09:00:00.000Z',
+                package_source_filename: 'draft.json',
+                package_imported_by_name: 'Rina Patel',
+                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 2, scoringRuleCount: 1, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
+                created_at: '2026-03-21T09:00:00.000Z',
+                updated_at: '2026-03-21T09:00:00.000Z',
+                published_at: null,
+                archived_at: null,
+                created_by_name: 'Rina Patel',
+                updated_by_name: 'Rina Patel',
+                published_by_name: null,
+                latest_regression_suite_snapshot_json: null,
+              },
+              {
+                id: 'version-2',
+                assessment_definition_id: 'assessment-1',
+                version_label: '1.2.0',
+                lifecycle_status: 'published',
+                source_type: 'import',
+                notes: 'Published',
+                has_definition_payload: true,
+                definition_payload: JSON.parse(validPackage),
+                validation_status: 'valid',
+                package_status: 'valid',
+                package_schema_version: 'sonartra-assessment-package/v1',
+                package_source_type: 'manual_import',
+                package_imported_at: '2026-03-20T09:00:00.000Z',
+                package_source_filename: 'published.json',
+                package_imported_by_name: 'Rina Patel',
+                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 2, scoringRuleCount: 1, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
+                created_at: '2026-03-20T09:00:00.000Z',
+                updated_at: '2026-03-20T09:00:00.000Z',
+                published_at: '2026-03-20T09:00:00.000Z',
+                archived_at: null,
+                created_by_name: 'Rina Patel',
+                updated_by_name: 'Rina Patel',
+                published_by_name: 'Rina Patel',
+                latest_regression_suite_snapshot_json: null,
+              },
+            ],
+          }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'scenario-pass',
+                assessment_version_id: 'version-3',
+                version_label: '1.3.0',
+                name: 'Scenario pass',
+                description: null,
+                scenario_payload: scenarioPayload,
+                status: 'active',
+                source_version_id: 'version-2',
+                source_version_label: '1.2.0',
+                source_scenario_id: 'scenario-source',
+                provenance_json: {},
+                created_at: '2026-03-21T09:00:00.000Z',
+                updated_at: '2026-03-21T09:00:00.000Z',
+                archived_at: null,
+                created_by_name: 'Rina Patel',
+                updated_by_name: 'Rina Patel',
+              },
+            ],
+          }
+        }
+
+        if (/update assessment_versions\s+set latest_regression_suite_snapshot_json/i.test(sql)) {
+          versionUpdates.push(params)
+          return { rows: [] }
+        }
+
+        if (/update assessment_definitions/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/insert into access_audit_events/i.test(sql)) {
+          auditEvents.push(String(params[1]))
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-21T12:00:00.000Z'),
+    createId: (() => {
+      const ids = ['audit-1', 'audit-2']
+      return () => ids.shift() ?? 'audit-3'
+    })(),
+  } as never)
+
+  assert.equal(result.ok, true)
+  assert.equal(result.code, 'completed')
+  assert.equal(result.snapshot?.baselineVersionLabel, '1.2.0')
+  assert.equal(result.snapshot?.overallStatus, 'pass')
+  assert.equal(result.snapshot?.totalScenarios, 1)
+  assert.equal(versionUpdates.length, 1)
+  assert.deepEqual(auditEvents, ['assessment_regression_suite_snapshot_updated', 'assessment_regression_suite_snapshot_updated'])
 })
 
 test('publish version succeeds when a valid package is attached and enforces a single published version', async () => {

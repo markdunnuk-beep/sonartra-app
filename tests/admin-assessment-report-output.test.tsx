@@ -248,6 +248,8 @@ function createDetailData(pkg: SonartraAssessmentPackageV1 | null, status: 'vali
         createdByName: 'Rina Patel',
         updatedByName: 'Rina Patel',
         publishedByName: 'Rina Patel',
+        latestSuiteSnapshot: null,
+        savedScenarios: [],
       },
     ],
     activity: [],

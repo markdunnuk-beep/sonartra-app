@@ -2,14 +2,25 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import type { AdminAssessmentPackageImportState, AdminAssessmentVersionMutationState } from '@/lib/admin/domain/assessment-management'
-import { buildAdminAssessmentVersionMutationState } from '@/lib/admin/domain/assessment-management'
+import type {
+  AdminAssessmentPackageImportState,
+  AdminAssessmentScenarioImportState,
+  AdminAssessmentScenarioSuiteRunState,
+  AdminAssessmentVersionMutationState,
+} from '@/lib/admin/domain/assessment-management'
+import {
+  buildAdminAssessmentScenarioImportState,
+  buildAdminAssessmentVersionMutationState,
+} from '@/lib/admin/domain/assessment-management'
 import type { AdminAssessmentSimulationActionState } from '@/lib/admin/domain/assessment-simulation'
 import {
   archiveAdminAssessmentVersion,
+  cloneAdminAssessmentSavedScenario,
   createAdminAssessmentDraftVersion,
   importAdminAssessmentPackage,
+  importAdminAssessmentSavedScenarios,
   publishAdminAssessmentVersion,
+  runAdminAssessmentScenarioSuite,
   simulateAdminAssessmentVersion,
 } from '@/lib/admin/server/assessment-management'
 
@@ -47,6 +58,116 @@ export async function submitAdminAssessmentSimulationAction(
   }
 
   return result.state
+}
+
+export async function submitAdminAssessmentScenarioImportAction(
+  _previousState: AdminAssessmentScenarioImportState,
+  formData: FormData,
+): Promise<AdminAssessmentScenarioImportState> {
+  const assessmentId = String(formData.get('assessmentId') ?? '')
+  const versionId = String(formData.get('versionId') ?? '')
+  const versionLabel = String(formData.get('versionLabel') ?? '')
+  const result = await importAdminAssessmentSavedScenarios({
+    assessmentId,
+    targetVersionId: versionId,
+    sourceVersionId: String(formData.get('sourceVersionId') ?? '') || null,
+  })
+
+  if (!result.ok && result.code === 'permission_denied') {
+    redirect('/sign-in')
+  }
+
+  revalidateAssessmentPaths(assessmentId, versionLabel)
+
+  if (!result.ok) {
+    return buildAdminAssessmentScenarioImportState(result.message, {
+      sourceVersionLabel: result.sourceVersionLabel,
+      importedCount: result.importedCount,
+      skippedCount: result.skippedCount,
+      importedNames: result.importedNames,
+      skipped: result.skipped,
+    })
+  }
+
+  return {
+    status: 'success',
+    message: result.message,
+    summary: {
+      sourceVersionLabel: result.sourceVersionLabel,
+      importedCount: result.importedCount,
+      skippedCount: result.skippedCount,
+      importedNames: result.importedNames,
+      skipped: result.skipped,
+    },
+  }
+}
+
+export async function submitAdminAssessmentScenarioCloneAction(
+  _previousState: AdminAssessmentScenarioImportState,
+  formData: FormData,
+): Promise<AdminAssessmentScenarioImportState> {
+  const assessmentId = String(formData.get('assessmentId') ?? '')
+  const versionId = String(formData.get('versionId') ?? '')
+  const versionLabel = String(formData.get('versionLabel') ?? '')
+  const result = await cloneAdminAssessmentSavedScenario({
+    assessmentId,
+    targetVersionId: versionId,
+    sourceScenarioId: String(formData.get('sourceScenarioId') ?? ''),
+  })
+
+  if (!result.ok && result.code === 'permission_denied') {
+    redirect('/sign-in')
+  }
+
+  revalidateAssessmentPaths(assessmentId, versionLabel)
+
+  if (!result.ok) {
+    return buildAdminAssessmentScenarioImportState(result.message, {
+      sourceVersionLabel: result.sourceVersionLabel,
+      importedCount: result.importedCount,
+      skippedCount: result.skippedCount,
+      importedNames: result.importedNames,
+      skipped: result.skipped,
+    })
+  }
+
+  return {
+    status: 'success',
+    message: result.message,
+    summary: {
+      sourceVersionLabel: result.sourceVersionLabel,
+      importedCount: result.importedCount,
+      skippedCount: result.skippedCount,
+      importedNames: result.importedNames,
+      skipped: result.skipped,
+    },
+  }
+}
+
+export async function submitAdminAssessmentScenarioSuiteRunAction(
+  _previousState: AdminAssessmentScenarioSuiteRunState,
+  formData: FormData,
+): Promise<AdminAssessmentScenarioSuiteRunState> {
+  const assessmentId = String(formData.get('assessmentId') ?? '')
+  const versionId = String(formData.get('versionId') ?? '')
+  const versionLabel = String(formData.get('versionLabel') ?? '')
+  const result = await runAdminAssessmentScenarioSuite({
+    assessmentId,
+    versionId,
+    baselineVersionId: String(formData.get('baselineVersionId') ?? '') || null,
+  })
+
+  if (!result.ok && result.code === 'permission_denied') {
+    redirect('/sign-in')
+  }
+
+  revalidateAssessmentPaths(assessmentId, versionLabel)
+
+  if (!result.ok) {
+    return { status: 'error', message: result.message, snapshot: result.snapshot ?? null }
+  }
+
+  return { status: 'success', message: result.message, snapshot: result.snapshot ?? null }
 }
 
 export async function submitAdminAssessmentCreateDraftVersionAction(

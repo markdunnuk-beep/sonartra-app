@@ -5,11 +5,13 @@ import {
   getAdminAssessmentRegistryFilters,
   type AdminAssessmentCreateState,
   type AdminAssessmentDetailData,
+  type AdminAssessmentLatestSuiteSnapshot,
   type AdminAssessmentLifecycleStatus,
   type AdminAssessmentRegistryData,
   type AdminAssessmentRegistryFilters,
   type AdminAssessmentRegistryItem,
   type AdminAssessmentRegistryNotice,
+  type AdminAssessmentSavedScenarioRecord,
   type AdminAssessmentVersionMutationState,
   type AdminAssessmentVersionRecord,
 } from '@/lib/admin/domain/assessment-management'
@@ -84,6 +86,26 @@ interface AssessmentVersionRow {
   created_by_name: string | null
   updated_by_name: string | null
   published_by_name: string | null
+  latest_regression_suite_snapshot_json: unknown
+}
+
+interface AssessmentSavedScenarioRow {
+  id: string | null
+  assessment_version_id: string | null
+  version_label: string | null
+  name: string | null
+  description: string | null
+  scenario_payload: unknown
+  status: string | null
+  source_version_id: string | null
+  source_version_label: string | null
+  source_scenario_id: string | null
+  provenance_json: unknown
+  created_at: string | Date | null
+  updated_at: string | Date | null
+  archived_at: string | Date | null
+  created_by_name: string | null
+  updated_by_name: string | null
 }
 
 interface ActorRow {
@@ -183,6 +205,42 @@ export interface AdminAssessmentVersionSimulationResult {
   code: 'simulated' | 'validation_error' | 'blocked' | 'permission_denied' | 'not_found' | 'unknown_error'
   message: string
   state: AdminAssessmentSimulationActionState
+}
+
+export interface AdminAssessmentScenarioImportInput {
+  assessmentId: string
+  targetVersionId: string
+  sourceVersionId?: string | null
+}
+
+export interface AdminAssessmentScenarioCloneInput {
+  assessmentId: string
+  targetVersionId: string
+  sourceScenarioId: string
+}
+
+export interface AdminAssessmentScenarioImportResult {
+  ok: boolean
+  code: 'imported' | 'validation_error' | 'permission_denied' | 'not_found' | 'invalid_transition' | 'unknown_error'
+  message: string
+  sourceVersionLabel: string | null
+  importedCount: number
+  skippedCount: number
+  importedNames: string[]
+  skipped: Array<{ name: string; reason: string }>
+}
+
+export interface AdminAssessmentScenarioSuiteRunInput {
+  assessmentId: string
+  versionId: string
+  baselineVersionId?: string | null
+}
+
+export interface AdminAssessmentScenarioSuiteRunResult {
+  ok: boolean
+  code: 'completed' | 'validation_error' | 'permission_denied' | 'not_found' | 'invalid_transition' | 'unknown_error'
+  message: string
+  snapshot?: AdminAssessmentLatestSuiteSnapshot | null
 }
 
 interface VersionTransitionInput {
@@ -336,6 +394,101 @@ function mapPackageInfo(row: AssessmentVersionRow): AdminAssessmentVersionPackag
     errors: normalisePackageIssues(row.package_validation_report_json, 'errors'),
     warnings: normalisePackageIssues(row.package_validation_report_json, 'warnings'),
   }
+}
+
+function isScenarioStatus(value: string | null | undefined): value is AdminAssessmentSavedScenarioRecord['status'] {
+  return value === 'active' || value === 'archived'
+}
+
+function normaliseJsonString(value: unknown): string | null {
+  if (!value) {
+    return null
+  }
+
+  if (typeof value === 'string') {
+    return value
+  }
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return null
+  }
+}
+
+function mapLatestSuiteSnapshot(value: unknown): AdminAssessmentLatestSuiteSnapshot | null {
+  const snapshot = parseJsonObject<Record<string, unknown>>(value)
+  const executedAt = normaliseTimestamp(snapshot?.executedAt as string | Date | null | undefined)
+  const overallStatus = snapshot?.overallStatus === 'pass' || snapshot?.overallStatus === 'warning' || snapshot?.overallStatus === 'fail'
+    ? snapshot.overallStatus
+    : null
+  const summaryText = normaliseNullableField(snapshot?.summaryText as string | null | undefined)
+
+  if (!executedAt || !overallStatus || !summaryText) {
+    return null
+  }
+
+  return {
+    executedAt,
+    executedBy: normaliseNullableField(snapshot?.executedBy as string | null | undefined),
+    baselineVersionId: normaliseNullableField(snapshot?.baselineVersionId as string | null | undefined),
+    baselineVersionLabel: normaliseNullableField(snapshot?.baselineVersionLabel as string | null | undefined),
+    totalScenarios: normaliseCount(snapshot?.totalScenarios as number | string | null | undefined),
+    passedCount: normaliseCount(snapshot?.passedCount as number | string | null | undefined),
+    warningCount: normaliseCount(snapshot?.warningCount as number | string | null | undefined),
+    failedCount: normaliseCount(snapshot?.failedCount as number | string | null | undefined),
+    overallStatus,
+    summaryText,
+  }
+}
+
+function mapSavedScenarioRows(rows: AssessmentSavedScenarioRow[]): Map<string, AdminAssessmentSavedScenarioRecord[]> {
+  const scenariosByVersion = new Map<string, AdminAssessmentSavedScenarioRecord[]>()
+
+  for (const row of rows ?? []) {
+    const id = normaliseRequiredString(row.id)
+    const versionId = normaliseRequiredString(row.assessment_version_id)
+    const versionLabel = normaliseRequiredString(row.version_label)
+    const name = normaliseRequiredString(row.name)
+    const status = isScenarioStatus(row.status) ? row.status : null
+    const payload = normaliseJsonString(row.scenario_payload)
+    const createdAt = normaliseTimestamp(row.created_at)
+    const updatedAt = normaliseTimestamp(row.updated_at)
+
+    if (!id || !versionId || !versionLabel || !name || !status || !payload || !createdAt || !updatedAt) {
+      continue
+    }
+
+    const provenance = parseJsonObject<Record<string, unknown>>(row.provenance_json)
+    const scenario: AdminAssessmentSavedScenarioRecord = {
+      id,
+      versionId,
+      versionLabel,
+      name,
+      description: normaliseNullableField(row.description),
+      status,
+      payload,
+      sourceVersionId: normaliseNullableField(row.source_version_id),
+      sourceVersionLabel: normaliseNullableField(row.source_version_label) ?? normaliseNullableField(provenance?.sourceVersionLabel as string | null | undefined),
+      sourceScenarioId: normaliseNullableField(row.source_scenario_id),
+      provenanceSummary: normaliseNullableField(provenance?.summary as string | null | undefined),
+      createdAt,
+      updatedAt,
+      archivedAt: normaliseTimestamp(row.archived_at),
+      createdByName: normaliseNullableField(row.created_by_name),
+      updatedByName: normaliseNullableField(row.updated_by_name),
+    }
+
+    const current = scenariosByVersion.get(versionId) ?? []
+    current.push(scenario)
+    scenariosByVersion.set(versionId, current)
+  }
+
+  for (const [versionId, scenarios] of scenariosByVersion.entries()) {
+    scenariosByVersion.set(versionId, scenarios.sort((left, right) => left.name.localeCompare(right.name)))
+  }
+
+  return scenariosByVersion
 }
 
 function isLifecycleStatus(value: string | null | undefined): value is AdminAssessmentLifecycleStatus {
@@ -539,7 +692,10 @@ function mapAssessmentSummaryRow(row: AssessmentSummaryRow | undefined): AdminAs
   }
 }
 
-export function mapAssessmentVersionRows(rows: AssessmentVersionRow[]): AdminAssessmentVersionRecord[] {
+export function mapAssessmentVersionRows(
+  rows: AssessmentVersionRow[],
+  scenariosByVersion: Map<string, AdminAssessmentSavedScenarioRecord[]> = new Map(),
+): AdminAssessmentVersionRecord[] {
   return (rows ?? []).flatMap((row) => {
     const id = normaliseRequiredString(row.id)
     const assessmentId = normaliseRequiredString(row.assessment_definition_id)
@@ -573,6 +729,8 @@ export function mapAssessmentVersionRows(rows: AssessmentVersionRow[]): AdminAss
       createdByName: normaliseNullableField(row.created_by_name),
       updatedByName: normaliseNullableField(row.updated_by_name),
       publishedByName: normaliseNullableField(row.published_by_name),
+      latestSuiteSnapshot: mapLatestSuiteSnapshot(row.latest_regression_suite_snapshot_json),
+      savedScenarios: scenariosByVersion.get(id) ?? [],
     }]
   })
 }
@@ -756,7 +914,7 @@ export async function getAdminAssessmentRegistryData(
 }
 
 export async function getAdminAssessmentDetailData(assessmentId: string): Promise<AdminAssessmentDetailData | null> {
-  const [summaryResult, versionsResult, activity] = await Promise.all([
+  const [summaryResult, versionsResult, savedScenariosResult, activity] = await Promise.all([
     queryDb<AssessmentSummaryRow>(
       `select
          ad.id,
@@ -800,7 +958,8 @@ export async function getAdminAssessmentDetailData(assessmentId: string): Promis
          av.archived_at,
          created_by.full_name as created_by_name,
          updated_by.full_name as updated_by_name,
-         published_by.full_name as published_by_name
+         published_by.full_name as published_by_name,
+         av.latest_regression_suite_snapshot_json
        from assessment_versions av
        left join admin_identities created_by on created_by.id = av.created_by_identity_id
        left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
@@ -813,6 +972,33 @@ export async function getAdminAssessmentDetailData(assessmentId: string): Promis
          av.version_label desc`,
       [assessmentId],
     ),
+    queryDb<AssessmentSavedScenarioRow>(
+      `select
+         scenarios.id,
+         scenarios.assessment_version_id,
+         av.version_label,
+         scenarios.name,
+         scenarios.description,
+         scenarios.scenario_payload,
+         scenarios.status,
+         scenarios.source_version_id,
+         source_version.version_label as source_version_label,
+         scenarios.source_scenario_id,
+         scenarios.provenance_json,
+         scenarios.created_at,
+         scenarios.updated_at,
+         scenarios.archived_at,
+         created_by.full_name as created_by_name,
+         updated_by.full_name as updated_by_name
+       from assessment_version_saved_scenarios scenarios
+       inner join assessment_versions av on av.id = scenarios.assessment_version_id
+       left join assessment_versions source_version on source_version.id = scenarios.source_version_id
+       left join admin_identities created_by on created_by.id = scenarios.created_by_identity_id
+       left join admin_identities updated_by on updated_by.id = scenarios.updated_by_identity_id
+       where av.assessment_definition_id = $1
+       order by av.version_label desc, lower(scenarios.name) asc`,
+      [assessmentId],
+    ),
     getScopedAdminAuditActivity({ entityType: 'assessment', entityId: assessmentId, includeSecondaryEntityType: 'assessment_version', limit: 40 }),
   ])
 
@@ -822,7 +1008,7 @@ export async function getAdminAssessmentDetailData(assessmentId: string): Promis
     return null
   }
 
-  const versions = mapAssessmentVersionRows(versionsResult.rows ?? [])
+  const versions = mapAssessmentVersionRows(versionsResult.rows ?? [], mapSavedScenarioRows(savedScenariosResult.rows ?? []))
   const latestDraft = versions.find((version) => version.lifecycleStatus === 'draft') ?? null
   const latestPublished = versions.find((version) => version.lifecycleStatus === 'published') ?? null
   const latestVersionUpdatedAt = versions[0]?.updatedAt ?? null
@@ -937,6 +1123,139 @@ function buildPackageValidationReport(input: {
     errors: input.errors,
     warnings: input.warnings,
   }
+}
+
+function buildScenarioPayloadSummary(name: string, sourceVersionLabel: string | null, sourceScenarioId: string | null) {
+  return sourceVersionLabel || sourceScenarioId
+    ? `Copied from ${sourceVersionLabel ? `v${sourceVersionLabel}` : 'a prior version'}${sourceScenarioId ? ` · source scenario ${sourceScenarioId}` : ''}.`
+    : `${name} created locally for this version.`
+}
+
+function resolveScenarioCloneName(baseName: string, existingNames: Set<string>): string {
+  const normalizedNames = new Set(Array.from(existingNames, (name) => name.trim().toLowerCase()))
+  if (!normalizedNames.has(baseName.trim().toLowerCase())) {
+    return baseName
+  }
+
+  let attempt = 2
+  while (normalizedNames.has(`${baseName} (copy ${attempt})`.trim().toLowerCase())) {
+    attempt += 1
+  }
+
+  return `${baseName} (copy ${attempt})`
+}
+
+function buildSuiteSnapshot(input: {
+  executedAt: string
+  executedBy: string | null
+  baselineVersionId: string | null
+  baselineVersionLabel: string | null
+  totalScenarios: number
+  passedCount: number
+  warningCount: number
+  failedCount: number
+}): AdminAssessmentLatestSuiteSnapshot {
+  const overallStatus = input.failedCount > 0 ? 'fail' : input.warningCount > 0 ? 'warning' : 'pass'
+  const summaryText = input.totalScenarios === 0
+    ? 'No active saved scenarios were available for a suite run.'
+    : `${input.passedCount}/${input.totalScenarios} passed${input.warningCount > 0 ? ` · ${input.warningCount} warning(s)` : ''}${input.failedCount > 0 ? ` · ${input.failedCount} failed` : ''}.`
+
+  return {
+    ...input,
+    overallStatus,
+    summaryText,
+  }
+}
+
+async function loadAssessmentVersionsForScenarioWork(
+  client: PoolClient,
+  assessmentId: string,
+): Promise<Array<AssessmentVersionRow & { assessment_name: string | null }>> {
+  const result = await client.query<AssessmentVersionRow & { assessment_name: string | null }>(
+    `select
+       av.id,
+       av.assessment_definition_id,
+       av.version_label,
+       av.lifecycle_status,
+       av.source_type,
+       av.notes,
+       (av.definition_payload is not null) as has_definition_payload,
+       av.definition_payload,
+       av.validation_status,
+       av.package_status,
+       av.package_schema_version,
+       av.package_source_type,
+       av.package_imported_at,
+       av.package_source_filename,
+       package_imported_by.full_name as package_imported_by_name,
+       av.package_validation_report_json,
+       av.created_at,
+       av.updated_at,
+       av.published_at,
+       av.archived_at,
+       created_by.full_name as created_by_name,
+       updated_by.full_name as updated_by_name,
+       published_by.full_name as published_by_name,
+       av.latest_regression_suite_snapshot_json,
+       ad.name as assessment_name
+     from assessment_versions av
+     inner join assessment_definitions ad on ad.id = av.assessment_definition_id
+     left join admin_identities created_by on created_by.id = av.created_by_identity_id
+     left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
+     left join admin_identities published_by on published_by.id = av.published_by_identity_id
+     left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
+     where av.assessment_definition_id = $1
+     order by
+       case av.lifecycle_status when 'published' then 0 when 'draft' then 1 else 2 end,
+       av.updated_at desc,
+       av.version_label desc`,
+    [assessmentId],
+  )
+
+  return result.rows ?? []
+}
+
+async function loadAssessmentSavedScenariosForAssessment(client: PoolClient, assessmentId: string): Promise<Map<string, AdminAssessmentSavedScenarioRecord[]>> {
+  const result = await client.query<AssessmentSavedScenarioRow>(
+    `select
+       scenarios.id,
+       scenarios.assessment_version_id,
+       av.version_label,
+       scenarios.name,
+       scenarios.description,
+       scenarios.scenario_payload,
+       scenarios.status,
+       scenarios.source_version_id,
+       source_version.version_label as source_version_label,
+       scenarios.source_scenario_id,
+       scenarios.provenance_json,
+       scenarios.created_at,
+       scenarios.updated_at,
+       scenarios.archived_at,
+       created_by.full_name as created_by_name,
+       updated_by.full_name as updated_by_name
+     from assessment_version_saved_scenarios scenarios
+     inner join assessment_versions av on av.id = scenarios.assessment_version_id
+     left join assessment_versions source_version on source_version.id = scenarios.source_version_id
+     left join admin_identities created_by on created_by.id = scenarios.created_by_identity_id
+     left join admin_identities updated_by on updated_by.id = scenarios.updated_by_identity_id
+     where av.assessment_definition_id = $1
+     order by av.version_label desc, lower(scenarios.name) asc`,
+    [assessmentId],
+  )
+
+  return mapSavedScenarioRows(result.rows ?? [])
+}
+
+async function loadExistingScenarioNames(client: PoolClient, versionId: string): Promise<Set<string>> {
+  const result = await client.query<{ name: string | null }>(
+    `select name
+     from assessment_version_saved_scenarios
+     where assessment_version_id = $1`,
+    [versionId],
+  )
+
+  return new Set((result.rows ?? []).map((row) => normaliseWhitespace(row.name ?? '')).filter(Boolean))
 }
 
 export async function createAdminAssessment(
@@ -1574,6 +1893,410 @@ export async function simulateAdminAssessmentVersion(
         message: describeDatabaseError(error),
       },
     }
+  }
+}
+
+export async function importAdminAssessmentSavedScenarios(
+  input: AdminAssessmentScenarioImportInput,
+  dependencies: Partial<AssessmentMutationDependencies> = {},
+): Promise<AdminAssessmentScenarioImportResult> {
+  const deps = { ...defaultDependencies, ...dependencies }
+  const denied = await requireAccess(deps)
+
+  if (denied) {
+    return { ok: false, code: 'permission_denied', message: denied.message, sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
+  }
+
+  try {
+    return await deps.withTransaction(async (client) => {
+      const [versionRows, scenariosByVersion] = await Promise.all([
+        loadAssessmentVersionsForScenarioWork(client, input.assessmentId),
+        loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
+      ])
+      const versions = mapAssessmentVersionRows(versionRows, scenariosByVersion)
+      const targetVersion = versions.find((entry) => entry.id === input.targetVersionId)
+
+      if (!targetVersion) {
+        return { ok: false, code: 'not_found', message: 'Target version not found.', sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
+      }
+
+      if (targetVersion.lifecycleStatus !== 'draft' || !targetVersion.normalizedPackage || targetVersion.packageInfo.status === 'invalid' || targetVersion.packageInfo.status === 'missing') {
+        return { ok: false, code: 'invalid_transition', message: 'Scenario import is only available for draft versions with a valid normalized package.', sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
+      }
+
+      const sourceVersion = input.sourceVersionId
+        ? versions.find((entry) => entry.id === input.sourceVersionId)
+        : versions.filter((entry) => entry.id !== targetVersion.id && entry.savedScenarios.some((scenario) => scenario.status === 'active')).sort((left, right) => {
+            if (left.lifecycleStatus === 'published' && right.lifecycleStatus !== 'published') return -1
+            if (left.lifecycleStatus !== 'published' && right.lifecycleStatus === 'published') return 1
+            return right.updatedAt.localeCompare(left.updatedAt)
+          })[0]
+
+      if (!sourceVersion) {
+        return { ok: false, code: 'not_found', message: 'No prior version with active saved scenarios could be found.', sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
+      }
+
+      const sourceScenarios = sourceVersion.savedScenarios.filter((scenario) => scenario.status === 'active')
+      const existingNames = await loadExistingScenarioNames(client, targetVersion.id)
+      const actor = await deps.getActorIdentity(client)
+      const nowIso = deps.now().toISOString()
+      const importedNames: string[] = []
+      const skipped: Array<{ name: string; reason: string }> = []
+
+      for (const sourceScenario of sourceScenarios) {
+        const parsedPayload = parseAdminAssessmentSimulationPayload(sourceScenario.payload)
+        if (!parsedPayload.ok || !parsedPayload.normalizedRequest) {
+          skipped.push({ name: sourceScenario.name, reason: parsedPayload.errors[0]?.message ?? 'Stored scenario payload is malformed.' })
+          continue
+        }
+
+        const validation = executeAdminAssessmentSimulation(targetVersion.normalizedPackage, parsedPayload.normalizedRequest)
+        if (!validation.ok) {
+          skipped.push({ name: sourceScenario.name, reason: validation.errors[0]?.message ?? 'Scenario is incompatible with the target version package.' })
+          continue
+        }
+
+        const nextName = resolveScenarioCloneName(sourceScenario.name, existingNames)
+        existingNames.add(nextName)
+        await client.query(
+          `insert into assessment_version_saved_scenarios (
+             id,
+             assessment_version_id,
+             name,
+             description,
+             scenario_payload,
+             status,
+             source_version_id,
+             source_scenario_id,
+             provenance_json,
+             created_by_identity_id,
+             updated_by_identity_id,
+             created_at,
+             updated_at
+           )
+           values ($1, $2, $3, $4, $5::jsonb, 'active', $6, $7, $8::jsonb, $9, $9, $10::timestamptz, $10::timestamptz)`,
+          [
+            deps.createId(),
+            targetVersion.id,
+            nextName,
+            sourceScenario.description,
+            sourceScenario.payload,
+            sourceVersion.id,
+            sourceScenario.id,
+            JSON.stringify({
+              sourceVersionLabel: sourceVersion.versionLabel,
+              sourceScenarioId: sourceScenario.id,
+              summary: buildScenarioPayloadSummary(nextName, sourceVersion.versionLabel, sourceScenario.id),
+              importMode: 'bulk_copy_forward',
+            }),
+            actor?.id ?? null,
+            nowIso,
+          ],
+        )
+        importedNames.push(nextName)
+      }
+
+      await client.query(
+        `update assessment_definitions
+         set updated_at = $2::timestamptz,
+             updated_by_identity_id = $3
+         where id = $1`,
+        [input.assessmentId, nowIso, actor?.id ?? null],
+      )
+
+      await writeAssessmentAuditEvent(client, {
+        createId: deps.createId,
+        actor,
+        nowIso,
+        eventType: 'assessment_saved_scenarios_imported',
+        summary: `Saved scenarios copied forward into ${targetVersion.versionLabel} from v${sourceVersion.versionLabel} · ${importedNames.length} imported · ${skipped.length} skipped.`,
+        assessmentId: input.assessmentId,
+        assessmentName: versions.find((entry) => entry.id === targetVersion.id)?.normalizedPackage?.meta.assessmentTitle ?? 'Assessment',
+        versionId: targetVersion.id,
+        versionLabel: targetVersion.versionLabel,
+        metadata: {
+          sourceVersionId: sourceVersion.id,
+          sourceVersionLabel: sourceVersion.versionLabel,
+          importedCount: importedNames.length,
+          skippedCount: skipped.length,
+        },
+      })
+
+      return {
+        ok: true,
+        code: 'imported',
+        message: importedNames.length > 0
+          ? `Imported ${importedNames.length} scenario${importedNames.length === 1 ? '' : 's'} from v${sourceVersion.versionLabel}.`
+          : `No scenarios were imported from v${sourceVersion.versionLabel}.`,
+        sourceVersionLabel: sourceVersion.versionLabel,
+        importedCount: importedNames.length,
+        skippedCount: skipped.length,
+        importedNames,
+        skipped,
+      }
+    })
+  } catch (error) {
+    console.error('[admin-assessment-management] Failed to import saved scenarios.', error)
+    return { ok: false, code: 'unknown_error', message: describeDatabaseError(error), sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
+  }
+}
+
+export async function cloneAdminAssessmentSavedScenario(
+  input: AdminAssessmentScenarioCloneInput,
+  dependencies: Partial<AssessmentMutationDependencies> = {},
+): Promise<AdminAssessmentScenarioImportResult> {
+  const deps = { ...defaultDependencies, ...dependencies }
+  const denied = await requireAccess(deps)
+
+  if (denied) {
+    return { ok: false, code: 'permission_denied', message: denied.message, sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
+  }
+
+  try {
+    return await deps.withTransaction(async (client) => {
+      const [versionRows, scenariosByVersion] = await Promise.all([
+        loadAssessmentVersionsForScenarioWork(client, input.assessmentId),
+        loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
+      ])
+      const versions = mapAssessmentVersionRows(versionRows, scenariosByVersion)
+      const targetVersion = versions.find((entry) => entry.id === input.targetVersionId)
+
+      if (!targetVersion) {
+        return { ok: false, code: 'not_found', message: 'Target version not found.', sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
+      }
+
+      if (targetVersion.lifecycleStatus !== 'draft' || !targetVersion.normalizedPackage || targetVersion.packageInfo.status === 'invalid' || targetVersion.packageInfo.status === 'missing') {
+        return { ok: false, code: 'invalid_transition', message: 'Scenario cloning is only available for draft versions with a valid normalized package.', sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
+      }
+
+      const sourceScenario = versions.flatMap((version) => version.savedScenarios.map((scenario) => ({ version, scenario }))).find((entry) => entry.scenario.id === input.sourceScenarioId)
+
+      if (!sourceScenario) {
+        return { ok: false, code: 'not_found', message: 'Source scenario not found.', sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
+      }
+
+      const parsedPayload = parseAdminAssessmentSimulationPayload(sourceScenario.scenario.payload)
+      if (!parsedPayload.ok || !parsedPayload.normalizedRequest) {
+        return {
+          ok: false,
+          code: 'validation_error',
+          message: parsedPayload.errors[0]?.message ?? 'The saved scenario payload is malformed.',
+          sourceVersionLabel: sourceScenario.version.versionLabel,
+          importedCount: 0,
+          skippedCount: 0,
+          importedNames: [],
+          skipped: [{ name: sourceScenario.scenario.name, reason: parsedPayload.errors[0]?.message ?? 'The saved scenario payload is malformed.' }],
+        }
+      }
+
+      const validation = executeAdminAssessmentSimulation(targetVersion.normalizedPackage, parsedPayload.normalizedRequest)
+      if (!validation.ok) {
+        return {
+          ok: false,
+          code: 'validation_error',
+          message: validation.errors[0]?.message ?? 'The selected scenario is incompatible with the target version package.',
+          sourceVersionLabel: sourceScenario.version.versionLabel,
+          importedCount: 0,
+          skippedCount: 0,
+          importedNames: [],
+          skipped: [{ name: sourceScenario.scenario.name, reason: validation.errors[0]?.message ?? 'The selected scenario is incompatible with the target version package.' }],
+        }
+      }
+
+      const existingNames = await loadExistingScenarioNames(client, targetVersion.id)
+      const nextName = resolveScenarioCloneName(sourceScenario.scenario.name, existingNames)
+      const actor = await deps.getActorIdentity(client)
+      const nowIso = deps.now().toISOString()
+
+      await client.query(
+        `insert into assessment_version_saved_scenarios (
+           id,
+           assessment_version_id,
+           name,
+           description,
+           scenario_payload,
+           status,
+           source_version_id,
+           source_scenario_id,
+           provenance_json,
+           created_by_identity_id,
+           updated_by_identity_id,
+           created_at,
+           updated_at
+         )
+         values ($1, $2, $3, $4, $5::jsonb, 'active', $6, $7, $8::jsonb, $9, $9, $10::timestamptz, $10::timestamptz)`,
+        [
+          deps.createId(),
+          targetVersion.id,
+          nextName,
+          sourceScenario.scenario.description,
+          sourceScenario.scenario.payload,
+          sourceScenario.version.id,
+          sourceScenario.scenario.id,
+          JSON.stringify({
+            sourceVersionLabel: sourceScenario.version.versionLabel,
+            sourceScenarioId: sourceScenario.scenario.id,
+            summary: buildScenarioPayloadSummary(nextName, sourceScenario.version.versionLabel, sourceScenario.scenario.id),
+            importMode: 'single_clone',
+          }),
+          actor?.id ?? null,
+          nowIso,
+        ],
+      )
+
+      await client.query(
+        `update assessment_definitions
+         set updated_at = $2::timestamptz,
+             updated_by_identity_id = $3
+         where id = $1`,
+        [input.assessmentId, nowIso, actor?.id ?? null],
+      )
+
+      await writeAssessmentAuditEvent(client, {
+        createId: deps.createId,
+        actor,
+        nowIso,
+        eventType: 'assessment_saved_scenario_cloned',
+        summary: `Saved scenario ${sourceScenario.scenario.name} cloned into ${targetVersion.versionLabel} from v${sourceScenario.version.versionLabel}.`,
+        assessmentId: input.assessmentId,
+        assessmentName: targetVersion.normalizedPackage.meta.assessmentTitle,
+        versionId: targetVersion.id,
+        versionLabel: targetVersion.versionLabel,
+        metadata: {
+          sourceVersionId: sourceScenario.version.id,
+          sourceVersionLabel: sourceScenario.version.versionLabel,
+          sourceScenarioId: sourceScenario.scenario.id,
+          clonedName: nextName,
+        },
+      })
+
+      return {
+        ok: true,
+        code: 'imported',
+        message: `Cloned ${sourceScenario.scenario.name} into v${targetVersion.versionLabel}.`,
+        sourceVersionLabel: sourceScenario.version.versionLabel,
+        importedCount: 1,
+        skippedCount: 0,
+        importedNames: [nextName],
+        skipped: [],
+      }
+    })
+  } catch (error) {
+    console.error('[admin-assessment-management] Failed to clone saved scenario.', error)
+    return { ok: false, code: 'unknown_error', message: describeDatabaseError(error), sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
+  }
+}
+
+export async function runAdminAssessmentScenarioSuite(
+  input: AdminAssessmentScenarioSuiteRunInput,
+  dependencies: Partial<AssessmentMutationDependencies> = {},
+): Promise<AdminAssessmentScenarioSuiteRunResult> {
+  const deps = { ...defaultDependencies, ...dependencies }
+  const denied = await requireAccess(deps)
+
+  if (denied) {
+    return { ok: false, code: 'permission_denied', message: denied.message }
+  }
+
+  try {
+    return await deps.withTransaction(async (client) => {
+      const [versionRows, scenariosByVersion] = await Promise.all([
+        loadAssessmentVersionsForScenarioWork(client, input.assessmentId),
+        loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
+      ])
+      const versions = mapAssessmentVersionRows(versionRows, scenariosByVersion)
+      const version = versions.find((entry) => entry.id === input.versionId)
+
+      if (!version) {
+        return { ok: false, code: 'not_found', message: 'Version not found.' }
+      }
+
+      if (!version.normalizedPackage || version.packageInfo.status === 'invalid' || version.packageInfo.status === 'missing') {
+        return { ok: false, code: 'invalid_transition', message: 'A valid normalized package is required before running the regression suite.' }
+      }
+
+      const baseline = input.baselineVersionId
+        ? versions.find((entry) => entry.id === input.baselineVersionId)
+        : versions.find((entry) => entry.id !== version.id && entry.lifecycleStatus === 'published') ?? versions.find((entry) => entry.id !== version.id)
+
+      const activeScenarios = version.savedScenarios.filter((scenario) => scenario.status === 'active')
+      let passedCount = 0
+      let warningCount = 0
+      let failedCount = 0
+
+      for (const scenario of activeScenarios) {
+        const parsedPayload = parseAdminAssessmentSimulationPayload(scenario.payload)
+        if (!parsedPayload.ok || !parsedPayload.normalizedRequest) {
+          failedCount += 1
+          continue
+        }
+
+        const simulation = executeAdminAssessmentSimulation(version.normalizedPackage, parsedPayload.normalizedRequest)
+        if (!simulation.ok) {
+          failedCount += 1
+        } else if (simulation.warnings.length > 0) {
+          warningCount += 1
+        } else {
+          passedCount += 1
+        }
+      }
+
+      const actor = await deps.getActorIdentity(client)
+      const nowIso = deps.now().toISOString()
+      const snapshot = buildSuiteSnapshot({
+        executedAt: nowIso,
+        executedBy: actor?.full_name ?? null,
+        baselineVersionId: baseline?.id ?? null,
+        baselineVersionLabel: baseline?.versionLabel ?? null,
+        totalScenarios: activeScenarios.length,
+        passedCount,
+        warningCount,
+        failedCount,
+      })
+
+      await client.query(
+        `update assessment_versions
+         set latest_regression_suite_snapshot_json = $3::jsonb,
+             updated_at = $4::timestamptz,
+             updated_by_identity_id = $5
+         where id = $1
+           and assessment_definition_id = $2`,
+        [input.versionId, input.assessmentId, JSON.stringify(snapshot), nowIso, actor?.id ?? null],
+      )
+
+      await client.query(
+        `update assessment_definitions
+         set updated_at = $2::timestamptz,
+             updated_by_identity_id = $3
+         where id = $1`,
+        [input.assessmentId, nowIso, actor?.id ?? null],
+      )
+
+      await writeAssessmentAuditEvent(client, {
+        createId: deps.createId,
+        actor,
+        nowIso,
+        eventType: 'assessment_regression_suite_snapshot_updated',
+        summary: `Regression suite snapshot updated for ${version.versionLabel} · ${snapshot.summaryText}`,
+        assessmentId: input.assessmentId,
+        assessmentName: version.normalizedPackage.meta.assessmentTitle,
+        versionId: version.id,
+        versionLabel: version.versionLabel,
+        metadata: { ...snapshot },
+      })
+
+      return {
+        ok: true,
+        code: 'completed',
+        message: activeScenarios.length > 0
+          ? 'Regression suite completed and the latest snapshot was updated.'
+          : 'No active saved scenarios were available, but the latest suite snapshot was updated to reflect that.',
+        snapshot,
+      }
+    })
+  } catch (error) {
+    console.error('[admin-assessment-management] Failed to run regression suite.', error)
+    return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
   }
 }
 
