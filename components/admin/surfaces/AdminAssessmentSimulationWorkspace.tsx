@@ -15,9 +15,19 @@ import {
   type AdminAssessmentSimulationActionState,
   type AdminAssessmentSimulationInputMode,
   type AdminAssessmentSimulationRequest,
+  type AdminAssessmentSimulationResult,
 } from '@/lib/admin/domain/assessment-simulation'
 
 type FormMode = AdminAssessmentSimulationInputMode
+
+interface AdminAssessmentSimulationWorkspaceCopy {
+  title?: string
+  eyebrow?: string
+  description?: string
+  resultsTitle?: string
+  resultsEyebrow?: string
+  resultsDescription?: string
+}
 
 const INITIAL_STATE: AdminAssessmentSimulationActionState = { status: 'idle' }
 
@@ -65,11 +75,23 @@ function buildRequestFromAnswers(
 export function AdminAssessmentSimulationWorkspace({
   assessmentId,
   version,
+  workspaceCopy,
+  renderPostResults,
 }: {
   assessmentId: string
   version: AdminAssessmentVersionRecord
+  workspaceCopy?: AdminAssessmentSimulationWorkspaceCopy
+  renderPostResults?: (result: AdminAssessmentSimulationResult) => React.ReactNode
 }) {
   const [state, action] = useFormState(submitAdminAssessmentSimulationAction, INITIAL_STATE)
+  const copy = {
+    title: workspaceCopy?.title ?? 'Simulation input',
+    eyebrow: workspaceCopy?.eyebrow ?? 'Sample responses',
+    description: workspaceCopy?.description ?? 'Use generated inputs for fast QA or switch to raw JSON when you need exact payload control. All questions are treated as required in this admin simulation layer.',
+    resultsTitle: workspaceCopy?.resultsTitle ?? 'Simulation results',
+    resultsEyebrow: workspaceCopy?.resultsEyebrow ?? 'Scoring, normalization, and output trace',
+    resultsDescription: workspaceCopy?.resultsDescription ?? 'Compact admin evidence for whether the attached package behaves as expected with the supplied sample responses.',
+  }
   const eligibility = getAdminAssessmentSimulationWorkspaceStatus(version)
   const scenarioOptions = getAdminAssessmentSimulationScenarioOptions(version.normalizedPackage)
   const initialScenario = scenarioOptions.find((scenario) => scenario.key === 'sensible_defaults')?.request
@@ -123,9 +145,9 @@ export function AdminAssessmentSimulationWorkspace({
     <div className="space-y-5">
       <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <SurfaceSection
-          title="Simulation input"
-          eyebrow="Sample responses"
-          description="Use generated inputs for fast QA or switch to raw JSON when you need exact payload control. All questions are treated as required in this admin simulation layer."
+          title={copy.title}
+          eyebrow={copy.eyebrow}
+          description={copy.description}
         >
           <form action={action} className="space-y-4">
             <input type="hidden" name="assessmentId" value={assessmentId} />
@@ -255,9 +277,9 @@ export function AdminAssessmentSimulationWorkspace({
       </div>
 
       <SurfaceSection
-        title="Simulation results"
-        eyebrow="Scoring, normalization, and output trace"
-        description="Compact admin evidence for whether the attached package behaves as expected with the supplied sample responses."
+        title={copy.resultsTitle}
+        eyebrow={copy.resultsEyebrow}
+        description={copy.resultsDescription}
       >
         {state.result ? (
           <div className="space-y-5">
@@ -349,6 +371,7 @@ export function AdminAssessmentSimulationWorkspace({
               <summary className="cursor-pointer text-sm font-medium text-textPrimary">Debug payload</summary>
               <pre className="mt-3 overflow-x-auto rounded-2xl border border-white/[0.06] bg-panel/40 p-4 text-xs leading-6 text-textSecondary">{JSON.stringify({ input: state.result.debug.responsePayload, request: state.result.request }, null, 2)}</pre>
             </details>
+            {renderPostResults ? <div className="pt-2">{renderPostResults(state.result)}</div> : null}
           </div>
         ) : (
           <EmptyState title="No simulation result yet" detail="Run a simulation to inspect input coverage, raw scoring, normalization, output triggers, and trace evidence for this version." />
