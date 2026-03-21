@@ -17,6 +17,23 @@ import {
 } from '@/lib/admin/domain/audit'
 import { formatAdminRelativeTime, formatAdminTimestamp } from '@/lib/admin/wireframe'
 
+function AuditNotice({ data }: { data: AdminAuditWorkspaceData }) {
+  if (!data.notice) {
+    return null
+  }
+
+  const toneClass = data.notice.kind === 'setup_required'
+    ? 'border-amber-400/25 bg-amber-400/[0.08] text-amber-100'
+    : 'border-rose-400/25 bg-rose-500/[0.08] text-rose-100'
+
+  return (
+    <div className={`rounded-[1.25rem] border px-4 py-3 text-sm ${toneClass}`}>
+      <p className="font-semibold">{data.notice.title}</p>
+      <p className="mt-1 leading-6">{data.notice.detail}</p>
+    </div>
+  )
+}
+
 function Filters({ data }: { data: AdminAuditWorkspaceData }) {
   const { filters, availableActors, availableEventTypes, availableOrganisations } = data
 
@@ -184,6 +201,7 @@ export function AdminAuditWorkspaceSurface({ data }: { data: AdminAuditWorkspace
         description="Filter state is read directly from the URL so operators can deep-link investigations, preserve pagination context, and move cleanly between organisation detail and global audit review."
       >
         <div className="space-y-4">
+          <AuditNotice data={data} />
           <Filters data={data} />
           <FilterContext data={data} />
 
@@ -230,10 +248,10 @@ export function AdminAuditWorkspaceSurface({ data }: { data: AdminAuditWorkspace
             </>
           ) : (
             <EmptyState
-              title="No audit events match the current filters"
-              detail={filteredState
+              title={data.notice?.title ?? 'No audit events match the current filters'}
+              detail={data.notice?.detail ?? (filteredState
                 ? 'The current combination of organisation, actor, entity, event, date, or query filters did not produce any truthful audit rows. Clear or widen the filter scope to continue the investigation.'
-                : 'Audit events will appear here once the current workspace records real or derived operational history.'}
+                : 'Audit events will appear here once the current workspace records real or derived operational history.')}
               action={<Button href="/admin/audit" variant="secondary">Reset filters</Button>}
             />
           )}

@@ -110,6 +110,12 @@ export interface AdminAuditPagination {
   windowEnd: number
 }
 
+export interface AdminAuditWorkspaceNotice {
+  kind: 'setup_required' | 'degraded'
+  title: string
+  detail: string
+}
+
 export interface AdminAuditWorkspaceData {
   filters: AdminAuditFilters
   events: AdminAuditEventRecord[]
@@ -118,6 +124,7 @@ export interface AdminAuditWorkspaceData {
   availableOrganisations: AdminAuditOrganisationOption[]
   availableEventTypes: string[]
   appliedFilters: AdminAuditAppliedFilter[]
+  notice?: AdminAuditWorkspaceNotice | null
 }
 
 type AuditSearchParams = Record<string, string | string[] | undefined> | undefined

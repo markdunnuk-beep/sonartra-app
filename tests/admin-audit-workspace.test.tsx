@@ -12,6 +12,7 @@ import {
   getAdminAuditFilters,
 } from '../lib/admin/domain/audit'
 import {
+  getAdminAuditWorkspaceData,
   mapAdminAuditEventRows,
   mapAuditEventsToOrganisationActivity,
 } from '../lib/admin/server/audit-workspace'
@@ -68,6 +69,7 @@ const baseWorkspaceData = {
   availableOrganisations: [{ id: '20000000-0000-4000-8000-000000000001', label: 'Northstar Logistics' }],
   availableEventTypes: ['membership_joined', 'organisation_updated'],
   appliedFilters: [],
+  notice: null,
 }
 
 test('/admin/audit workspace renders the base audit list and operational columns', () => {
@@ -146,6 +148,137 @@ test('admin audit filter helpers sanitise invalid values and preserve filter sta
     buildAdminAuditHref({ ...filters, organisationId: '20000000-0000-4000-8000-000000000001', page: 3 }),
     '/admin/audit?organisationId=20000000-0000-4000-8000-000000000001&entityType=membership&eventType=membership_joined&query=northstar&page=3',
   )
+})
+
+test('audit workspace loader returns a safe empty-state payload when no audit data exists', async () => {
+  const queries: Array<{ sql: string; params: unknown[] | undefined }> = []
+  const data = await getAdminAuditWorkspaceData(undefined, {
+    queryDb: async (sql, params) => {
+      queries.push({ sql, params })
+
+      if (/to_regclass/i.test(sql)) {
+        return { rows: [{ has_access_audit_events_table: true }] } as never
+      }
+
+      if (/information_schema\\.columns/i.test(sql)) {
+        return {
+          rows: [
+            { column_name: 'entity_type' },
+            { column_name: 'entity_id' },
+            { column_name: 'entity_label' },
+            { column_name: 'entity_secondary' },
+          ],
+        } as never
+      }
+
+      if (/count\\(\\*\\)::int as total_count/i.test(sql)) {
+        return { rows: [{ total_count: 0 }] } as never
+      }
+
+      return { rows: [] } as never
+    },
+  })
+
+  assert.ok(queries.length >= 6)
+  assert.equal(data.notice ?? null, null)
+  assert.equal(data.events.length, 0)
+  assert.equal(data.pagination.totalCount, 0)
+  assert.equal(Array.isArray(data.availableEventTypes), true)
+
+  const html = renderToStaticMarkup(<AdminAuditWorkspaceSurface data={data} />)
+  assert.match(html, /Audit events will appear here once the current workspace records real or derived operational history\./)
+})
+
+test('shared audit row mapping tolerates missing optional actor and entity metadata', () => {
+  const events = mapAdminAuditEventRows([
+    {
+      id: 'audit-1',
+      event_type: 'assessment_package_imported',
+      summary: 'Assessment package imported for Sonartra Signals v1.2.0.',
+      actor_name: null,
+      actor_id: null,
+      happened_at: '2026-03-20T10:00:00Z',
+      source: 'audit',
+      organisation_id: null,
+      organisation_name: null,
+      entity_type: 'assessment_version',
+      entity_id: null,
+      entity_name: null,
+      entity_secondary: null,
+      is_derived: false,
+    },
+  ])
+
+  assert.equal(events.length, 1)
+  assert.equal(events[0]?.actorName, null)
+  assert.equal(events[0]?.entityName, null)
+  assert.equal(events[0]?.entityType, 'assessment_version')
+})
+
+test('audit workspace loader sanitises invalid search params and clamps stale pagination without crashing', async () => {
+  const data = await getAdminAuditWorkspaceData({
+    organisationId: 'not-a-uuid',
+    actorId: 'still-not-a-uuid',
+    dateFrom: 'not-a-date',
+    dateTo: 'also-not-a-date',
+    page: '99',
+  }, {
+    queryDb: async (sql) => {
+      if (/to_regclass/i.test(sql)) {
+        return { rows: [{ has_access_audit_events_table: false }] } as never
+      }
+
+      if (/select id::text as id, name as label/i.test(sql)) {
+        return { rows: [] } as never
+      }
+
+      if (/count\\(\\*\\)::int as total_count/i.test(sql)) {
+        return { rows: [{ total_count: 1 }] } as never
+      }
+
+      return {
+        rows: [{
+          id: 'organisation-created-20000000-0000-4000-8000-000000000001',
+          event_type: 'organisation_created',
+          summary: 'Organisation record created.',
+          actor_name: null,
+          actor_id: null,
+          happened_at: '2026-03-20T10:00:00Z',
+          source: 'organisation',
+          organisation_id: '20000000-0000-4000-8000-000000000001',
+          organisation_name: 'Northstar Logistics',
+          entity_type: 'organisation',
+          entity_id: '20000000-0000-4000-8000-000000000001',
+          entity_name: 'Northstar Logistics',
+          entity_secondary: 'northstar-logistics',
+          is_derived: true,
+        }],
+      } as never
+    },
+  })
+
+  assert.equal(data.filters.organisationId, '')
+  assert.equal(data.filters.actorId, '')
+  assert.equal(data.filters.page, 1)
+  assert.equal(data.events.length, 1)
+})
+
+test('audit workspace loader degrades to a setup state when required schema is missing', async () => {
+  const data = await getAdminAuditWorkspaceData(undefined, {
+    queryDb: async () => {
+      const error = new Error('column "entity_type" of relation "access_audit_events" does not exist') as Error & { code?: string }
+      error.code = '42703'
+      throw error
+    },
+  })
+
+  assert.equal(data.notice?.kind, 'setup_required')
+  assert.match(data.notice?.detail ?? '', /0006_admin_access_registry\.sql/)
+  assert.equal(data.events.length, 0)
+
+  const html = renderToStaticMarkup(<AdminAuditWorkspaceSurface data={data} />)
+  assert.match(html, /Audit workspace setup is incomplete/)
+  assert.match(html, /Apply filters/)
 })
 
 test('shared audit presentation mapping normalises event labels and organisation activity drill-in records', () => {
