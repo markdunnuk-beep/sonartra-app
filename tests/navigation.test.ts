@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { canonicalAdminLandingHref } from '../lib/admin/navigation'
 import { getSidebarLinks } from '../lib/navigation';
 
 test('sidebar links hide individual results when user has no completed assessment', () => {
@@ -14,6 +15,22 @@ test('sidebar links include individual results when user has completed assessmen
 
   assert.deepEqual(labels, ['Dashboard', 'Assessment', 'Individual Results', 'Organisation', 'Settings']);
 });
+
+test('admin users see the admin link in the primary signed-in navigation', () => {
+  const links = getSidebarLinks(true, canonicalAdminLandingHref)
+  const labels = links.map((link) => link.label)
+  const adminLink = links.find((link) => link.label === 'Admin')
+
+  assert.deepEqual(labels, ['Dashboard', 'Assessment', 'Individual Results', 'Admin', 'Organisation', 'Settings'])
+  assert.equal(adminLink?.href, canonicalAdminLandingHref)
+  assert.equal(adminLink?.startsWith, canonicalAdminLandingHref)
+})
+
+test('non-admin users do not see the admin link in the primary signed-in navigation', () => {
+  const adminLink = getSidebarLinks(true, null).find((link) => link.label === 'Admin')
+
+  assert.equal(adminLink, undefined)
+})
 
 test('organisation link remains visible and locked while reports stay hidden', () => {
   const links = getSidebarLinks(true);

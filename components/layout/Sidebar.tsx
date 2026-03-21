@@ -10,15 +10,20 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 
 interface NavigationStateResponse {
-  hasCompletedAssessment: boolean;
-  lifecycleState: 'not_started' | 'in_progress' | 'completed_processing' | 'ready' | 'error';
-  message: string;
+  hasCompletedAssessment: boolean
+  lifecycleState: 'not_started' | 'in_progress' | 'completed_processing' | 'ready' | 'error'
+  message: string
+  admin: {
+    visible: boolean
+    href: string | null
+  }
 }
 
 export function Sidebar() {
   const pathname = usePathname()
   const { user } = useUser()
   const [hasCompletedAssessment, setHasCompletedAssessment] = useState(false)
+  const [adminHref, setAdminHref] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -35,6 +40,7 @@ export function Sidebar() {
 
         if (active) {
           setHasCompletedAssessment(Boolean(payload.hasCompletedAssessment))
+          setAdminHref(payload.admin.visible ? payload.admin.href : null)
         }
       } catch {
         // Keep baseline nav if state lookup fails.
@@ -58,7 +64,7 @@ export function Sidebar() {
     [user?.firstName, user?.lastName, user?.primaryEmailAddress?.emailAddress]
   )
 
-  const links = useMemo(() => getSidebarLinks(hasCompletedAssessment), [hasCompletedAssessment])
+  const links = useMemo(() => getSidebarLinks(hasCompletedAssessment, adminHref), [adminHref, hasCompletedAssessment])
 
   return (
     <aside className="sticky top-0 z-20 w-full border-b border-border/80 bg-panel/95 px-4 py-5 backdrop-blur-md lg:flex lg:h-screen lg:flex-col lg:border-b-0 lg:border-r lg:px-5 lg:py-7">
