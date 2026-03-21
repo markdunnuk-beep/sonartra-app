@@ -29,9 +29,11 @@ function getEligibilityTone(status: ReturnType<typeof getAdminAssessmentSimulati
 export function AdminAssessmentVersionSimulationSurface({
   detailData,
   version,
+  selectedScenarioPayload,
 }: {
   detailData: AdminAssessmentDetailData
   version: AdminAssessmentVersionRecord
+  selectedScenarioPayload?: string | null
 }) {
   const readiness = getAdminAssessmentVersionReadiness(version)
   const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(version)
@@ -46,6 +48,7 @@ export function AdminAssessmentVersionSimulationSurface({
           <div className="flex flex-wrap gap-2">
             <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}`} variant="ghost"><ArrowLeft className="mr-2 h-4 w-4" />Back to version</Button>
             <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/import`} variant="ghost"><FileJson2 className="mr-2 h-4 w-4" />Package import</Button>
+            <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/scenarios`} variant="ghost">Scenario library</Button>
             <Button href={buildAdminAuditHref({ entityType: 'assessment_version', entityId: version.id })} variant="ghost"><Activity className="mr-2 h-4 w-4" />Version audit</Button>
           </div>
         )}
@@ -98,7 +101,7 @@ export function AdminAssessmentVersionSimulationSurface({
         />
       </SurfaceSection>
 
-      <AdminAssessmentSimulationWorkspace assessmentId={detailData.assessment.id} version={version} />
+      <AdminAssessmentSimulationWorkspace assessmentId={detailData.assessment.id} version={version} initialRequestPayload={selectedScenarioPayload} />
     </div>
   )
 }
