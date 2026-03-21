@@ -153,7 +153,7 @@ test('admin routes point to the shared high-fidelity wireframe surfaces', async 
 
   for (const route of routes) {
     const source = await readFile(new URL(route, import.meta.url), 'utf8')
-    assert.match(source, /Admin.*(WireframePage|DetailSurface)/)
+    assert.match(source, /Admin.*(WireframePage|DetailSurface|WorkspaceSurface)/)
   }
 })
 
