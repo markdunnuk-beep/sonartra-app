@@ -13,7 +13,7 @@
     "bootstrap:admin-access-registry": "tsx scripts/bootstrap-admin-access-registry.ts --dry-run"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.39.0",
+    "@clerk/nextjs": "6.39.0",
     "autoprefixer": "^10.4.27",
     "clsx": "^2.1.1",
     "framer-motion": "^11.18.2",
