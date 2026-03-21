@@ -103,6 +103,7 @@ export function AdminAssessmentVersionDetailSurface({
             {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/import`} variant="secondary"><FileJson2 className="mr-2 h-4 w-4" />Import package</Button> : null}
             {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/simulate`} variant="ghost"><FlaskConical className="mr-2 h-4 w-4" />Simulate</Button> : null}
             {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/report-preview`} variant="ghost">Report preview</Button> : null}
+            {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/scenarios`} variant="ghost">Scenario library</Button> : null}
             <Button href={buildAdminAuditHref({ entityType: 'assessment_version', entityId: version.id })} variant="ghost"><Activity className="mr-2 h-4 w-4" />View audit</Button>
           </div>
         )}
@@ -267,6 +268,7 @@ export function AdminAssessmentVersionDetailSurface({
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/simulate`} variant="secondary">Open simulation workspace</Button>
                 <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/report-preview`} variant="ghost">Open report preview</Button>
+                <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/scenarios`} variant="ghost">Open scenario library</Button>
               </div>
             </div>
           </div>

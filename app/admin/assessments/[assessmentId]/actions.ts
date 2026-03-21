@@ -21,6 +21,7 @@ function revalidateAssessmentPaths(assessmentId: string, versionLabel?: string) 
     revalidatePath(`/admin/assessments/${assessmentId}/versions/${versionLabel}/import`)
     revalidatePath(`/admin/assessments/${assessmentId}/versions/${versionLabel}/simulate`)
     revalidatePath(`/admin/assessments/${assessmentId}/versions/${versionLabel}/report-preview`)
+    revalidatePath(`/admin/assessments/${assessmentId}/versions/${versionLabel}/scenarios`)
   }
   revalidatePath('/admin/audit')
 }
