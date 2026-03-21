@@ -1,4 +1,4 @@
-export type AdminOrganisationDetailTab = 'overview' | 'members' | 'assessments' | 'settings'
+export type AdminOrganisationDetailTab = 'overview' | 'members' | 'assessments' | 'activity' | 'settings'
 
 export interface AdminOrganisationSummaryRecord {
   id: string
@@ -51,6 +51,7 @@ export interface AdminOrganisationActivityRecord {
   summary: string
   actorName: string | null
   happenedAt: string
+  source: 'audit' | 'membership' | 'organisation'
 }
 
 export interface AdminOrganisationDetailData {
@@ -58,9 +59,10 @@ export interface AdminOrganisationDetailData {
   members: AdminOrganisationMemberRecord[]
   assessments: AdminOrganisationAssessmentRecord[]
   recentActivity: AdminOrganisationActivityRecord[]
+  auditTrail: AdminOrganisationActivityRecord[]
 }
 
-export const ADMIN_ORGANISATION_DETAIL_TABS: AdminOrganisationDetailTab[] = ['overview', 'members', 'assessments', 'settings']
+export const ADMIN_ORGANISATION_DETAIL_TABS: AdminOrganisationDetailTab[] = ['overview', 'members', 'assessments', 'activity', 'settings']
 
 export function getAdminOrganisationDetailTab(tab?: string | null): AdminOrganisationDetailTab {
   if (tab && ADMIN_ORGANISATION_DETAIL_TABS.includes(tab as AdminOrganisationDetailTab)) {

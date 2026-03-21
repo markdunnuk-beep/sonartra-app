@@ -19,6 +19,7 @@ import {
   getAdminOrganisationClassificationLabel,
   getAdminOrganisationDetailTab,
   getAssessmentPublishStateLabel,
+  type AdminOrganisationActivityRecord,
   type AdminOrganisationDetailData,
   type AdminOrganisationDetailTab,
 } from '@/lib/admin/domain/organisation-detail'
@@ -39,15 +40,58 @@ function getActivityTone(eventType: string) {
     return 'rose' as const
   }
 
-  if (/sign_in|checkpoint|review|confirm/i.test(eventType)) {
+  if (/sign_in|checkpoint|review|confirm|created|joined|reactivat/i.test(eventType)) {
     return 'sky' as const
   }
 
   return 'slate' as const
 }
 
+function getFlashMessage(mutation?: string | null): string | null {
+  switch (mutation) {
+    case 'updated':
+      return 'Organisation changes saved successfully.'
+    case 'deactivated':
+      return 'Organisation moved to the suspended lifecycle state.'
+    case 'reactivated':
+      return 'Organisation restored to an active lifecycle state.'
+    default:
+      return null
+  }
+}
+
+function ActivityList({ activity, emptyCopy }: { activity: AdminOrganisationActivityRecord[]; emptyCopy: string }) {
+  if (!activity.length) {
+    return (
+      <EmptyState
+        title="No organisation-scoped activity is available"
+        detail={emptyCopy}
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {activity.map((event) => (
+        <div key={event.id} className="rounded-2xl border border-white/[0.07] bg-bg/55 px-4 py-3.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge label={event.eventType.replace(/_/g, ' ')} tone={getActivityTone(event.eventType)} />
+            <Badge label={event.source} tone="slate" />
+            <span className="text-xs text-textSecondary">{event.actorName ?? 'System'}</span>
+            <span className="text-xs text-textSecondary">{formatAdminTimestamp(event.happenedAt)}</span>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-textPrimary">{event.summary}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function HeaderMetadata({ detailData }: { detailData: AdminOrganisationDetailData }) {
   const { organisation } = detailData
+  const lifecycleHref = organisation.status === 'suspended'
+    ? `/admin/organisations/${organisation.id}/edit`
+    : `/admin/organisations/${organisation.id}/edit`
 
   return (
     <Card className="px-6 py-5 sm:px-7 sm:py-6">
@@ -65,17 +109,15 @@ function HeaderMetadata({ detailData }: { detailData: AdminOrganisationDetailDat
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {/* TODO(admin-org-edit): replace disabled action when organisation edit workflow is implemented. */}
-          <Button variant="secondary" disabled>
+          <Button href={`/admin/organisations/${organisation.id}/edit`} variant="secondary">
             <PencilLine className="mr-2 h-4 w-4" />
             Edit organisation
           </Button>
-          {/* TODO(admin-org-archive): replace disabled action when organisation lifecycle mutation endpoint exists. */}
-          <Button variant="ghost" disabled>
+          <Button href={lifecycleHref} variant="ghost">
             <Archive className="mr-2 h-4 w-4" />
-            Archive organisation
+            {organisation.status === 'suspended' ? 'Restore lifecycle' : 'Deactivate organisation'}
           </Button>
-          <Button href="/admin/audit" variant="ghost">
+          <Button href={getTabHref(organisation.id, 'activity')} variant="ghost">
             <Activity className="mr-2 h-4 w-4" />
             View audit trail
           </Button>
@@ -146,6 +188,7 @@ function OverviewTab({ detailData }: { detailData: AdminOrganisationDetailData }
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge label={event.eventType.replace(/_/g, ' ')} tone={getActivityTone(event.eventType)} />
+                      <Badge label={event.source} tone="slate" />
                       <span className="text-xs text-textSecondary">{event.actorName ?? 'System'}</span>
                     </div>
                     <p className="text-sm leading-6 text-textPrimary">{event.summary}</p>
@@ -156,7 +199,7 @@ function OverviewTab({ detailData }: { detailData: AdminOrganisationDetailData }
                 label: 'Recent activity',
                 value: 'No organisation-scoped audit events are available yet. This panel will populate when the audit model records tenant events.',
               }]}
-          footer={<p className="text-xs leading-5 text-textSecondary">Audit detail currently routes to the shared admin audit workspace until organisation-specific filtering is introduced.</p>}
+          footer={<p className="text-xs leading-5 text-textSecondary">Open the activity tab to review scoped audit, lifecycle, and derived membership events for this organisation.</p>}
         />
       </div>
     </div>
@@ -254,6 +297,22 @@ function AssessmentsTab({ detailData }: { detailData: AdminOrganisationDetailDat
   )
 }
 
+function ActivityTab({ detailData }: { detailData: AdminOrganisationDetailData }) {
+  return (
+    <SurfaceSection
+      title="Organisation audit trail"
+      eyebrow="Scoped activity"
+      description="Audit, lifecycle, creation, and derived membership events filtered to the selected organisation."
+      actions={<Button href="/admin/audit" variant="ghost">Open shared audit workspace</Button>}
+    >
+      <ActivityList
+        activity={detailData.auditTrail}
+        emptyCopy="The current audit model has not yet produced organisation-scoped events for this record."
+      />
+    </SurfaceSection>
+  )
+}
+
 function SettingsTab({ detailData }: { detailData: AdminOrganisationDetailData }) {
   const { organisation } = detailData
 
@@ -304,16 +363,20 @@ function SettingsTab({ detailData }: { detailData: AdminOrganisationDetailData }
 export function AdminOrganisationDetailSurface({
   detailData,
   activeTab = 'overview',
+  mutation,
 }: {
   detailData: AdminOrganisationDetailData
   activeTab?: AdminOrganisationDetailTab
+  mutation?: string | null
 }) {
   const resolvedTab = getAdminOrganisationDetailTab(activeTab)
   const { organisation } = detailData
+  const flashMessage = getFlashMessage(mutation)
   const tabItems = [
     { label: 'Overview', href: getTabHref(organisation.id, 'overview'), current: resolvedTab === 'overview' },
     { label: 'Members', href: getTabHref(organisation.id, 'members'), current: resolvedTab === 'members', count: detailData.members.length },
     { label: 'Assessments', href: getTabHref(organisation.id, 'assessments'), current: resolvedTab === 'assessments', count: detailData.assessments.length },
+    { label: 'Activity', href: getTabHref(organisation.id, 'activity'), current: resolvedTab === 'activity', count: detailData.auditTrail.length },
     { label: 'Settings', href: getTabHref(organisation.id, 'settings'), current: resolvedTab === 'settings' },
   ]
 
@@ -331,6 +394,12 @@ export function AdminOrganisationDetailSurface({
         }
       />
 
+      {flashMessage ? (
+        <div className="rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.08] px-5 py-4 text-sm text-emerald-100">
+          {flashMessage}
+        </div>
+      ) : null}
+
       <HeaderMetadata detailData={detailData} />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -345,6 +414,7 @@ export function AdminOrganisationDetailSurface({
       {resolvedTab === 'overview' ? <OverviewTab detailData={detailData} /> : null}
       {resolvedTab === 'members' ? <MembersTab detailData={detailData} /> : null}
       {resolvedTab === 'assessments' ? <AssessmentsTab detailData={detailData} /> : null}
+      {resolvedTab === 'activity' ? <ActivityTab detailData={detailData} /> : null}
       {resolvedTab === 'settings' ? <SettingsTab detailData={detailData} /> : null}
     </div>
   )
