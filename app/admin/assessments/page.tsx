@@ -1,5 +1,18 @@
-import { AdminAssessmentsWireframePage } from '@/components/admin/surfaces/AdminWireframeSurfaces'
+import { AdminAssessmentsRegistrySurface } from '@/components/admin/surfaces/AdminAssessmentsRegistrySurface'
+import { getAdminAssessmentRegistryData } from '@/lib/admin/server/assessment-management'
 
-export default function AdminAssessmentsPage() {
-  return <AdminAssessmentsWireframePage />
+export default async function AdminAssessmentsPage({
+  searchParams,
+}: {
+  searchParams?: {
+    query?: string
+    lifecycle?: string
+    category?: string
+    sort?: string
+    page?: string
+  }
+}) {
+  const data = await getAdminAssessmentRegistryData(searchParams)
+
+  return <AdminAssessmentsRegistrySurface data={data} />
 }

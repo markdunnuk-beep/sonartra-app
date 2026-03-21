@@ -44,7 +44,7 @@ export interface AuditLogEvent {
   details: Record<string, string | number | boolean | null>
 }
 
-export const ADMIN_AUDIT_ENTITY_TYPES = ['organisation', 'membership', 'user', 'admin_access'] as const
+export const ADMIN_AUDIT_ENTITY_TYPES = ['organisation', 'membership', 'user', 'assessment', 'assessment_version', 'admin_access'] as const
 export type AdminAuditEntityType = (typeof ADMIN_AUDIT_ENTITY_TYPES)[number]
 
 export const ADMIN_AUDIT_SOURCES = ['audit', 'membership', 'organisation'] as const
@@ -186,6 +186,10 @@ export function getAdminAuditEntityTypeLabel(entityType: AdminAuditEntityType): 
   switch (entityType) {
     case 'admin_access':
       return 'Admin access'
+    case 'assessment':
+      return 'Assessment'
+    case 'assessment_version':
+      return 'Assessment version'
     case 'membership':
       return 'Membership'
     case 'organisation':

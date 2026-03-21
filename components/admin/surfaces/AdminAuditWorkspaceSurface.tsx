@@ -65,6 +65,8 @@ function Filters({ data }: { data: AdminAuditWorkspaceData }) {
                 <option value="organisation">Organisation</option>
                 <option value="membership">Membership</option>
                 <option value="user">User</option>
+                <option value="assessment">Assessment</option>
+                <option value="assessment_version">Assessment version</option>
                 <option value="admin_access">Admin access</option>
               </select>
             </label>

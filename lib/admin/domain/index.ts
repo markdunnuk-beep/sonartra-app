@@ -10,3 +10,5 @@ export * from './access-registry'
 export * from './access-query'
 export * from './access-selectors'
 export * from './access-priority'
+
+export * from './assessment-management'

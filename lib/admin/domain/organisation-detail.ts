@@ -56,7 +56,7 @@ export interface AdminOrganisationActivityRecord {
   source: 'audit' | 'membership' | 'organisation'
   organisationId?: string | null
   organisationName?: string | null
-  entityType?: 'organisation' | 'membership' | 'user' | 'admin_access'
+  entityType?: 'organisation' | 'membership' | 'user' | 'admin_access' | 'assessment' | 'assessment_version'
   entityId?: string | null
   entityName?: string | null
 }

@@ -78,7 +78,7 @@ function normaliseOptionalString(value: string | null | undefined): string | nul
 }
 
 function normaliseEntityType(value: string | null, details?: Record<string, unknown>): AdminAuditEntityType | null {
-  if (value === 'organisation' || value === 'membership' || value === 'user' || value === 'admin_access') {
+  if (value === 'organisation' || value === 'membership' || value === 'user' || value === 'assessment' || value === 'assessment_version' || value === 'admin_access') {
     return value
   }
 
@@ -216,25 +216,37 @@ function getAuditWorkspaceBaseQuery() {
         'audit'::text as source,
         aae.organisation_id::text as organisation_id,
         org.name as organisation_name,
-        case
-          when aae.event_type like 'organisation_%' or coalesce(aae.metadata ->> 'change_type', '') like 'organisation_%' then 'organisation'
-          when aae.event_type like 'membership_%' or aae.event_type like 'member_%' or aae.event_type like 'invitation_%' or coalesce(aae.metadata ->> 'change_type', '') like 'membership_%' then 'membership'
-          when subject.identity_type = 'internal' and aae.organisation_id is null then 'admin_access'
-          else 'user'
-        end as entity_type,
-        case
-          when aae.event_type like 'organisation_%' or coalesce(aae.metadata ->> 'change_type', '') like 'organisation_%' then aae.organisation_id::text
-          when aae.event_type like 'membership_%' or aae.event_type like 'member_%' or aae.event_type like 'invitation_%' or coalesce(aae.metadata ->> 'change_type', '') like 'membership_%' then nullif(aae.metadata ->> 'membershipId', '')
-          else aae.identity_id::text
-        end as entity_id,
-        case
-          when aae.event_type like 'organisation_%' or coalesce(aae.metadata ->> 'change_type', '') like 'organisation_%' then org.name
-          else coalesce(subject.full_name, subject.email, aae.identity_id::text)
-        end as entity_name,
-        case
-          when aae.event_type like 'organisation_%' or coalesce(aae.metadata ->> 'change_type', '') like 'organisation_%' then org.slug
-          else subject.email
-        end as entity_secondary,
+        coalesce(
+          nullif(aae.entity_type, ''),
+          case
+            when aae.event_type like 'organisation_%' or coalesce(aae.metadata ->> 'change_type', '') like 'organisation_%' then 'organisation'
+            when aae.event_type like 'membership_%' or aae.event_type like 'member_%' or aae.event_type like 'invitation_%' or coalesce(aae.metadata ->> 'change_type', '') like 'membership_%' then 'membership'
+            when subject.identity_type = 'internal' and aae.organisation_id is null then 'admin_access'
+            else 'user'
+          end
+        ) as entity_type,
+        coalesce(
+          nullif(aae.entity_id, ''),
+          case
+            when aae.event_type like 'organisation_%' or coalesce(aae.metadata ->> 'change_type', '') like 'organisation_%' then aae.organisation_id::text
+            when aae.event_type like 'membership_%' or aae.event_type like 'member_%' or aae.event_type like 'invitation_%' or coalesce(aae.metadata ->> 'change_type', '') like 'membership_%' then nullif(aae.metadata ->> 'membershipId', '')
+            else aae.identity_id::text
+          end
+        ) as entity_id,
+        coalesce(
+          nullif(aae.entity_label, ''),
+          case
+            when aae.event_type like 'organisation_%' or coalesce(aae.metadata ->> 'change_type', '') like 'organisation_%' then org.name
+            else coalesce(subject.full_name, subject.email, aae.identity_id::text)
+          end
+        ) as entity_name,
+        coalesce(
+          nullif(aae.entity_secondary, ''),
+          case
+            when aae.event_type like 'organisation_%' or coalesce(aae.metadata ->> 'change_type', '') like 'organisation_%' then org.slug
+            else subject.email
+          end
+        ) as entity_secondary,
         false as is_derived
       from access_audit_events aae
       left join admin_identities actor on actor.id = aae.actor_identity_id
@@ -471,6 +483,76 @@ export async function getAdminAuditWorkspaceData(searchParams?: AuditSearchParam
       organisations: availableOrganisations,
     }),
   }
+}
+
+
+export async function getScopedAdminAuditActivity({
+  entityType,
+  entityId,
+  includeSecondaryEntityType,
+  limit = 40,
+}: {
+  entityType: AdminAuditEntityType
+  entityId: string
+  includeSecondaryEntityType?: AdminAuditEntityType
+  limit?: number
+}): Promise<AdminAuditEventRecord[]> {
+  const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 40
+  const baseFilters = {
+    ...getAdminAuditFilters({ entityType, entityId }),
+    entityType,
+    entityId,
+    page: 1,
+    pageSize: safeLimit,
+  }
+
+  const primaryEvents = await getAdminAuditEvents(baseFilters)
+
+  if (!includeSecondaryEntityType) {
+    return primaryEvents.events
+  }
+
+  const secondaryEvents = await getAdminAuditEvents({
+    ...getAdminAuditFilters({ entityType: includeSecondaryEntityType, entityId }),
+    entityType: includeSecondaryEntityType,
+    entityId,
+    page: 1,
+    pageSize: safeLimit,
+  })
+
+  return [...primaryEvents.events, ...secondaryEvents.events]
+    .sort((left, right) => right.happenedAt.localeCompare(left.happenedAt) || right.id.localeCompare(left.id))
+    .slice(0, safeLimit)
+}
+
+export function mapScopedAuditEventsToAssessmentActivity(events: AdminAuditEventRecord[]): Array<{
+  id: string
+  eventType: string
+  summary: string
+  actorId: string | null
+  actorName: string | null
+  happenedAt: string
+  source: 'audit' | 'membership' | 'organisation'
+  entityType: 'assessment' | 'assessment_version'
+  entityId: string | null
+  entityName: string | null
+  entitySecondary: string | null
+}> {
+  return events
+    .filter((event) => event.entityType === 'assessment' || event.entityType === 'assessment_version')
+    .map((event) => ({
+      id: event.id,
+      eventType: event.eventType,
+      summary: event.summary,
+      actorId: event.actorId,
+      actorName: event.actorName,
+      happenedAt: event.happenedAt,
+      source: event.source,
+      entityType: event.entityType as 'assessment' | 'assessment_version',
+      entityId: event.entityId,
+      entityName: event.entityName,
+      entitySecondary: event.entitySecondary,
+    }))
 }
 
 export async function getOrganisationAuditActivity(organisationId: string, limit = 40): Promise<AdminOrganisationActivityRecord[]> {
