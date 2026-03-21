@@ -49,6 +49,7 @@ function makeReadyState(): DashboardState {
 
 function makeInProgressState(): DashboardState {
   return {
+    status: 'ready',
     authStatus: 'authenticated',
     hasCompletedResult: false,
     result: null,
@@ -103,4 +104,28 @@ test('intelligence coverage renders current and future platform states', () => {
   assert.match(html, /Coming soon/)
   assert.match(html, /Organisation Intelligence/)
   assert.match(html, /Locked/)
+})
+
+test('infrastructure error renders a calm fallback message instead of the normal dashboard sections', () => {
+  const html = renderToStaticMarkup(
+    <DashboardPreResultContent
+      state={{
+        status: 'error',
+        authStatus: 'authenticated',
+        hasCompletedResult: false,
+        result: null,
+        assessment: {
+          status: 'error',
+          progressPercent: 0,
+          questionsCompleted: 0,
+          questionsRemaining: null,
+        },
+      }}
+    />,
+  )
+
+  assert.match(html, /We couldn&#x27;t load your dashboard right now\./)
+  assert.match(html, /Please try again shortly\./)
+  assert.doesNotMatch(html, /Next Actions/)
+  assert.doesNotMatch(html, /Key Signals Snapshot/)
 })

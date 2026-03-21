@@ -1,7 +1,8 @@
 import { AssessmentRow } from '@/lib/assessment-types'
 import { queryDb } from '@/lib/db'
 import { resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness'
-import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
+import { DatabaseUserResolutionError, resolveAuthenticatedAppUser } from '@/lib/server/auth'
+import { checkDatabaseHealth, DbHealthCheckResult } from '@/lib/server/db-health'
 import { getAuthenticatedIndividualIntelligenceResult, IndividualIntelligenceResultContract } from '@/lib/server/individual-intelligence-result'
 
 type DashboardAssessmentStatus = 'not_started' | 'in_progress' | 'completed_processing' | 'ready' | 'error'
@@ -14,6 +15,7 @@ export interface DashboardAssessmentState {
 }
 
 export interface DashboardState {
+  status?: 'ready' | 'error'
   authStatus: 'authenticated' | 'unauthenticated'
   hasCompletedResult: boolean
   assessment: DashboardAssessmentState
@@ -25,6 +27,7 @@ interface DashboardStateDependencies {
   getLatestAssessment: (dbUserId: string) => Promise<AssessmentRow | null>
   getResult: (dbUserId: string) => Promise<IndividualIntelligenceResultContract>
   resolveLifecycle: typeof resolveIndividualLifecycleState
+  checkDatabaseHealth: () => Promise<DbHealthCheckResult>
 }
 
 const fallbackAssessmentState: DashboardAssessmentState = {
@@ -60,6 +63,7 @@ const defaultDependencies: DashboardStateDependencies = {
       resolveAuthenticatedUserId: async () => dbUserId,
     })
   },
+  checkDatabaseHealth,
 }
 
 function mapAssessmentState(assessment: AssessmentRow | null, lifecycleStatus: DashboardAssessmentStatus): DashboardAssessmentState {
@@ -91,17 +95,60 @@ function deriveStatusFromAssessment(assessment: AssessmentRow | null): Dashboard
   return 'in_progress'
 }
 
+function buildUnauthenticatedDashboardState(): DashboardState {
+  return {
+    status: 'ready',
+    authStatus: 'unauthenticated',
+    hasCompletedResult: false,
+    assessment: fallbackAssessmentState,
+    result: null,
+  }
+}
+
+function buildInfrastructureFailureDashboardState(): DashboardState {
+  return {
+    status: 'error',
+    authStatus: 'authenticated',
+    hasCompletedResult: false,
+    assessment: {
+      ...fallbackAssessmentState,
+      status: 'error',
+    },
+    result: null,
+  }
+}
+
+async function logDatabaseHealthDiagnostic(checkHealth: () => Promise<DbHealthCheckResult>) {
+  try {
+    const health = await checkHealth()
+    if (health.ok) {
+      console.error('getAuthenticatedDashboardState user resolution failed even though the database health check succeeded.')
+      return
+    }
+
+    console.error(`getAuthenticatedDashboardState user resolution failed because the database is unavailable: ${health.message}`)
+  } catch (error) {
+    console.error('getAuthenticatedDashboardState could not complete database health check:', error)
+  }
+}
+
 export async function getAuthenticatedDashboardState(dependencies: Partial<DashboardStateDependencies> = {}): Promise<DashboardState> {
   const deps = { ...defaultDependencies, ...dependencies }
-  const userId = await deps.resolveAuthenticatedUserId()
+
+  let userId: string | null
+  try {
+    userId = await deps.resolveAuthenticatedUserId()
+  } catch (error) {
+    if (error instanceof DatabaseUserResolutionError) {
+      await logDatabaseHealthDiagnostic(deps.checkDatabaseHealth)
+      return buildInfrastructureFailureDashboardState()
+    }
+
+    throw error
+  }
 
   if (!userId) {
-    return {
-      authStatus: 'unauthenticated',
-      hasCompletedResult: false,
-      assessment: fallbackAssessmentState,
-      result: null,
-    }
+    return buildUnauthenticatedDashboardState()
   }
 
   let assessment: AssessmentRow | null = null
@@ -121,6 +168,7 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
 
   if (lifecycleStatus !== 'ready') {
     return {
+      status: 'ready',
       authStatus: 'authenticated',
       hasCompletedResult: false,
       assessment: mapAssessmentState(assessment, lifecycleStatus),
@@ -133,6 +181,7 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
     const canShowResult = result.resultStatus === 'complete' && result.hasResult
 
     return {
+      status: 'ready',
       authStatus: 'authenticated',
       hasCompletedResult: canShowResult,
       assessment: mapAssessmentState(assessment, canShowResult ? 'ready' : lifecycleStatus),
@@ -142,6 +191,7 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
     console.error('getAuthenticatedDashboardState result lookup failed; preserving ready-state metrics:', error)
 
     return {
+      status: 'ready',
       authStatus: 'authenticated',
       hasCompletedResult: false,
       assessment: mapAssessmentState(assessment, lifecycleStatus),
