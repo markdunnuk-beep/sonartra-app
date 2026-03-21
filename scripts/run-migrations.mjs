@@ -1,17 +1,9 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Client } from 'pg';
+import { resolveMigrationFiles } from './migration-files.mjs';
 
 const migrationsDir = path.join(process.cwd(), 'db', 'migrations');
-
-async function resolveMigrationFiles() {
-  const files = await readdir(migrationsDir, { withFileTypes: true });
-
-  return files
-    .filter((entry) => entry.isFile() && /^\d+_.+\.sql$/i.test(entry.name))
-    .map((entry) => entry.name)
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-}
 
 async function ensureMigrationTrackingTable(client) {
   await client.query(`
@@ -66,10 +58,14 @@ async function runMigrations() {
   await client.connect();
 
   try {
-    const migrationFiles = await resolveMigrationFiles();
+    const { migrationFiles, skippedSeedFiles } = await resolveMigrationFiles(migrationsDir);
 
     if (migrationFiles.length === 0) {
       throw new Error(`No migration files found in ${migrationsDir}`);
+    }
+
+    if (skippedSeedFiles.length > 0) {
+      console.log(`→ Skipping seed migrations (set INCLUDE_SEED_MIGRATIONS=true to include): ${skippedSeedFiles.join(', ')}`);
     }
 
     await ensureMigrationTrackingTable(client);
