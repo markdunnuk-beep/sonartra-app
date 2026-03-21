@@ -82,6 +82,58 @@ export interface AdminAssessmentVersionRecord {
   createdByName: string | null
   updatedByName: string | null
   publishedByName: string | null
+  latestSuiteSnapshot: AdminAssessmentLatestSuiteSnapshot | null
+  savedScenarios: AdminAssessmentSavedScenarioRecord[]
+}
+
+export interface AdminAssessmentSavedScenarioRecord {
+  id: string
+  versionId: string
+  versionLabel: string
+  name: string
+  description: string | null
+  status: 'active' | 'archived'
+  payload: string
+  sourceVersionId: string | null
+  sourceVersionLabel: string | null
+  sourceScenarioId: string | null
+  provenanceSummary: string | null
+  createdAt: string
+  updatedAt: string
+  archivedAt: string | null
+  createdByName: string | null
+  updatedByName: string | null
+}
+
+export interface AdminAssessmentLatestSuiteSnapshot {
+  executedAt: string
+  executedBy: string | null
+  baselineVersionId: string | null
+  baselineVersionLabel: string | null
+  totalScenarios: number
+  passedCount: number
+  warningCount: number
+  failedCount: number
+  overallStatus: 'pass' | 'warning' | 'fail'
+  summaryText: string
+}
+
+export interface AdminAssessmentScenarioImportState {
+  status: 'idle' | 'success' | 'error'
+  message?: string
+  summary?: {
+    sourceVersionLabel: string | null
+    importedCount: number
+    skippedCount: number
+    importedNames: string[]
+    skipped: Array<{ name: string; reason: string }>
+  }
+}
+
+export interface AdminAssessmentScenarioSuiteRunState {
+  status: 'idle' | 'success' | 'error'
+  message?: string
+  snapshot?: AdminAssessmentLatestSuiteSnapshot | null
 }
 
 export interface AdminAssessmentDetailData {
@@ -282,5 +334,16 @@ export function buildAdminAssessmentVersionMutationState(message?: string, field
     status: 'error',
     message,
     fieldErrors,
+  }
+}
+
+export function buildAdminAssessmentScenarioImportState(
+  message?: string,
+  summary?: AdminAssessmentScenarioImportState['summary'],
+): AdminAssessmentScenarioImportState {
+  return {
+    status: 'error',
+    message,
+    summary,
   }
 }

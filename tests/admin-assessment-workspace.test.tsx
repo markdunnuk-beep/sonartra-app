@@ -224,6 +224,38 @@ const detailData = {
       createdByName: 'Noah Chen',
       updatedByName: 'Noah Chen',
       publishedByName: 'Rina Patel',
+      latestSuiteSnapshot: {
+        executedAt: '2026-03-21T09:15:00Z',
+        executedBy: 'Rina Patel',
+        baselineVersionId: 'version-1',
+        baselineVersionLabel: '1.1.0',
+        totalScenarios: 2,
+        passedCount: 1,
+        warningCount: 1,
+        failedCount: 0,
+        overallStatus: 'warning' as const,
+        summaryText: '1/2 passed · 1 warning(s).',
+      },
+      savedScenarios: [
+        {
+          id: 'scenario-1',
+          versionId: 'version-2',
+          versionLabel: '1.2.0',
+          name: 'Leadership baseline',
+          description: 'Published release baseline.',
+          status: 'active' as const,
+          payload: JSON.stringify({ answers: [{ questionId: 'q1', optionId: 'q1.b' }], locale: 'en', source: 'manual_json', scenarioKey: null }),
+          sourceVersionId: null,
+          sourceVersionLabel: null,
+          sourceScenarioId: null,
+          provenanceSummary: 'Local to this version',
+          createdAt: '2026-03-20T09:00:00Z',
+          updatedAt: '2026-03-21T09:00:00Z',
+          archivedAt: null,
+          createdByName: 'Rina Patel',
+          updatedByName: 'Rina Patel',
+        },
+      ],
     },
     {
       id: 'version-3',
@@ -248,6 +280,38 @@ const detailData = {
       createdByName: 'Noah Chen',
       updatedByName: 'Noah Chen',
       publishedByName: null,
+      latestSuiteSnapshot: {
+        executedAt: '2026-03-22T10:30:00Z',
+        executedBy: 'Noah Chen',
+        baselineVersionId: 'version-2',
+        baselineVersionLabel: '1.2.0',
+        totalScenarios: 2,
+        passedCount: 1,
+        warningCount: 1,
+        failedCount: 0,
+        overallStatus: 'warning' as const,
+        summaryText: '1/2 passed · 1 warning(s).',
+      },
+      savedScenarios: [
+        {
+          id: 'scenario-draft',
+          versionId: 'version-3',
+          versionLabel: '1.3.0',
+          name: 'Draft regression',
+          description: 'Draft carry-forward scenario.',
+          status: 'active' as const,
+          payload: JSON.stringify({ answers: [{ questionId: 'q1', optionId: 'q1.b' }, { questionId: 'q2', optionId: 'q2.b' }], locale: 'en', source: 'manual_json', scenarioKey: null }),
+          sourceVersionId: 'version-2',
+          sourceVersionLabel: '1.2.0',
+          sourceScenarioId: 'scenario-1',
+          provenanceSummary: 'Copied from v1.2.0 · source scenario scenario-1.',
+          createdAt: '2026-03-22T09:10:00Z',
+          updatedAt: '2026-03-22T10:30:00Z',
+          archivedAt: null,
+          createdByName: 'Noah Chen',
+          updatedByName: 'Noah Chen',
+        },
+      ],
     },
     {
       id: 'version-1',
@@ -285,6 +349,27 @@ const detailData = {
       createdByName: 'Rina Patel',
       updatedByName: 'Rina Patel',
       publishedByName: null,
+      latestSuiteSnapshot: null,
+      savedScenarios: [
+        {
+          id: 'scenario-legacy',
+          versionId: 'version-1',
+          versionLabel: '1.1.0',
+          name: 'Legacy baseline',
+          description: 'Prior release suite scenario.',
+          status: 'active' as const,
+          payload: JSON.stringify({ answers: [{ questionId: 'q1', optionId: 'q1.a' }], locale: 'en', source: 'manual_json', scenarioKey: null }),
+          sourceVersionId: null,
+          sourceVersionLabel: null,
+          sourceScenarioId: null,
+          provenanceSummary: 'Original saved scenario',
+          createdAt: '2026-03-15T09:00:00Z',
+          updatedAt: '2026-03-15T09:00:00Z',
+          archivedAt: null,
+          createdByName: 'Rina Patel',
+          updatedByName: 'Rina Patel',
+        },
+      ],
     },
   ],
   activity: [
@@ -401,9 +486,10 @@ test('assessment detail settings tab renders package-aware metadata and compiler
 
 test('assessment version detail surface renders package preview diff and readiness evidence', async () => {
   const detailHtml = renderToStaticMarkup(<AdminAssessmentVersionDetailSurface detailData={detailData} version={detailData.versions[1]} />)
-  const [versionSurfaceSource, importFormSource] = await Promise.all([
+  const [versionSurfaceSource, importFormSource, simulationSurfaceSource] = await Promise.all([
     readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionDetailSurface.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionPackageImportForm.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/admin/surfaces/AdminAssessmentSimulationWorkspace.tsx', import.meta.url), 'utf8'),
   ])
 
   assert.match(detailHtml, /Package Preview/)
@@ -413,9 +499,15 @@ test('assessment version detail surface renders package preview diff and readine
   assert.match(detailHtml, /q2/)
   assert.match(detailHtml, /Structured comparison against v1.2.0 found operational package changes\./)
   assert.match(detailHtml, /Ready with warnings/)
+  assert.match(detailHtml, /Latest regression suite snapshot/)
+  assert.match(detailHtml, /1 \/ 1 \/ 0|1 \/ 1 \/ 0/)
   assert.match(versionSurfaceSource, /Import assessment package/)
+  assert.match(versionSurfaceSource, /Latest regression suite snapshot/)
   assert.match(versionSurfaceSource, /Assessment package imported successfully\./)
   assert.match(importFormSource, /Validation results/)
+  assert.match(simulationSurfaceSource, /Import scenarios from previous version/)
+  assert.match(simulationSurfaceSource, /Clone an individual scenario/)
+  assert.match(simulationSurfaceSource, /Run full suite/)
 })
 
 test('assessment version detail surface renders clean no-package state', () => {
@@ -439,6 +531,8 @@ test('assessment version detail surface renders clean no-package state', () => {
       normalizedPackage: null,
       hasDefinitionPayload: false,
       validationStatus: null,
+      latestSuiteSnapshot: null,
+      savedScenarios: [],
     }],
   }} version={{
     ...detailData.versions[1],
@@ -458,6 +552,8 @@ test('assessment version detail surface renders clean no-package state', () => {
     normalizedPackage: null,
     hasDefinitionPayload: false,
     validationStatus: null,
+    latestSuiteSnapshot: null,
+    savedScenarios: [],
   }} />)
 
   assert.match(html, /No package attached/)
@@ -480,6 +576,8 @@ test('assessment version detail surface renders invalid-package state cleanly', 
     normalizedPackage: null,
     hasDefinitionPayload: false,
     validationStatus: 'invalid',
+    latestSuiteSnapshot: null,
+    savedScenarios: [],
   }
   const html = renderToStaticMarkup(<AdminAssessmentVersionDetailSurface detailData={{ ...detailData, versions: [invalidVersion, detailData.versions[0]] }} version={invalidVersion} />)
 
@@ -536,6 +634,18 @@ test('assessment version row mapping normalises audit-facing version state and p
     created_by_name: 'Noah Chen',
     updated_by_name: 'Noah Chen',
     published_by_name: null,
+    latest_regression_suite_snapshot_json: {
+      executedAt: '2026-03-02T10:00:00Z',
+      executedBy: 'Noah Chen',
+      baselineVersionId: 'version-0',
+      baselineVersionLabel: '0.9.0',
+      totalScenarios: 3,
+      passedCount: 2,
+      warningCount: 1,
+      failedCount: 0,
+      overallStatus: 'warning',
+      summaryText: '2/3 passed · 1 warning(s).',
+    },
   }])
 
   assert.equal(versions[0]?.versionLabel, '1.0.0')
@@ -543,6 +653,7 @@ test('assessment version row mapping normalises audit-facing version state and p
   assert.equal(versions[0]?.packageInfo.status, 'invalid')
   assert.equal(versions[0]?.packageInfo.importedByName, 'Noah Chen')
   assert.equal(versions[0]?.normalizedPackage?.questions.length, 2)
+  assert.equal(versions[0]?.latestSuiteSnapshot?.overallStatus, 'warning')
 })
 
 test('assessment routes and actions wire server data loading, import workflow, and mutation surfaces', async () => {
@@ -570,6 +681,9 @@ test('assessment routes and actions wire server data loading, import workflow, a
   assert.match(detailAction, /publishAdminAssessmentVersion/)
   assert.match(detailAction, /archiveAdminAssessmentVersion/)
   assert.match(detailAction, /importAdminAssessmentPackage/)
+  assert.match(detailAction, /importAdminAssessmentSavedScenarios/)
+  assert.match(detailAction, /cloneAdminAssessmentSavedScenario/)
+  assert.match(detailAction, /runAdminAssessmentScenarioSuite/)
   assert.match(notFoundSource, /Assessment not found/)
   assert.match(versionRoute, /AdminAssessmentVersionDetailSurface/)
   assert.match(importRoute, /mode="import"/)

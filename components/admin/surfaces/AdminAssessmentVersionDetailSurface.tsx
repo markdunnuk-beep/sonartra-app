@@ -52,6 +52,10 @@ function formatReadinessLabel(verdict: 'ready' | 'ready_with_warnings' | 'blocke
   return verdict === 'ready_with_warnings' ? 'Ready with warnings' : verdict === 'ready' ? 'Ready' : 'Blocked'
 }
 
+function getSuiteSnapshotTone(status: NonNullable<AdminAssessmentVersionRecord['latestSuiteSnapshot']>['overallStatus']) {
+  return status === 'pass' ? 'emerald' as const : status === 'warning' ? 'amber' as const : 'rose' as const
+}
+
 function EvidenceList({ items, tone }: { items: string[]; tone: 'rose' | 'amber' }) {
   if (!items.length) {
     return null
@@ -88,6 +92,7 @@ export function AdminAssessmentVersionDetailSurface({
   const diff = getAdminAssessmentVersionDiff(version, detailData.versions, detailData.assessment.currentPublishedVersionId)
   const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(version)
   const reportPreviewStatus = getAdminAssessmentReportPreviewWorkspaceStatus(version)
+  const latestSuiteSnapshot = version.latestSuiteSnapshot
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -132,6 +137,35 @@ export function AdminAssessmentVersionDetailSurface({
           <p className="mt-3 text-sm leading-6 text-textSecondary">{packageSummary ? `${preview.metrics.dimensionsCount} dimensions · ${preview.metrics.optionsCount} options · ${preview.metrics.outputRuleCount} output rules.` : 'Summary metrics populate after a valid import.'}</p>
         </div>
       </div>
+
+      <SurfaceSection
+        title="Latest regression suite snapshot"
+        eyebrow="Release-control visibility"
+        description="A compact version-level summary of the most recent full saved-scenario suite run. This is not historical run storage; it is the latest truthful release signal only."
+        actions={<Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/simulate`} variant="secondary">Open scenario library / suite</Button>}
+      >
+        {latestSuiteSnapshot ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge label={latestSuiteSnapshot.overallStatus} tone={getSuiteSnapshotTone(latestSuiteSnapshot.overallStatus)} />
+              <p className="text-sm text-textSecondary">{latestSuiteSnapshot.summaryText}</p>
+            </div>
+            <MetaGrid
+              columns={3}
+              items={[
+                { label: 'Last run', value: formatAdminTimestamp(latestSuiteSnapshot.executedAt) },
+                { label: 'Executed by', value: latestSuiteSnapshot.executedBy ?? 'Unknown' },
+                { label: 'Baseline used', value: latestSuiteSnapshot.baselineVersionLabel ? `v${latestSuiteSnapshot.baselineVersionLabel}` : 'None selected' },
+                { label: 'Scenarios run', value: String(latestSuiteSnapshot.totalScenarios) },
+                { label: 'Pass / warning / fail', value: `${latestSuiteSnapshot.passedCount} / ${latestSuiteSnapshot.warningCount} / ${latestSuiteSnapshot.failedCount}` },
+                { label: 'Overall status', value: latestSuiteSnapshot.overallStatus },
+              ]}
+            />
+          </div>
+        ) : (
+          <EmptyState title="No suite snapshot stored" detail="Run the full saved-scenario suite from the simulation workspace to persist a compact release-control summary on this version." />
+        )}
+      </SurfaceSection>
 
       <SurfaceSection
         title="Overview"

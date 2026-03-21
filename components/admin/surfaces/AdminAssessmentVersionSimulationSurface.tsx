@@ -98,7 +98,7 @@ export function AdminAssessmentVersionSimulationSurface({
         />
       </SurfaceSection>
 
-      <AdminAssessmentSimulationWorkspace assessmentId={detailData.assessment.id} version={version} />
+      <AdminAssessmentSimulationWorkspace assessmentId={detailData.assessment.id} version={version} relatedVersions={detailData.versions} />
     </div>
   )
 }

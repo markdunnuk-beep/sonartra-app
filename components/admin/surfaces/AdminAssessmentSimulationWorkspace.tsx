@@ -2,11 +2,20 @@
 
 import React from 'react'
 import { useFormState, useFormStatus } from 'react-dom'
-import { FlaskConical, Play, RefreshCcw, RotateCcw } from 'lucide-react'
-import { submitAdminAssessmentSimulationAction } from '@/app/admin/assessments/[assessmentId]/actions'
+import { CopyPlus, FlaskConical, Play, RefreshCcw, RotateCcw } from 'lucide-react'
+import {
+  submitAdminAssessmentScenarioCloneAction,
+  submitAdminAssessmentScenarioImportAction,
+  submitAdminAssessmentScenarioSuiteRunAction,
+  submitAdminAssessmentSimulationAction,
+} from '@/app/admin/assessments/[assessmentId]/actions'
 import { Badge, EmptyState, MetaGrid, SurfaceSection, Table } from '@/components/admin/surfaces/AdminWireframePrimitives'
 import { Button } from '@/components/ui/Button'
-import type { AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
+import type {
+  AdminAssessmentScenarioImportState,
+  AdminAssessmentScenarioSuiteRunState,
+  AdminAssessmentVersionRecord,
+} from '@/lib/admin/domain/assessment-management'
 import {
   buildAdminAssessmentSimulationPayloadText,
   getAdminAssessmentSimulationPackageStatusSummary,
@@ -30,6 +39,8 @@ interface AdminAssessmentSimulationWorkspaceCopy {
 }
 
 const INITIAL_STATE: AdminAssessmentSimulationActionState = { status: 'idle' }
+const INITIAL_IMPORT_STATE: AdminAssessmentScenarioImportState = { status: 'idle' }
+const INITIAL_SUITE_STATE: AdminAssessmentScenarioSuiteRunState = { status: 'idle' }
 
 function toneForState(status: AdminAssessmentSimulationActionState['status']) {
   switch (status) {
@@ -55,6 +66,16 @@ function SubmitButton() {
   )
 }
 
+function InlineSubmitButton({ busyLabel, idleLabel }: { busyLabel: string; idleLabel: string }) {
+  const { pending } = useFormStatus()
+
+  return (
+    <Button type="submit" variant="secondary" disabled={pending} className="min-h-10 px-4 py-2 text-xs">
+      {pending ? busyLabel : idleLabel}
+    </Button>
+  )
+}
+
 function buildRequestFromAnswers(
   answers: Record<string, string>,
   version: AdminAssessmentVersionRecord,
@@ -75,15 +96,20 @@ function buildRequestFromAnswers(
 export function AdminAssessmentSimulationWorkspace({
   assessmentId,
   version,
+  relatedVersions = [],
   workspaceCopy,
   renderPostResults,
 }: {
   assessmentId: string
   version: AdminAssessmentVersionRecord
+  relatedVersions?: AdminAssessmentVersionRecord[]
   workspaceCopy?: AdminAssessmentSimulationWorkspaceCopy
   renderPostResults?: (result: AdminAssessmentSimulationResult) => React.ReactNode
 }) {
   const [state, action] = useFormState(submitAdminAssessmentSimulationAction, INITIAL_STATE)
+  const [importState, importAction] = useFormState(submitAdminAssessmentScenarioImportAction, INITIAL_IMPORT_STATE)
+  const [cloneState, cloneAction] = useFormState(submitAdminAssessmentScenarioCloneAction, INITIAL_IMPORT_STATE)
+  const [suiteState, suiteAction] = useFormState(submitAdminAssessmentScenarioSuiteRunAction, INITIAL_SUITE_STATE)
   const copy = {
     title: workspaceCopy?.title ?? 'Simulation input',
     eyebrow: workspaceCopy?.eyebrow ?? 'Sample responses',
@@ -93,6 +119,10 @@ export function AdminAssessmentSimulationWorkspace({
     resultsDescription: workspaceCopy?.resultsDescription ?? 'Compact admin evidence for whether the attached package behaves as expected with the supplied sample responses.',
   }
   const eligibility = getAdminAssessmentSimulationWorkspaceStatus(version)
+  const priorVersions = relatedVersions.filter((entry) => entry.id !== version.id && entry.savedScenarios.some((scenario) => scenario.status === 'active'))
+  const latestSnapshot = suiteState.snapshot ?? version.latestSuiteSnapshot
+  const defaultImportSource = priorVersions.find((entry) => entry.lifecycleStatus === 'published') ?? priorVersions[0] ?? null
+  const defaultBaseline = relatedVersions.find((entry) => entry.id !== version.id && entry.lifecycleStatus === 'published') ?? relatedVersions.find((entry) => entry.id !== version.id) ?? null
   const scenarioOptions = getAdminAssessmentSimulationScenarioOptions(version.normalizedPackage)
   const initialScenario = scenarioOptions.find((scenario) => scenario.key === 'sensible_defaults')?.request
   const initialPayload = initialScenario ? buildAdminAssessmentSimulationPayloadText(initialScenario) : '{\n  "answers": []\n}'
@@ -377,6 +407,164 @@ export function AdminAssessmentSimulationWorkspace({
           <EmptyState title="No simulation result yet" detail="Run a simulation to inspect input coverage, raw scoring, normalization, output triggers, and trace evidence for this version." />
         )}
       </SurfaceSection>
+
+      <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+        <SurfaceSection
+          title="Scenario library"
+          eyebrow="Release-control continuity"
+          description="Copy active saved scenarios forward from a prior version, clone individual scenarios, and keep the draft library aligned with the current normalized package."
+        >
+          <div className="space-y-4">
+            {version.lifecycleStatus === 'draft' ? (
+              <form action={importAction} className="rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
+                <input type="hidden" name="assessmentId" value={assessmentId} />
+                <input type="hidden" name="versionId" value={version.id} />
+                <input type="hidden" name="versionLabel" value={version.versionLabel} />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-textPrimary">Import scenarios from previous version</p>
+                    <p className="mt-1 text-sm leading-6 text-textSecondary">Bulk copy only active scenarios. Invalid or incompatible scenarios are skipped with reasons.</p>
+                  </div>
+                  <InlineSubmitButton busyLabel="Importing…" idleLabel="Import scenarios from previous version" />
+                </div>
+                <div className="mt-4">
+                  <label className="block space-y-2">
+                    <span className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Source version</span>
+                    <select name="sourceVersionId" defaultValue={defaultImportSource?.id ?? ''} className="h-11 w-full rounded-xl border border-border/90 bg-panel/70 px-3.5 text-sm text-textPrimary outline-none ring-accent/40 focus:border-accent/50 focus:ring">
+                      <option value="">Most relevant prior version</option>
+                      {priorVersions.map((entry) => <option key={entry.id} value={entry.id}>v{entry.versionLabel} · {entry.savedScenarios.filter((scenario) => scenario.status === 'active').length} active scenario(s)</option>)}
+                    </select>
+                  </label>
+                </div>
+                {importState.message ? <p className={`mt-4 text-sm ${importState.status === 'success' ? 'text-emerald-100' : 'text-amber-100'}`}>{importState.message}</p> : null}
+                {importState.summary ? (
+                  <div className="mt-4 space-y-3 rounded-2xl border border-white/[0.07] bg-panel/40 p-4">
+                    <p className="text-sm text-textPrimary">Imported {importState.summary.importedCount} · skipped {importState.summary.skippedCount}{importState.summary.sourceVersionLabel ? ` · source v${importState.summary.sourceVersionLabel}` : ''}.</p>
+                    {importState.summary.skipped.length ? (
+                      <ul className="space-y-2 text-sm leading-6 text-textSecondary">
+                        {importState.summary.skipped.map((item) => <li key={`${item.name}-${item.reason}`}>• {item.name}: {item.reason}</li>)}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+              </form>
+            ) : (
+              <EmptyState title="Copy-forward controls are draft only" detail="Create or reopen a draft version before importing or cloning saved scenarios." />
+            )}
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-textPrimary">Current version scenarios</p>
+                <Badge label={`${version.savedScenarios.filter((scenario) => scenario.status === 'active').length} active`} tone="sky" />
+              </div>
+              {version.savedScenarios.length ? (
+                <Table
+                  columns={['Scenario', 'Status', 'Provenance', 'Updated']}
+                  rows={version.savedScenarios.map((scenario) => [
+                    <div key={`${scenario.id}-name`} className="space-y-1">
+                      <p className="text-sm font-medium text-textPrimary">{scenario.name}</p>
+                      <p className="text-xs text-textSecondary">{scenario.description ?? 'No description supplied.'}</p>
+                    </div>,
+                    <Badge key={`${scenario.id}-status`} label={scenario.status} tone={scenario.status === 'active' ? 'emerald' : 'slate'} />,
+                    <p key={`${scenario.id}-prov`} className="text-sm text-textPrimary">{scenario.provenanceSummary ?? (scenario.sourceVersionLabel ? `Copied from v${scenario.sourceVersionLabel}` : 'Local to this version')}</p>,
+                    <p key={`${scenario.id}-updated`} className="text-sm text-textPrimary">{new Date(scenario.updatedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })}</p>,
+                  ])}
+                />
+              ) : (
+                <EmptyState title="No saved scenarios attached" detail="Import scenarios from a prior version or save new QA scenarios into this draft to build a regression suite." />
+              )}
+            </div>
+
+            {version.lifecycleStatus === 'draft' && priorVersions.length ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <CopyPlus className="h-4 w-4 text-accent" />
+                  <p className="text-sm font-medium text-textPrimary">Clone an individual scenario</p>
+                </div>
+                <Table
+                  columns={['Source', 'Scenario', 'Provenance', 'Action']}
+                  rows={priorVersions.flatMap((priorVersion) => priorVersion.savedScenarios.filter((scenario) => scenario.status === 'active').map((scenario) => [
+                    <p key={`${scenario.id}-source`} className="text-sm text-textPrimary">v{priorVersion.versionLabel}</p>,
+                    <div key={`${scenario.id}-scenario`} className="space-y-1">
+                      <p className="text-sm font-medium text-textPrimary">{scenario.name}</p>
+                      <p className="text-xs text-textSecondary">{scenario.description ?? 'No description supplied.'}</p>
+                    </div>,
+                    <p key={`${scenario.id}-provenance`} className="text-sm text-textPrimary">{scenario.provenanceSummary ?? 'Original saved scenario'}</p>,
+                    <form key={`${scenario.id}-action`} action={cloneAction}>
+                      <input type="hidden" name="assessmentId" value={assessmentId} />
+                      <input type="hidden" name="versionId" value={version.id} />
+                      <input type="hidden" name="versionLabel" value={version.versionLabel} />
+                      <input type="hidden" name="sourceScenarioId" value={scenario.id} />
+                      <InlineSubmitButton busyLabel="Cloning…" idleLabel="Clone scenario" />
+                    </form>,
+                  ]))}
+                />
+                {cloneState.message ? <p className={`text-sm ${cloneState.status === 'success' ? 'text-emerald-100' : 'text-amber-100'}`}>{cloneState.message}</p> : null}
+                {cloneState.summary?.skipped.length ? <p className="text-sm text-amber-100">{cloneState.summary.skipped[0]?.reason}</p> : null}
+              </div>
+            ) : null}
+          </div>
+        </SurfaceSection>
+
+        <SurfaceSection
+          title="Latest regression suite snapshot"
+          eyebrow="Version-level release signal"
+          description="This lightweight summary persists on the version record after a full suite run so admins can assess release readiness at a glance."
+          actions={(
+            <div className="flex flex-wrap gap-2">
+              <Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}`} variant="ghost">Open version detail</Button>
+              <Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}/simulate`} variant="secondary">Scenario library / suite</Button>
+            </div>
+          )}
+        >
+          <div className="space-y-4">
+            <form action={suiteAction} className="rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
+              <input type="hidden" name="assessmentId" value={assessmentId} />
+              <input type="hidden" name="versionId" value={version.id} />
+              <input type="hidden" name="versionLabel" value={version.versionLabel} />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-textPrimary">Run full saved-scenario suite</p>
+                  <p className="mt-1 text-sm leading-6 text-textSecondary">Single scenario runs do not touch this snapshot. Full suite runs overwrite the latest summary only.</p>
+                </div>
+                <InlineSubmitButton busyLabel="Running suite…" idleLabel="Run full suite" />
+              </div>
+              <div className="mt-4">
+                <label className="block space-y-2">
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Baseline version</span>
+                  <select name="baselineVersionId" defaultValue={defaultBaseline?.id ?? ''} className="h-11 w-full rounded-xl border border-border/90 bg-panel/70 px-3.5 text-sm text-textPrimary outline-none ring-accent/40 focus:border-accent/50 focus:ring">
+                    <option value="">Most relevant baseline</option>
+                    {relatedVersions.filter((entry) => entry.id !== version.id).map((entry) => <option key={entry.id} value={entry.id}>v{entry.versionLabel}</option>)}
+                  </select>
+                </label>
+              </div>
+              {suiteState.message ? <p className={`mt-4 text-sm ${suiteState.status === 'success' ? 'text-emerald-100' : 'text-amber-100'}`}>{suiteState.message}</p> : null}
+            </form>
+
+            {latestSnapshot ? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge label={latestSnapshot.overallStatus} tone={latestSnapshot.overallStatus === 'pass' ? 'emerald' : latestSnapshot.overallStatus === 'warning' ? 'amber' : 'rose'} />
+                  <p className="text-sm text-textSecondary">{latestSnapshot.summaryText}</p>
+                </div>
+                <MetaGrid
+                  columns={2}
+                  items={[
+                    { label: 'Executed at', value: new Date(latestSnapshot.executedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) },
+                    { label: 'Executed by', value: latestSnapshot.executedBy ?? 'Unknown' },
+                    { label: 'Baseline used', value: latestSnapshot.baselineVersionLabel ? `v${latestSnapshot.baselineVersionLabel}` : 'None selected' },
+                    { label: 'Scenarios run', value: String(latestSnapshot.totalScenarios) },
+                    { label: 'Pass / warning / fail', value: `${latestSnapshot.passedCount} / ${latestSnapshot.warningCount} / ${latestSnapshot.failedCount}` },
+                    { label: 'Overall severity', value: latestSnapshot.overallStatus },
+                  ]}
+                />
+              </>
+            ) : (
+              <EmptyState title="No suite snapshot stored" detail="Run the full saved-scenario suite to persist a version-level readiness summary." />
+            )}
+          </div>
+        </SurfaceSection>
+      </div>
     </div>
   )
 }
