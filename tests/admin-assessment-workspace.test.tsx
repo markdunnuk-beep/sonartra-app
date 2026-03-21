@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 import { AdminAssessmentsRegistrySurface } from '../components/admin/surfaces/AdminAssessmentsRegistrySurface'
 import { AdminAssessmentDetailSurface } from '../components/admin/surfaces/AdminAssessmentDetailSurface'
+import { AdminAssessmentVersionDetailSurface } from '../components/admin/surfaces/AdminAssessmentVersionDetailSurface'
 import {
   getAdminAssessmentDetailTab,
   getAdminAssessmentRegistryFilters,
@@ -48,6 +49,26 @@ const registryData = {
   },
 }
 
+const packageInfo = {
+  status: 'valid_with_warnings' as const,
+  schemaVersion: 'sonartra-assessment-package/v1',
+  sourceType: 'manual_import' as const,
+  importedAt: '2026-03-21T08:00:00Z',
+  importedByName: 'Rina Patel',
+  sourceFilename: 'signals-v1.json',
+  summary: {
+    dimensionsCount: 5,
+    questionsCount: 80,
+    optionsCount: 320,
+    scoringRuleCount: 5,
+    normalizationRuleCount: 4,
+    outputRuleCount: 3,
+    localeCount: 1,
+  },
+  errors: [],
+  warnings: [{ path: 'scoring.dimensionRules', message: 'Not every dimension has an explicit scoring rule.' }],
+}
+
 const detailData = {
   assessment: {
     id: 'assessment-1',
@@ -68,10 +89,11 @@ const detailData = {
       assessmentId: 'assessment-1',
       versionLabel: '1.2.0',
       lifecycleStatus: 'published' as const,
-      sourceType: 'manual' as const,
+      sourceType: 'import' as const,
       notes: 'Current stable release',
-      hasDefinitionPayload: false,
-      validationStatus: null,
+      hasDefinitionPayload: true,
+      validationStatus: 'valid_with_warnings',
+      packageInfo,
       createdAt: '2026-03-10T09:00:00Z',
       updatedAt: '2026-03-21T09:00:00Z',
       publishedAt: '2026-03-21T09:00:00Z',
@@ -88,7 +110,17 @@ const detailData = {
       sourceType: 'manual' as const,
       notes: 'Next draft candidate',
       hasDefinitionPayload: false,
-      validationStatus: null,
+      validationStatus: 'invalid',
+      packageInfo: {
+        ...packageInfo,
+        status: 'invalid' as const,
+        importedAt: '2026-03-22T09:00:00Z',
+        importedByName: 'Noah Chen',
+        sourceFilename: null,
+        summary: null,
+        errors: [{ path: 'questions[0].dimensionId', message: 'Question references unknown dimension "missing".' }],
+        warnings: [],
+      },
       createdAt: '2026-03-22T09:00:00Z',
       updatedAt: '2026-03-22T09:00:00Z',
       publishedAt: null,
@@ -114,15 +146,28 @@ const detailData = {
     },
     {
       id: 'audit-2',
-      eventType: 'assessment_version_published',
-      summary: 'Version 1.2.0 published for Sonartra Signals.',
+      eventType: 'assessment_package_imported',
+      summary: 'Assessment package imported for Sonartra Signals v1.2.0.',
       actorId: 'admin-1',
       actorName: 'Rina Patel',
-      happenedAt: '2026-03-21T09:00:00Z',
+      happenedAt: '2026-03-21T08:00:00Z',
       source: 'audit' as const,
       entityType: 'assessment_version' as const,
       entityId: 'version-2',
       entityName: 'Sonartra Signals v1.2.0',
+      entitySecondary: 'assessment-1',
+    },
+    {
+      id: 'audit-3',
+      eventType: 'assessment_publish_blocked_invalid_package',
+      summary: 'Publish blocked for Sonartra Signals v1.3.0 because the attached package is missing or invalid.',
+      actorId: 'admin-1',
+      actorName: 'Rina Patel',
+      happenedAt: '2026-03-22T09:00:00Z',
+      source: 'audit' as const,
+      entityType: 'assessment_version' as const,
+      entityId: 'version-3',
+      entityName: 'Sonartra Signals v1.3.0',
       entitySecondary: 'assessment-1',
     },
   ],
@@ -158,10 +203,11 @@ test('assessment detail overview renders workspace tabs, metadata, and audit act
   assert.match(html, /Activity/)
   assert.match(html, /Assessment created successfully\./)
   assert.match(html, /Published version v1.2.0/)
+  assert.match(html, /Package spec v1 enabled/)
   assert.match(html, /\/admin\/audit\?entityType=assessment&amp;entityId=assessment-1/)
 })
 
-test('assessment versions workspace wires lifecycle controls and version operators', async () => {
+test('assessment versions workspace wires lifecycle controls and package operators', async () => {
   const [surfaceSource, managerSource] = await Promise.all([
     readFile(new URL('../components/admin/surfaces/AdminAssessmentDetailSurface.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionsManager.tsx', import.meta.url), 'utf8'),
@@ -171,28 +217,44 @@ test('assessment versions workspace wires lifecycle controls and version operato
   assert.match(managerSource, /Create draft version/)
   assert.match(managerSource, /Publish/)
   assert.match(managerSource, /Archive/)
-  assert.match(managerSource, /Metadata only/)
-  assert.match(managerSource, /confirmation/)
+  assert.match(managerSource, /Import package/)
+  assert.match(managerSource, /Re-import package/)
 })
 
-test('assessment activity tab renders shared audit presentation and deep link', () => {
+test('assessment activity tab renders shared audit presentation and package events', () => {
   const html = renderToStaticMarkup(<AdminAssessmentDetailSurface detailData={detailData} activeTab="activity" />)
 
   assert.match(html, /Assessment activity/)
-  assert.match(html, /assessment created/i)
-  assert.match(html, /assessment version published/i)
+  assert.match(html, /assessment package imported/i)
+  assert.match(html, /publish blocked invalid package/i)
   assert.match(html, /Open in shared audit/)
   assert.match(html, /\/admin\/audit\?entityType=assessment&amp;entityId=assessment-1/)
 })
 
-test('assessment detail settings tab renders safe metadata and reserved controls', () => {
+test('assessment detail settings tab renders package-aware metadata and compiler controls', () => {
   const html = renderToStaticMarkup(<AdminAssessmentDetailSurface detailData={detailData} activeTab="settings" />)
 
   assert.match(html, /Assessment settings/)
   assert.match(html, /Assessment ID/)
   assert.match(html, /assessment-1/)
-  assert.match(html, /Result\/report template binding/)
-  assert.match(html, /Assignment defaults/)
+  assert.match(html, /Enabled/)
+  assert.match(html, /Package normalization pipeline active/i)
+})
+
+test('assessment version detail surface shows package provenance and validation state', async () => {
+  const detailHtml = renderToStaticMarkup(<AdminAssessmentVersionDetailSurface detailData={detailData} version={detailData.versions[0]} />)
+  const [versionSurfaceSource, importFormSource] = await Promise.all([
+    readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionDetailSurface.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionPackageImportForm.tsx', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(detailHtml, /Version package state/)
+  assert.match(detailHtml, /Valid with warnings/)
+  assert.match(detailHtml, /signals-v1\.json/)
+  assert.match(detailHtml, /80 questions/)
+  assert.match(versionSurfaceSource, /Import assessment package/)
+  assert.match(versionSurfaceSource, /Assessment package imported successfully\./)
+  assert.match(importFormSource, /Validation results/)
 })
 
 test('assessment route helpers normalise tabs and registry filters', () => {
@@ -206,7 +268,7 @@ test('assessment route helpers normalise tabs and registry filters', () => {
   assert.equal(filters.page, 2)
 })
 
-test('assessment version row mapping normalises audit-facing version state', () => {
+test('assessment version row mapping normalises audit-facing version state and package fields', () => {
   const versions = mapAssessmentVersionRows([{
     id: 'version-1',
     assessment_definition_id: 'assessment-1',
@@ -215,7 +277,26 @@ test('assessment version row mapping normalises audit-facing version state', () 
     source_type: 'manual',
     notes: 'Initial draft',
     has_definition_payload: false,
-    validation_status: null,
+    validation_status: 'invalid',
+    package_status: 'invalid',
+    package_schema_version: 'sonartra-assessment-package/v1',
+    package_source_type: 'manual_import',
+    package_imported_at: '2026-03-02T09:00:00Z',
+    package_source_filename: 'draft.json',
+    package_imported_by_name: 'Noah Chen',
+    package_validation_report_json: {
+      summary: {
+        dimensionsCount: 1,
+        questionsCount: 0,
+        optionsCount: 0,
+        scoringRuleCount: 0,
+        normalizationRuleCount: 0,
+        outputRuleCount: 0,
+        localeCount: 1,
+      },
+      errors: [{ path: 'questions', message: 'At least one question is required.' }],
+      warnings: [],
+    },
     created_at: '2026-03-01T09:00:00Z',
     updated_at: '2026-03-02T09:00:00Z',
     published_at: null,
@@ -227,11 +308,12 @@ test('assessment version row mapping normalises audit-facing version state', () 
 
   assert.equal(versions[0]?.versionLabel, '1.0.0')
   assert.equal(versions[0]?.lifecycleStatus, 'draft')
-  assert.equal(versions[0]?.createdByName, 'Noah Chen')
+  assert.equal(versions[0]?.packageInfo.status, 'invalid')
+  assert.equal(versions[0]?.packageInfo.importedByName, 'Noah Chen')
 })
 
-test('assessment routes and actions wire server data loading and mutation surfaces', async () => {
-  const [registryRoute, detailRoute, createRoute, createAction, detailAction, notFoundSource, versionRoute] = await Promise.all([
+test('assessment routes and actions wire server data loading, import workflow, and mutation surfaces', async () => {
+  const [registryRoute, detailRoute, createRoute, createAction, detailAction, notFoundSource, versionRoute, importRoute, versionNotFoundSource, versionSurfaceSource, importFormSource] = await Promise.all([
     readFile(new URL('../app/admin/assessments/page.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../app/admin/assessments/[assessmentId]/page.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../app/admin/assessments/new/page.tsx', import.meta.url), 'utf8'),
@@ -239,6 +321,10 @@ test('assessment routes and actions wire server data loading and mutation surfac
     readFile(new URL('../app/admin/assessments/[assessmentId]/actions.ts', import.meta.url), 'utf8'),
     readFile(new URL('../app/admin/assessments/[assessmentId]/not-found.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../app/admin/assessments/[assessmentId]/versions/[versionNumber]/page.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../app/admin/assessments/[assessmentId]/versions/[versionNumber]/import/page.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../app/admin/assessments/[assessmentId]/versions/[versionNumber]/not-found.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionDetailSurface.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionPackageImportForm.tsx', import.meta.url), 'utf8'),
   ])
 
   assert.match(registryRoute, /getAdminAssessmentRegistryData/)
@@ -250,6 +336,11 @@ test('assessment routes and actions wire server data loading and mutation surfac
   assert.match(detailAction, /createAdminAssessmentDraftVersion/)
   assert.match(detailAction, /publishAdminAssessmentVersion/)
   assert.match(detailAction, /archiveAdminAssessmentVersion/)
+  assert.match(detailAction, /importAdminAssessmentPackage/)
   assert.match(notFoundSource, /Assessment not found/)
-  assert.match(versionRoute, /redirect\(/)
+  assert.match(versionRoute, /AdminAssessmentVersionDetailSurface/)
+  assert.match(importRoute, /mode="import"/)
+  assert.match(versionNotFoundSource, /Assessment version not found/)
+  assert.match(versionSurfaceSource, /Version package state/)
+  assert.match(importFormSource, /Validate \+ attach package/)
 })

@@ -71,8 +71,8 @@ function OverviewTab({ detailData }: { detailData: AdminAssessmentDetailData }) 
               { label: 'Current published version', value: assessment.currentPublishedVersionLabel ? `v${assessment.currentPublishedVersionLabel}` : 'None' },
               { label: 'Latest draft version', value: diagnostics.latestDraftVersionLabel ? `v${diagnostics.latestDraftVersionLabel}` : 'None' },
               { label: 'Latest version update', value: formatAdminTimestamp(diagnostics.latestVersionUpdatedAt) },
-              { label: 'Import compatibility', value: 'Reserved metadata surface only', hint: 'No package upload or validation engine is implemented in this task.' },
-              { label: 'Definition payload state', value: versions.some((version) => version.hasDefinitionPayload) ? 'At least one version has payload metadata' : 'No definition payload stored yet' },
+              { label: 'Import compatibility', value: 'Package spec v1 enabled', hint: 'Draft versions can now import, validate, and retain structured package payloads.' },
+              { label: 'Definition payload state', value: versions.some((version) => version.packageInfo.status === 'valid' || version.packageInfo.status === 'valid_with_warnings') ? 'At least one version has a valid attached package' : 'No valid package attached yet' },
               { label: 'Created', value: formatAdminTimestamp(assessment.createdAt) },
               { label: 'Updated', value: formatAdminTimestamp(assessment.updatedAt) },
             ]}
@@ -124,10 +124,10 @@ function SettingsTab({ detailData }: { detailData: AdminAssessmentDetailData }) 
           { label: 'Current published version ID', value: assessment.currentPublishedVersionId ?? 'None' },
           { label: 'Created', value: formatAdminTimestamp(assessment.createdAt) },
           { label: 'Updated', value: formatAdminTimestamp(assessment.updatedAt) },
-          { label: 'Import compatibility', value: 'Reserved', hint: 'Future package validation, preview checks, and import provenance can land here.' },
+          { label: 'Import compatibility', value: 'Enabled', hint: 'Version routes expose package intake, validation output, provenance, and publish gating.' },
           { label: 'Result/report template binding', value: 'Not yet modelled' },
           { label: 'Assignment defaults', value: 'Not yet modelled' },
-          { label: 'Definition compiler state', value: 'No compiler pipeline connected yet' },
+          { label: 'Definition compiler state', value: 'Package normalization pipeline active for draft imports' },
         ]}
       />
     </SurfaceSection>

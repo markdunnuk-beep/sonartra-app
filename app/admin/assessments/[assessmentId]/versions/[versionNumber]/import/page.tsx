@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { AdminAssessmentVersionDetailSurface } from '@/components/admin/surfaces/AdminAssessmentVersionDetailSurface'
 import { getAdminAssessmentDetailData } from '@/lib/admin/server/assessment-management'
 
-export default async function AdminAssessmentVersionPage({
+export default async function AdminAssessmentVersionImportPage({
   params,
   searchParams,
 }: {
@@ -21,5 +21,5 @@ export default async function AdminAssessmentVersionPage({
     notFound()
   }
 
-  return <AdminAssessmentVersionDetailSurface detailData={detailData} version={version} mutation={searchParams?.mutation} />
+  return <AdminAssessmentVersionDetailSurface detailData={detailData} version={version} mode="import" mutation={searchParams?.mutation} />
 }
