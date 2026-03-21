@@ -25,6 +25,7 @@ export interface AdminOrganisationSummaryRecord {
 }
 
 export interface AdminOrganisationMemberRecord {
+  membershipId: string
   identityId: string
   fullName: string
   email: string
