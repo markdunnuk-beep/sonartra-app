@@ -1,8 +1,9 @@
-import { AssessmentVersionRow } from '@/lib/assessment-types'
 import { queryDb, withTransaction } from '@/lib/db'
 import type { AuthenticatedAppUser } from '@/lib/server/auth'
-
-const LIVE_SIGNALS_ASSESSMENT_KEY = 'sonartra_signals'
+import {
+  resolveLiveSignalsPublishedVersionState,
+  type LiveSignalsPublishedVersionDiagnosticCode,
+} from '@/lib/server/live-signals-runtime'
 
 type QueryDb = typeof queryDb
 
@@ -11,10 +12,6 @@ type WithTransaction = typeof withTransaction
 interface StartAssessmentInput {
   appUser: AuthenticatedAppUser | null
   source?: string
-}
-
-interface PublishedAssessmentVersionRow extends AssessmentVersionRow {
-  assessment_definition_id: string
 }
 
 interface ExistingAssessmentRow {
@@ -28,6 +25,7 @@ interface ExistingAssessmentRow {
 interface StartAssessmentDependencies {
   queryDb: QueryDb
   withTransaction: WithTransaction
+  resolveLiveSignalsPublishedVersionState: typeof resolveLiveSignalsPublishedVersionState
 }
 
 export interface StartLiveSignalsAssessmentSuccess {
@@ -43,20 +41,21 @@ export interface StartLiveSignalsAssessmentSuccess {
 
 export type StartLiveSignalsAssessmentResult =
   | { kind: 'unauthenticated'; status: 401; body: { error: string } }
-  | { kind: 'unavailable'; status: 404; body: { error: string } }
+  | { kind: 'unavailable'; status: 404; body: { error: string; code?: LiveSignalsPublishedVersionDiagnosticCode } }
   | { kind: 'ok'; status: 200 | 201; body: StartLiveSignalsAssessmentSuccess }
 
 const defaultDependencies: StartAssessmentDependencies = {
   queryDb,
   withTransaction,
+  resolveLiveSignalsPublishedVersionState,
 }
 
-function buildVersionPayload(version: Pick<AssessmentVersionRow, 'id' | 'key' | 'name' | 'total_questions'>) {
+function buildVersionPayload(version: { id: string; key: string; name: string; totalQuestions: number }) {
   return {
     id: version.id,
     key: version.key,
     name: version.name,
-    totalQuestions: version.total_questions,
+    totalQuestions: version.totalQuestions,
   }
 }
 
@@ -71,25 +70,17 @@ export async function startLiveSignalsAssessment(
   const deps = { ...defaultDependencies, ...dependencies }
   const appUser = input.appUser
 
-  const versionResult = await deps.queryDb<PublishedAssessmentVersionRow>(
-    `SELECT av.id, av.key, av.name, av.total_questions, av.is_active, av.assessment_definition_id
-     FROM assessment_definitions ad
-     INNER JOIN assessment_versions av ON av.id = ad.current_published_version_id
-     WHERE ad.key = $1
-       AND ad.lifecycle_status = 'published'
-       AND av.lifecycle_status = 'published'
-       AND av.is_active = TRUE
-     LIMIT 1`,
-    [LIVE_SIGNALS_ASSESSMENT_KEY],
-  )
+  const publishedVersionState = await deps.resolveLiveSignalsPublishedVersionState({ queryDb: deps.queryDb })
+  const currentPublishedVersion = publishedVersionState.version
 
-  const currentPublishedVersion = versionResult.rows[0]
-
-  if (!currentPublishedVersion) {
+  if (!currentPublishedVersion || !currentPublishedVersion.isActive) {
     return {
       kind: 'unavailable',
       status: 404,
-      body: { error: 'No active published Sonartra Signals version is available.' },
+      body: {
+        error: publishedVersionState.diagnostic.message,
+        code: publishedVersionState.diagnostic.code,
+      },
     }
   }
 
@@ -106,7 +97,7 @@ export async function startLiveSignalsAssessment(
        AND a.status IN ('not_started', 'in_progress')
      ORDER BY a.last_activity_at DESC NULLS LAST, a.created_at DESC
      LIMIT 1`,
-    [appUser.dbUserId, currentPublishedVersion.assessment_definition_id],
+    [appUser.dbUserId, currentPublishedVersion.assessmentDefinitionId],
   )
 
   const resumedAssessment = existingAssessment.rows[0]
@@ -144,7 +135,7 @@ export async function startLiveSignalsAssessment(
         source
       ) VALUES ($1, NULL, $2, 'not_started', NOW(), NOW(), 0, 0, 0, 'not_scored', $3)
       RETURNING id`,
-      [appUser.dbUserId, currentPublishedVersion.id, input.source ?? 'direct'],
+      [appUser.dbUserId, currentPublishedVersion.assessmentVersionId, input.source ?? 'direct'],
     )
 
     return result.rows[0]
@@ -156,7 +147,12 @@ export async function startLiveSignalsAssessment(
     body: {
       assessmentId: createdAssessment.id,
       resumed: false,
-      version: buildVersionPayload(currentPublishedVersion),
+      version: buildVersionPayload({
+        id: currentPublishedVersion.assessmentVersionId,
+        key: currentPublishedVersion.assessmentVersionKey,
+        name: currentPublishedVersion.assessmentVersionName,
+        totalQuestions: currentPublishedVersion.totalQuestions,
+      }),
     },
   }
 }
