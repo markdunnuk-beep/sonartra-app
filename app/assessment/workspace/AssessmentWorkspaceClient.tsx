@@ -21,7 +21,6 @@ import { type IndividualLifecycleResolution, type IndividualLifecycleState } fro
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const ACTIVE_ASSESSMENT_STORAGE_KEY = 'sonartra_active_assessment_id'
-const ASSESSMENT_VERSION_KEY = 'wplp80-v1'
 const WORKSPACE_ASSESSMENT_DEFINITION_ID = 'signals'
 
 interface LiveQuestion {
@@ -339,7 +338,6 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          assessmentVersionKey: ASSESSMENT_VERSION_KEY,
           source: 'direct',
         }),
       })
