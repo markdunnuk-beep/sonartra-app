@@ -41,3 +41,60 @@ test('queryDb reports missing DATABASE_URL with a clear configuration error', as
     }
   }
 })
+
+test('resolveDatabasePoolMax uses safe production defaults and ignores invalid overrides', async () => {
+  const dbModule = await import(buildModuleUrl('../lib/db.ts'))
+
+  assert.equal(
+    dbModule.resolveDatabasePoolMax({ NODE_ENV: 'production', DB_POOL_MAX: undefined } as NodeJS.ProcessEnv),
+    2,
+  )
+  assert.equal(
+    dbModule.resolveDatabasePoolMax({ NODE_ENV: 'development', DB_POOL_MAX: undefined } as NodeJS.ProcessEnv),
+    10,
+  )
+  assert.equal(
+    dbModule.resolveDatabasePoolMax({ NODE_ENV: 'production', DB_POOL_MAX: '1' } as NodeJS.ProcessEnv),
+    1,
+  )
+  assert.equal(
+    dbModule.resolveDatabasePoolMax({ NODE_ENV: 'production', DB_POOL_MAX: 'invalid' } as NodeJS.ProcessEnv),
+    2,
+  )
+  assert.equal(
+    dbModule.resolveDatabasePoolMax({ NODE_ENV: 'production', DB_POOL_MAX: '0' } as NodeJS.ProcessEnv),
+    2,
+  )
+})
+
+test('database error diagnostics classify pool exhaustion separately from schema failures', async () => {
+  const dbModule = await import(buildModuleUrl('../lib/db.ts'))
+  const poolError = new Error('MaxClientsInSessionMode: max clients reached - in Session mode max clients are limited to pool_size') as Error & { code?: string }
+  poolError.code = '53300'
+
+  const schemaError = new Error('relation "assessment_versions" does not exist') as Error & { code?: string }
+  schemaError.code = '42P01'
+
+  assert.deepEqual(dbModule.getDatabaseErrorDiagnostics(poolError), {
+    classification: 'pool_exhaustion',
+    code: '53300',
+    message: 'MaxClientsInSessionMode: max clients reached - in Session mode max clients are limited to pool_size',
+    causeCode: undefined,
+    causeMessage: undefined,
+  })
+  assert.equal(
+    dbModule.describeDatabaseError(poolError),
+    'Database request failed because the database connection pool is saturated.',
+  )
+  assert.deepEqual(dbModule.getDatabaseErrorDiagnostics(schemaError), {
+    classification: 'schema',
+    code: '42P01',
+    message: 'relation "assessment_versions" does not exist',
+    causeCode: undefined,
+    causeMessage: undefined,
+  })
+  assert.equal(
+    dbModule.describeDatabaseError(schemaError),
+    'Database request failed due to a database schema or query error.',
+  )
+})

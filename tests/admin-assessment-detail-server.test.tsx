@@ -172,6 +172,50 @@ test('assessment detail loader falls back to an empty saved-scenarios collection
   assert.doesNotMatch(html, /Application error/i)
 })
 
+test('assessment detail loader sequences database reads to avoid pool fan-out', async () => {
+  const queryOrder: string[] = []
+  let activeQueries = 0
+
+  const detailData = await getAdminAssessmentDetailData('assessment-1', {
+    queryDb: async (sql) => {
+      activeQueries += 1
+      assert.equal(activeQueries, 1, `expected sequential query execution, received overlap while running: ${sql}`)
+
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 5))
+
+        if (/from assessment_definitions ad/i.test(sql)) {
+          queryOrder.push('summary')
+          return { rows: [makeAssessmentSummaryRow()] } as never
+        }
+
+        if (/from assessment_versions av/i.test(sql)) {
+          queryOrder.push('versions')
+          return { rows: [makeVersionRow()] } as never
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          queryOrder.push('scenarios')
+          return { rows: [makeSavedScenarioRow()] } as never
+        }
+
+        throw new Error(`Unexpected query: ${sql}`)
+      } finally {
+        activeQueries -= 1
+      }
+    },
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    getScopedAdminAuditActivity: async () => {
+      queryOrder.push('activity')
+      return []
+    },
+  })
+
+  assert.ok(detailData)
+  assert.deepEqual(queryOrder, ['summary', 'versions', 'scenarios', 'activity'])
+  assert.equal(detailData?.versions.length, 1)
+})
+
 test('assessment detail loader uses modern capability mode when governance and regression fields are available', async () => {
   const versionQueries: string[] = []
 

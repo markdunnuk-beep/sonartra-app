@@ -339,6 +339,47 @@ test('create assessment flow rejects duplicate keys and denied access', async ()
   assert.equal(denied.code, 'permission_denied')
 })
 
+test('create assessment duplicate checks run sequentially and surface duplicate slug conflicts', async () => {
+  const queryOrder: string[] = []
+  let activeQueries = 0
+
+  const duplicateSlug = await createAdminAssessment({
+    name: 'Signals',
+    key: 'sonartra_signals',
+    slug: 'signals',
+    category: 'behavioural_intelligence',
+    description: '',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    queryDb: async (sql: string) => {
+      activeQueries += 1
+      assert.equal(activeQueries, 1, `expected sequential duplicate checks, received overlap while running: ${sql}`)
+
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 5))
+
+        if (/where key = \$1/i.test(sql)) {
+          queryOrder.push('key')
+          return { rows: [] } as never
+        }
+
+        if (/where slug = \$1/i.test(sql)) {
+          queryOrder.push('slug')
+          return { rows: [{ id: 'assessment-2' }] } as never
+        }
+
+        throw new Error(`Unexpected query: ${sql}`)
+      } finally {
+        activeQueries -= 1
+      }
+    },
+  } as never)
+
+  assert.equal(duplicateSlug.ok, false)
+  assert.equal(duplicateSlug.code, 'duplicate_slug')
+  assert.deepEqual(queryOrder, ['key', 'slug'])
+})
+
 test('create draft version succeeds for an existing assessment', async () => {
   const inserts: unknown[][] = []
   const auditEvents: unknown[][] = []
