@@ -96,6 +96,63 @@ test('logDatabaseError includes structured diagnostics alongside caller metadata
   })
 })
 
+test('logDatabaseSessionDiagnostics logs resolved session details once per key', async () => {
+  const dbModule = await import(buildModuleUrl('../lib/db.ts'))
+  const calls: unknown[][] = []
+  const originalConsoleInfo = console.info
+  console.info = (...args: unknown[]) => {
+    calls.push(args)
+  }
+
+  try {
+    await dbModule.logDatabaseSessionDiagnostics('db session', {
+      executor: async () => ({
+        rows: [{
+          database_name: 'sonartra_prod',
+          schema_name: 'tenant_app',
+          search_path: 'tenant_app, public',
+          assessment_versions_schema: 'public',
+          assessment_versions_regclass: 'public.assessment_versions',
+          schema_migrations_schema: 'public',
+          schema_migrations_regclass: 'public.schema_migrations',
+        }],
+      }),
+      metadata: { route: '/api/navigation-state' },
+      onceKey: 'test-db-session',
+    })
+    await dbModule.logDatabaseSessionDiagnostics('db session', {
+      executor: async () => ({
+        rows: [{
+          database_name: 'ignored',
+          schema_name: 'ignored',
+          search_path: 'ignored',
+          assessment_versions_schema: 'ignored',
+          assessment_versions_regclass: 'ignored',
+          schema_migrations_schema: 'ignored',
+          schema_migrations_regclass: 'ignored',
+        }],
+      }),
+      metadata: { route: '/api/navigation-state' },
+      onceKey: 'test-db-session',
+    })
+  } finally {
+    console.info = originalConsoleInfo
+  }
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0]?.[0], 'db session')
+  assert.deepEqual(calls[0]?.[1], {
+    route: '/api/navigation-state',
+    database_name: 'sonartra_prod',
+    schema_name: 'tenant_app',
+    search_path: 'tenant_app, public',
+    assessment_versions_schema: 'public',
+    assessment_versions_regclass: 'public.assessment_versions',
+    schema_migrations_schema: 'public',
+    schema_migrations_regclass: 'public.schema_migrations',
+  })
+})
+
 test('database error diagnostics classify pool exhaustion separately from schema failures', async () => {
   const dbModule = await import(buildModuleUrl('../lib/db.ts'))
   const poolError = new Error('MaxClientsInSessionMode: max clients reached - in Session mode max clients are limited to pool_size') as Error & { code?: string }

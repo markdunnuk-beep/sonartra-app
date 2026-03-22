@@ -34,7 +34,7 @@ import {
   parseAdminAssessmentSimulationPayload,
   type AdminAssessmentSimulationActionState,
 } from '@/lib/admin/domain/assessment-simulation'
-import { queryDb, withTransaction, describeDatabaseError, logDatabaseError } from '@/lib/db'
+import { queryDb, withTransaction, describeDatabaseError, logDatabaseError, logDatabaseSessionDiagnostics } from '@/lib/db'
 import { getScopedAdminAuditActivity, mapScopedAuditEventsToAssessmentActivity } from '@/lib/admin/server/audit-workspace'
 import {
   ASSESSMENT_VERSION_REGRESSION_SNAPSHOT_COLUMNS,
@@ -3248,10 +3248,26 @@ export async function publishAdminAssessmentVersion(
   } catch (error) {
     const compatibilityFailure = buildAssessmentVersionSchemaCompatibilityResult<AdminAssessmentVersionMutationResult>(error)
     if (compatibilityFailure) {
+      await logDatabaseSessionDiagnostics('[admin-assessment-management] Publish schema compatibility database session.', {
+        metadata: {
+          assessmentId: input.assessmentId,
+          versionId: input.versionId,
+          code: compatibilityFailure.code,
+        },
+        onceKey: `publish-schema-compatibility:${input.assessmentId}:${input.versionId}`,
+      })
       return compatibilityFailure
     }
     const runtimeCompatibilityFailure = buildAssessmentRuntimeSchemaCompatibilityResult<AdminAssessmentVersionMutationResult>(error)
     if (runtimeCompatibilityFailure) {
+      await logDatabaseSessionDiagnostics('[admin-assessment-management] Publish runtime schema database session.', {
+        metadata: {
+          assessmentId: input.assessmentId,
+          versionId: input.versionId,
+          code: runtimeCompatibilityFailure.code,
+        },
+        onceKey: `publish-runtime-schema-compatibility:${input.assessmentId}:${input.versionId}`,
+      })
       return runtimeCompatibilityFailure
     }
     const mappedDatabaseFailure = mapPublishDatabaseFailure(error)

@@ -88,11 +88,17 @@ export function hasAssessmentVersionOptionalGovernanceAndRegressionSupport(
 export async function getAdminAssessmentVersionSchemaCapabilities(
   deps: AssessmentVersionSchemaCapabilityDependencies = defaultAssessmentVersionSchemaCapabilityDependencies,
 ): Promise<AdminAssessmentVersionSchemaCapabilities> {
-  const tableResult = await deps.queryDb<{ has_assessment_versions_table: boolean | null }>(
-    `select to_regclass(current_schema() || '.assessment_versions') is not null as has_assessment_versions_table`,
+  const tableResult = await deps.queryDb<{ assessment_versions_schema: string | null }>(
+    `select (
+       select n.nspname
+       from pg_class c
+       inner join pg_namespace n on n.oid = c.relnamespace
+       where c.oid = to_regclass('assessment_versions')
+     ) as assessment_versions_schema`,
   )
 
-  const hasAssessmentVersionsTable = Boolean(tableResult.rows[0]?.has_assessment_versions_table)
+  const assessmentVersionsSchema = tableResult.rows[0]?.assessment_versions_schema ?? null
+  const hasAssessmentVersionsTable = Boolean(assessmentVersionsSchema)
 
   if (!hasAssessmentVersionsTable) {
     return {
@@ -104,8 +110,9 @@ export async function getAdminAssessmentVersionSchemaCapabilities(
   const columnResult = await deps.queryDb<{ column_name: string | null }>(
     `select column_name
      from information_schema.columns
-     where table_schema = current_schema()
+     where table_schema = $1
        and table_name = 'assessment_versions'`,
+    [assessmentVersionsSchema],
   )
 
   return {

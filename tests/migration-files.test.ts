@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -70,4 +70,12 @@ test('migration SQL normalization leaves wrapper-free SQL unchanged', () => {
 
   assert.equal(result.hadExplicitTransactionWrapper, false)
   assert.equal(result.sql, sql)
+})
+
+test('migration runner records schema_migrations in the public schema and logs resolved relation context', async () => {
+  const runnerSource = await readFile(path.join(process.cwd(), 'scripts', 'run-migrations.mjs'), 'utf8')
+
+  assert.match(runnerSource, /const schemaMigrationsTableName = 'public\.schema_migrations'/)
+  assert.match(runnerSource, /to_regclass\('assessment_versions'\)::text AS assessment_versions_regclass/)
+  assert.match(runnerSource, /to_regclass\('\$\{schemaMigrationsTableName\}'\)::text AS schema_migrations_regclass/)
 })

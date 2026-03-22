@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { describeDatabaseError, logDatabaseError } from '@/lib/db';
+import { describeDatabaseError, logDatabaseError, logDatabaseSessionDiagnostics } from '@/lib/db';
 
 import { resolveAdminAccess } from '@/lib/admin/access'
 import { canonicalAdminLandingHref } from '@/lib/admin/navigation'
@@ -11,6 +11,13 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    if (process.env.NODE_ENV === 'production') {
+      await logDatabaseSessionDiagnostics('GET /api/navigation-state database session.', {
+        metadata: { route: '/api/navigation-state' },
+        onceKey: 'api-navigation-state-production-db-session',
+      });
+    }
+
     const appUser = await resolveAuthenticatedAppUser();
 
     if (!appUser) {
