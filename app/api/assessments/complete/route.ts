@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { CompleteAssessmentRequest } from '@/lib/assessment-types';
-import { queryDb } from '@/lib/db';
+import { logDatabaseError, queryDb } from '@/lib/db';
 import { completeAssessmentWithResults } from '@/lib/server/assessment-completion';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result.body, { status: result.httpStatus });
   } catch (error) {
-    console.error('POST /api/assessments/complete failed:', error);
+    logDatabaseError('POST /api/assessments/complete failed.', error, { route: '/api/assessments/complete' });
 
     return NextResponse.json({ ok: false, error: 'Unable to complete assessment.' }, { status: 500 });
   }

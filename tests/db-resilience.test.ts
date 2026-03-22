@@ -67,6 +67,35 @@ test('resolveDatabasePoolMax uses safe production defaults and ignores invalid o
   )
 })
 
+test('logDatabaseError includes structured diagnostics alongside caller metadata', async () => {
+  const dbModule = await import(buildModuleUrl('../lib/db.ts'))
+  const error = new Error('connection pool exhausted while acquiring client') as Error & { code?: string }
+  error.code = '53300'
+
+  const calls: unknown[][] = []
+  const originalConsoleError = console.error
+  console.error = (...args: unknown[]) => {
+    calls.push(args)
+  }
+
+  try {
+    dbModule.logDatabaseError('db context', error, { route: '/api/test' })
+  } finally {
+    console.error = originalConsoleError
+  }
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0]?.[0], 'db context')
+  assert.deepEqual(calls[0]?.[1], {
+    route: '/api/test',
+    classification: 'pool_exhaustion',
+    code: '53300',
+    message: 'connection pool exhausted while acquiring client',
+    causeCode: undefined,
+    causeMessage: undefined,
+  })
+})
+
 test('database error diagnostics classify pool exhaustion separately from schema failures', async () => {
   const dbModule = await import(buildModuleUrl('../lib/db.ts'))
   const poolError = new Error('MaxClientsInSessionMode: max clients reached - in Session mode max clients are limited to pool_size') as Error & { code?: string }

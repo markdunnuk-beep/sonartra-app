@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+import { logDatabaseError } from '@/lib/db'
+
 import { startLiveSignalsAssessment } from '@/lib/server/start-live-signals-assessment'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
 
@@ -20,7 +22,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result.body, { status: result.status })
   } catch (error) {
-    console.error('POST /api/assessments/start failed:', error)
+    logDatabaseError('POST /api/assessments/start failed.', error, { route: '/api/assessments/start' })
 
     return NextResponse.json({ error: 'Unable to start assessment.' }, { status: 500 })
   }

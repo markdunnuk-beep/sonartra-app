@@ -235,9 +235,10 @@ export function getDatabaseErrorDiagnostics(error: unknown): DatabaseErrorDiagno
   return classifyDatabaseError(error)
 }
 
-export function logDatabaseError(context: string, error: unknown): void {
+export function logDatabaseError(context: string, error: unknown, metadata?: Record<string, unknown>): void {
   const diagnostics = getDatabaseErrorDiagnostics(error)
   console.error(context, {
+    ...(metadata ?? {}),
     classification: diagnostics.classification,
     code: diagnostics.code,
     message: diagnostics.message,

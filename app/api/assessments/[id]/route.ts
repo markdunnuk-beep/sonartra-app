@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { AssessmentRow, AssessmentVersionRow } from '@/lib/assessment-types';
-import { queryDb } from '@/lib/db';
+import { logDatabaseError, queryDb } from '@/lib/db';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 
 interface AssessmentResponseRow {
@@ -37,21 +37,19 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
       return NextResponse.json({ error: 'Assessment not found.' }, { status: 404 });
     }
 
-    const [versionResult, responsesResult] = await Promise.all([
-      queryDb<AssessmentVersionRow>(
-        `SELECT id, key, name, total_questions, is_active
-         FROM assessment_versions
-         WHERE id = $1`,
-        [assessment.assessment_version_id]
-      ),
-      queryDb<AssessmentResponseRow>(
-        `SELECT question_id, response_value, response_time_ms, is_changed, created_at, updated_at
-         FROM assessment_responses
-         WHERE assessment_id = $1
-         ORDER BY question_id ASC`,
-        [assessmentId]
-      ),
-    ]);
+    const versionResult = await queryDb<AssessmentVersionRow>(
+      `SELECT id, key, name, total_questions, is_active
+       FROM assessment_versions
+       WHERE id = $1`,
+      [assessment.assessment_version_id]
+    );
+    const responsesResult = await queryDb<AssessmentResponseRow>(
+      `SELECT question_id, response_value, response_time_ms, is_changed, created_at, updated_at
+       FROM assessment_responses
+       WHERE assessment_id = $1
+       ORDER BY question_id ASC`,
+      [assessmentId]
+    );
 
     const version = versionResult.rows[0];
 
@@ -74,7 +72,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
       },
     });
   } catch (error) {
-    console.error('GET /api/assessments/[id] failed:', error);
+    logDatabaseError('GET /api/assessments/[id] failed.', error, { route: '/api/assessments/[id]' });
 
     return NextResponse.json({ error: 'Unable to fetch assessment.' }, { status: 500 });
   }

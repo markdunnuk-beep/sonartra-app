@@ -318,40 +318,38 @@ export async function getAdminOrganisationDetailData(organisationId: string): Pr
     return null
   }
 
-  const [membersResult, assessmentsResult, auditTrail] = await Promise.all([
-    queryDb<OrganisationMemberRow>(`
-      select
-        om.id as membership_id,
-        om.identity_id,
-        ai.full_name,
-        ai.email,
-        om.membership_role as role,
-        om.membership_status as access_status,
-        om.joined_at,
-        om.invited_at,
-        coalesce(om.last_activity_at, ai.last_activity_at) as last_activity_at
-      from organisation_memberships om
-      inner join admin_identities ai on ai.id = om.identity_id
-      where om.organisation_id = $1
-      order by lower(ai.full_name) asc, lower(ai.email) asc
-    `, [organisationId]),
-    queryDb<OrganisationAssessmentRow>(`
-      select
-        av.id as assessment_version_id,
-        av.name as title,
-        av.key as library_key,
-        av.is_active as publish_state,
-        count(distinct a.user_id)::int as assigned_users_count,
-        count(*) filter (where a.status = 'completed')::int as completion_count,
-        max(a.updated_at) as updated_at
-      from assessments a
-      inner join assessment_versions av on av.id = a.assessment_version_id
-      where a.organisation_id = $1
-      group by av.id, av.name, av.key, av.is_active
-      order by max(a.updated_at) desc nulls last, lower(av.name) asc
-    `, [organisationId]),
-    getOrganisationAuditActivity(organisationId),
-  ])
+  const membersResult = await queryDb<OrganisationMemberRow>(`
+    select
+      om.id as membership_id,
+      om.identity_id,
+      ai.full_name,
+      ai.email,
+      om.membership_role as role,
+      om.membership_status as access_status,
+      om.joined_at,
+      om.invited_at,
+      coalesce(om.last_activity_at, ai.last_activity_at) as last_activity_at
+    from organisation_memberships om
+    inner join admin_identities ai on ai.id = om.identity_id
+    where om.organisation_id = $1
+    order by lower(ai.full_name) asc, lower(ai.email) asc
+  `, [organisationId])
+  const assessmentsResult = await queryDb<OrganisationAssessmentRow>(`
+    select
+      av.id as assessment_version_id,
+      av.name as title,
+      av.key as library_key,
+      av.is_active as publish_state,
+      count(distinct a.user_id)::int as assigned_users_count,
+      count(*) filter (where a.status = 'completed')::int as completion_count,
+      max(a.updated_at) as updated_at
+    from assessments a
+    inner join assessment_versions av on av.id = a.assessment_version_id
+    where a.organisation_id = $1
+    group by av.id, av.name, av.key, av.is_active
+    order by max(a.updated_at) desc nulls last, lower(av.name) asc
+  `, [organisationId])
+  const auditTrail = await getOrganisationAuditActivity(organisationId)
 
   return {
     organisation,

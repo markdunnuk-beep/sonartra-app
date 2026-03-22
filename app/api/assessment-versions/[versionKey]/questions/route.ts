@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import { logDatabaseError } from '@/lib/db';
+
 import { getQuestionsByVersionKey } from '@/lib/question-bank';
 
 export async function GET(_: Request, { params }: { params: { versionKey: string } }) {
@@ -15,7 +17,7 @@ export async function GET(_: Request, { params }: { params: { versionKey: string
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('GET /api/assessment-versions/[versionKey]/questions failed:', error);
+    logDatabaseError('GET /api/assessment-versions/[versionKey]/questions failed.', error, { route: '/api/assessment-versions/[versionKey]/questions' });
 
     return NextResponse.json({ error: 'Unable to fetch assessment questions.' }, { status: 500 });
   }
