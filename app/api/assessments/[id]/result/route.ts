@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import { logDatabaseError } from '@/lib/db';
+
 import { getAssessmentResultReadModel } from '@/lib/server/assessment-result-read';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 
@@ -34,7 +36,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     const response = await resolveAssessmentResultRouteResponse(params.id, appUser.dbUserId);
     return NextResponse.json(response.body, { status: response.status });
   } catch (error) {
-    console.error('GET /api/assessments/[id]/result failed:', error);
+    logDatabaseError('GET /api/assessments/[id]/result failed.', error, { route: '/api/assessments/[id]/result' });
     return NextResponse.json({ error: 'Unable to fetch assessment result.' }, { status: 500 });
   }
 }

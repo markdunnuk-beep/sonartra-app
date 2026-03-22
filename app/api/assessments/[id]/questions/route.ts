@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { queryDb } from '@/lib/db';
+import { logDatabaseError, queryDb } from '@/lib/db';
 import { getQuestionsByAssessmentId } from '@/lib/question-bank';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 
@@ -31,7 +31,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('GET /api/assessments/[id]/questions failed:', error);
+    logDatabaseError('GET /api/assessments/[id]/questions failed.', error, { route: '/api/assessments/[id]/questions' });
 
     return NextResponse.json({ error: 'Unable to fetch assessment questions.' }, { status: 500 });
   }

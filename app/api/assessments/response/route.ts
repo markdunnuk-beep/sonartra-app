@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import { logDatabaseError } from '@/lib/db';
+
 import { SaveResponseRequest } from '@/lib/assessment-types';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 import { saveAssessmentResponse } from '@/lib/server/save-assessment-response';
@@ -21,7 +23,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(response.body, { status: response.status });
   } catch (error) {
-    console.error('POST /api/assessments/response failed:', error);
+    logDatabaseError('POST /api/assessments/response failed.', error, { route: '/api/assessments/response' });
 
     return NextResponse.json({ error: 'Unable to save assessment response.' }, { status: 500 });
   }

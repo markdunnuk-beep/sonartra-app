@@ -1,4 +1,4 @@
-import { queryDb } from '@/lib/db'
+import { logDatabaseError, queryDb } from '@/lib/db'
 
 export interface AdminAccessIdentityRoleDTO {
   key: string
@@ -89,6 +89,14 @@ const VALID_IDENTITY_TYPES = new Set<AdminAccessIdentityDTO['identityType']>(['i
 const VALID_IDENTITY_STATUSES = new Set<AdminAccessIdentityDTO['status']>(['active', 'inactive', 'suspended', 'invited'])
 
 type TimestampInput = string | Date | null | undefined
+
+interface AccessRegistryDependencies {
+  queryDb: typeof queryDb
+}
+
+const defaultAccessRegistryDependencies: AccessRegistryDependencies = {
+  queryDb,
+}
 
 function logAccessRegistryInvariant(message: string, details?: Record<string, unknown>) {
   console.error(`[admin-access-registry] ${message}`, details ?? {})
@@ -277,9 +285,9 @@ function assembleIdentityDtos(identities: IdentityRow[], roles: RoleRow[], membe
   })
 }
 
-async function getIdentityRows(identityIds?: string[]): Promise<IdentityRow[]> {
+async function getIdentityRows(deps: AccessRegistryDependencies, identityIds?: string[]): Promise<IdentityRow[]> {
   const hasFilter = Boolean(identityIds?.length)
-  const result = await queryDb<IdentityRow>(
+  const result = await deps.queryDb<IdentityRow>(
     `
       select
         id,
@@ -301,9 +309,9 @@ async function getIdentityRows(identityIds?: string[]): Promise<IdentityRow[]> {
   return result.rows ?? []
 }
 
-async function getRoleRows(identityIds?: string[]): Promise<RoleRow[]> {
+async function getRoleRows(deps: AccessRegistryDependencies, identityIds?: string[]): Promise<RoleRow[]> {
   const hasFilter = Boolean(identityIds?.length)
-  const result = await queryDb<RoleRow>(
+  const result = await deps.queryDb<RoleRow>(
     `
       select
         air.identity_id,
@@ -321,9 +329,9 @@ async function getRoleRows(identityIds?: string[]): Promise<RoleRow[]> {
   return result.rows ?? []
 }
 
-async function getMembershipRows(identityIds?: string[]): Promise<MembershipRow[]> {
+async function getMembershipRows(deps: AccessRegistryDependencies, identityIds?: string[]): Promise<MembershipRow[]> {
   const hasFilter = Boolean(identityIds?.length)
-  const result = await queryDb<MembershipRow>(
+  const result = await deps.queryDb<MembershipRow>(
     `
       select
         om.identity_id,
@@ -349,9 +357,9 @@ async function getMembershipRows(identityIds?: string[]): Promise<MembershipRow[
   return result.rows ?? []
 }
 
-async function getAuditRows(identityIds?: string[]): Promise<AuditRow[]> {
+async function getAuditRows(deps: AccessRegistryDependencies, identityIds?: string[]): Promise<AuditRow[]> {
   const hasFilter = Boolean(identityIds?.length)
-  const result = await queryDb<AuditRow>(
+  const result = await deps.queryDb<AuditRow>(
     `
       select
         aae.id,
@@ -371,41 +379,45 @@ async function getAuditRows(identityIds?: string[]): Promise<AuditRow[]> {
   return result.rows ?? []
 }
 
-export async function getAdminAccessRegistryData(): Promise<AdminAccessIdentityDTO[]> {
+export async function getAdminAccessRegistryData(
+  deps: AccessRegistryDependencies = defaultAccessRegistryDependencies,
+): Promise<AdminAccessIdentityDTO[]> {
   try {
-    const [identities, roles, memberships, auditRows] = await Promise.all([
-      getIdentityRows(),
-      getRoleRows(),
-      getMembershipRows(),
-      getAuditRows(),
-    ])
+    const identities = await getIdentityRows(deps)
+    const roles = await getRoleRows(deps)
+    const memberships = await getMembershipRows(deps)
+    const auditRows = await getAuditRows(deps)
 
     return assembleIdentityDtos(identities ?? [], roles ?? [], memberships ?? [], auditRows ?? [])
   } catch (error) {
-    console.error('[admin-access-registry] Failed to load admin access registry collection.', error)
+    logDatabaseError('[admin-access-registry] Failed to load admin access registry collection.', error)
     return []
   }
 }
 
-export async function getAdminIdentityById(id: string): Promise<AdminAccessIdentityDTO | null> {
+export async function getAdminIdentityById(
+  id: string,
+  deps: AccessRegistryDependencies = defaultAccessRegistryDependencies,
+): Promise<AdminAccessIdentityDTO | null> {
   try {
-    const [identities, roles, memberships, auditRows] = await Promise.all([
-      getIdentityRows([id]),
-      getRoleRows([id]),
-      getMembershipRows([id]),
-      getAuditRows([id]),
-    ])
+    const identities = await getIdentityRows(deps, [id])
+    const roles = await getRoleRows(deps, [id])
+    const memberships = await getMembershipRows(deps, [id])
+    const auditRows = await getAuditRows(deps, [id])
 
     return assembleIdentityDtos(identities ?? [], roles ?? [], memberships ?? [], auditRows ?? [])[0] ?? null
   } catch (error) {
-    console.error('[admin-access-registry] Failed to load admin access registry identity.', { id, error })
+    logDatabaseError('[admin-access-registry] Failed to load admin access registry identity.', error, { id })
     return null
   }
 }
 
-export async function getAdminIdentityAuditHistory(id: string): Promise<AdminAccessAuditEventDTO[]> {
+export async function getAdminIdentityAuditHistory(
+  id: string,
+  deps: AccessRegistryDependencies = defaultAccessRegistryDependencies,
+): Promise<AdminAccessAuditEventDTO[]> {
   try {
-    const auditRows = await getAuditRows([id])
+    const auditRows = await getAuditRows(deps, [id])
 
     return (auditRows ?? []).flatMap((auditRow) => {
       const auditId = normaliseRequiredString(auditRow.id, 'audit.id', { auditRow, identityId: id })
@@ -429,7 +441,7 @@ export async function getAdminIdentityAuditHistory(id: string): Promise<AdminAcc
       }]
     })
   } catch (error) {
-    console.error('[admin-access-registry] Failed to load admin identity audit history.', { id, error })
+    logDatabaseError('[admin-access-registry] Failed to load admin identity audit history.', error, { id })
     return []
   }
 }

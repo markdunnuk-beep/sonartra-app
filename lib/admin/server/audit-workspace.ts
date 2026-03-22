@@ -1,4 +1,4 @@
-import { describeDatabaseError, queryDb } from '@/lib/db'
+import { describeDatabaseError, logDatabaseError, queryDb } from '@/lib/db'
 import {
   getAdminAuditAppliedFilters,
   getAdminAuditEventLabel,
@@ -552,37 +552,35 @@ async function getAdminAuditEvents(
   const limit = filters.pageSize
   const offset = (filters.page - 1) * filters.pageSize
 
-  const [rowsResult, countResult] = await Promise.all([
-    deps.queryDb<AdminAuditEventRow>(
-      `${baseQuery}
-       select
-         id,
-         event_type,
-         summary,
-         actor_name,
-         actor_id,
-         happened_at,
-         source,
-         organisation_id,
-         organisation_name,
-         entity_type,
-         entity_id,
-         entity_name,
-         entity_secondary,
-         is_derived
-       ${whereClause}
-       order by happened_at desc, id desc
-       limit $9
-       offset $10`,
-      [...params, limit, offset],
-    ),
-    deps.queryDb<{ total_count: number | string | null }>(
-      `${baseQuery}
-       select count(*)::int as total_count
-       ${whereClause}`,
-      params,
-    ),
-  ])
+  const rowsResult = await deps.queryDb<AdminAuditEventRow>(
+    `${baseQuery}
+     select
+       id,
+       event_type,
+       summary,
+       actor_name,
+       actor_id,
+       happened_at,
+       source,
+       organisation_id,
+       organisation_name,
+       entity_type,
+       entity_id,
+       entity_name,
+       entity_secondary,
+       is_derived
+     ${whereClause}
+     order by happened_at desc, id desc
+     limit $9
+     offset $10`,
+    [...params, limit, offset],
+  )
+  const countResult = await deps.queryDb<{ total_count: number | string | null }>(
+    `${baseQuery}
+     select count(*)::int as total_count
+     ${whereClause}`,
+    params,
+  )
 
   const events = mapAdminAuditEventRows(rowsResult.rows ?? [])
   const totalCount = Number(countResult.rows[0]?.total_count ?? 0)
@@ -655,12 +653,10 @@ export async function getAdminAuditWorkspaceData(
 
   try {
     const capabilities = await getAuditWorkspaceSchemaCapabilities(deps)
-    const [initialEvents, availableActors, availableOrganisations, availableEventTypes] = await Promise.all([
-      getAdminAuditEvents(filters, capabilities, deps),
-      getAuditActors(capabilities, deps),
-      getAuditOrganisations(deps),
-      getAuditEventTypes(capabilities, deps),
-    ])
+    const initialEvents = await getAdminAuditEvents(filters, capabilities, deps)
+    const availableActors = await getAuditActors(capabilities, deps)
+    const availableOrganisations = await getAuditOrganisations(deps)
+    const availableEventTypes = await getAuditEventTypes(capabilities, deps)
 
     const totalPages = Math.max(1, Math.ceil(initialEvents.totalCount / filters.pageSize))
     const page = Math.min(filters.page, totalPages)
@@ -696,7 +692,11 @@ export async function getAdminAuditWorkspaceData(
     }
   } catch (error) {
     const notice = classifyAuditWorkspaceLoadFailure(error)
-    console.error('Admin audit workspace load failed:', notice.title, describeDatabaseError(error))
+    logDatabaseError('Admin audit workspace load failed.', error, {
+      noticeTitle: notice.title,
+      noticeKind: notice.kind,
+      safeMessage: describeDatabaseError(error),
+    })
     return buildEmptyAuditWorkspaceData(filters, notice)
   }
 }
@@ -741,7 +741,7 @@ export async function getScopedAdminAuditActivity({
       .sort((left, right) => right.happenedAt.localeCompare(left.happenedAt) || right.id.localeCompare(left.id))
       .slice(0, safeLimit)
   } catch (error) {
-    console.error('Admin scoped audit activity load failed:', describeDatabaseError(error))
+    logDatabaseError('Admin scoped audit activity load failed.', error, { safeMessage: describeDatabaseError(error) })
     return []
   }
 }
@@ -789,7 +789,7 @@ export async function getOrganisationAuditActivity(organisationId: string, limit
 
     return mapAuditEventsToOrganisationActivity(events)
   } catch (error) {
-    console.error('Admin organisation audit activity load failed:', describeDatabaseError(error))
+    logDatabaseError('Admin organisation audit activity load failed.', error, { safeMessage: describeDatabaseError(error) })
     return []
   }
 }

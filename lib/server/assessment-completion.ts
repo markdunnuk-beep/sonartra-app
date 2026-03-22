@@ -93,26 +93,24 @@ function toFailureMetadata(assessmentVersionKey: string, stage: ResultFailureSta
 }
 
 async function fetchScoringInput(assessment: CompletionCheckRow): Promise<ScoringEngineInput> {
-  const [responsesResult, mappingsResult] = await Promise.all([
-    queryDb<AssessmentResponseRow>(
-      `SELECT question_id, response_value, response_time_ms
-       FROM assessment_responses
-       WHERE assessment_id = $1
-       ORDER BY question_id ASC`,
-      [assessment.id]
-    ),
-    queryDb<MappingRow>(
-      `SELECT ar.question_id, ar.response_value, m.signal_code, m.signal_weight
-       FROM assessment_responses ar
-       INNER JOIN assessments a ON a.id = ar.assessment_id
-       INNER JOIN assessment_question_sets qs ON qs.assessment_version_id = a.assessment_version_id AND qs.is_active = TRUE
-       INNER JOIN assessment_questions q ON q.question_set_id = qs.id AND q.question_number = ar.question_id AND q.is_active = TRUE
-       INNER JOIN assessment_question_options o ON o.question_id = q.id AND o.numeric_value = ar.response_value
-       INNER JOIN assessment_option_signal_mappings m ON m.question_option_id = o.id
-       WHERE ar.assessment_id = $1`,
-      [assessment.id]
-    ),
-  ]);
+  const responsesResult = await queryDb<AssessmentResponseRow>(
+    `SELECT question_id, response_value, response_time_ms
+     FROM assessment_responses
+     WHERE assessment_id = $1
+     ORDER BY question_id ASC`,
+    [assessment.id]
+  );
+  const mappingsResult = await queryDb<MappingRow>(
+    `SELECT ar.question_id, ar.response_value, m.signal_code, m.signal_weight
+     FROM assessment_responses ar
+     INNER JOIN assessments a ON a.id = ar.assessment_id
+     INNER JOIN assessment_question_sets qs ON qs.assessment_version_id = a.assessment_version_id AND qs.is_active = TRUE
+     INNER JOIN assessment_questions q ON q.question_set_id = qs.id AND q.question_number = ar.question_id AND q.is_active = TRUE
+     INNER JOIN assessment_question_options o ON o.question_id = q.id AND o.numeric_value = ar.response_value
+     INNER JOIN assessment_option_signal_mappings m ON m.question_option_id = o.id
+     WHERE ar.assessment_id = $1`,
+    [assessment.id]
+  );
 
   const responses: AssessmentResponseInput[] = responsesResult.rows.map((row) => ({
     questionId: row.question_id,

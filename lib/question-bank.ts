@@ -236,16 +236,14 @@ export async function getQuestionsByAssessmentIdWithDependencies(
   const resolved = await resolveVersionAndActiveQuestionSetWithDependencies(version.key, dependencies);
   if (!resolved) return null;
 
-  const [questions, responsesResult] = await Promise.all([
-    getQuestionsWithOptions(resolved.questionSet.id, dependencies),
-    dependencies.queryDb<AssessmentResponseLiteRow>(
-      `SELECT question_id, response_value, response_time_ms, is_changed, updated_at
-       FROM assessment_responses
-       WHERE assessment_id = $1
-       ORDER BY question_id ASC`,
-      [assessmentId]
-    ),
-  ]);
+  const questions = await getQuestionsWithOptions(resolved.questionSet.id, dependencies);
+  const responsesResult = await dependencies.queryDb<AssessmentResponseLiteRow>(
+    `SELECT question_id, response_value, response_time_ms, is_changed, updated_at
+     FROM assessment_responses
+     WHERE assessment_id = $1
+     ORDER BY question_id ASC`,
+    [assessmentId]
+  );
 
   return {
     assessment: {
