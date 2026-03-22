@@ -12,17 +12,38 @@ export const OPTIONAL_ASSESSMENT_VERSION_PACKAGE_COLUMNS = [
   'package_validation_report_json',
 ] as const
 
-export const OPTIONAL_ASSESSMENT_VERSION_GOVERNANCE_AND_REGRESSION_COLUMNS = [
+export const ASSESSMENT_VERSION_RELEASE_READINESS_COLUMNS = [
   'publish_readiness_status',
   'readiness_check_summary_json',
   'last_readiness_evaluated_at',
+] as const
+
+export const ASSESSMENT_VERSION_RELEASE_SIGN_OFF_COLUMNS = [
   'sign_off_status',
   'sign_off_at',
   'sign_off_by_identity_id',
   'sign_off_material_updated_at',
-  'release_notes',
   'material_updated_at',
+] as const
+
+export const ASSESSMENT_VERSION_RELEASE_NOTES_COLUMNS = [
+  'release_notes',
+] as const
+
+export const ASSESSMENT_VERSION_REGRESSION_SNAPSHOT_COLUMNS = [
   'latest_regression_suite_snapshot_json',
+] as const
+
+export const ASSESSMENT_VERSION_PUBLISH_GOVERNANCE_COLUMNS = [
+  ...ASSESSMENT_VERSION_RELEASE_READINESS_COLUMNS,
+  ...ASSESSMENT_VERSION_RELEASE_SIGN_OFF_COLUMNS,
+] as const
+
+export const OPTIONAL_ASSESSMENT_VERSION_GOVERNANCE_AND_REGRESSION_COLUMNS = [
+  ...ASSESSMENT_VERSION_RELEASE_READINESS_COLUMNS,
+  ...ASSESSMENT_VERSION_RELEASE_SIGN_OFF_COLUMNS,
+  ...ASSESSMENT_VERSION_RELEASE_NOTES_COLUMNS,
+  ...ASSESSMENT_VERSION_REGRESSION_SNAPSHOT_COLUMNS,
 ] as const
 
 export type AssessmentVersionOptionalGovernanceOrRegressionColumn =

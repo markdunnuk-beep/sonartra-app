@@ -39,6 +39,12 @@ const MODERN_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapab
 
 const LEGACY_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([])
 
+const READINESS_ONLY_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([
+  'publish_readiness_status',
+  'readiness_check_summary_json',
+  'last_readiness_evaluated_at',
+])
+
 const RUNTIME_TABLE_NAMES = [
   'assessment_question_sets',
   'assessment_questions',
@@ -243,7 +249,7 @@ test('publish loader uses modern compatibility-safe assessment_versions queries 
   assert.match(assessmentQueries[0] ?? '', /av\.latest_regression_suite_snapshot_json/i)
 })
 
-test('publish fails fast with a schema compatibility error in legacy capability mode', async () => {
+test('publish fails fast with the full release-governance schema contract in legacy capability mode', async () => {
   const byIdQueries: string[] = []
   const assessmentQueries: string[] = []
 
@@ -282,9 +288,45 @@ test('publish fails fast with a schema compatibility error in legacy capability 
   assert.equal(result.ok, false)
   assert.equal(result.code, 'schema_incompatible')
   assert.match(result.message, /publishing assessment versions/i)
-  assert.match(result.message, /publish_readiness_status|sign_off_status/i)
+  assert.match(result.message, /publish_readiness_status/)
+  assert.match(result.message, /last_readiness_evaluated_at/)
+  assert.match(result.message, /sign_off_status/)
+  assert.match(result.message, /sign_off_material_updated_at/)
+  assert.match(result.message, /material_updated_at/)
   assert.equal(byIdQueries.length, 0)
   assert.equal(assessmentQueries.length, 0)
+})
+
+test('publish reports missing sign-off columns even when readiness columns are present', async () => {
+  const result = await publishAdminAssessmentVersion({ assessmentId: 'assessment-1', versionId: 'version-1' }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => READINESS_ONLY_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params)
+        if (runtimeSchemaResult) {
+          return runtimeSchemaResult
+        }
+
+        if (/from assessment_versions av/i.test(sql) || /from assessment_version_saved_scenarios scenarios/i.test(sql) || /insert into access_audit_events/i.test(sql)) {
+          return { rows: [] }
+        }
+        throw new Error(`Unexpected query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-21T10:00:00.000Z'),
+    createId: () => 'audit-readiness-only',
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'schema_incompatible')
+  assert.doesNotMatch(result.message, /readiness_check_summary_json/)
+  assert.match(result.message, /sign_off_status/)
+  assert.match(result.message, /sign_off_at/)
+  assert.match(result.message, /sign_off_by_identity_id/)
+  assert.match(result.message, /sign_off_material_updated_at/)
+  assert.match(result.message, /material_updated_at/)
 })
 
 test('sign-off records signer identity and timestamp for draft versions', async () => {
