@@ -31,6 +31,8 @@ export interface IndividualLifecycleSnapshotSummary {
   assessmentId: string;
   status: AssessmentResultRow['status'];
   versionKey: string;
+  assessmentStartedAt: string | null;
+  assessmentCompletedAt: string | null;
   scoringModelKey: string;
   snapshotVersion: number;
   createdAt: string;
@@ -135,12 +137,17 @@ function toAssessmentSummary(assessment: AssessmentContextRow): IndividualLifecy
   };
 }
 
-function toSnapshotSummary(snapshot: AssessmentResultRow, signalCount: number): IndividualLifecycleSnapshotSummary {
+function toSnapshotSummary(
+  snapshot: AssessmentResultRow | ReadyResultContextRow,
+  signalCount: number
+): IndividualLifecycleSnapshotSummary {
   return {
     resultId: snapshot.id,
     assessmentId: snapshot.assessment_id,
     status: snapshot.status,
     versionKey: snapshot.version_key,
+    assessmentStartedAt: 'assessment_started_at' in snapshot ? snapshot.assessment_started_at : null,
+    assessmentCompletedAt: 'assessment_completed_at' in snapshot ? snapshot.assessment_completed_at : snapshot.completed_at,
     scoringModelKey: snapshot.scoring_model_key,
     snapshotVersion: snapshot.snapshot_version,
     createdAt: snapshot.created_at,

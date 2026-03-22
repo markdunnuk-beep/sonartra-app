@@ -72,7 +72,7 @@ export function IndividualIntelligenceResultView({ model, firstName }: { model: 
     )
   }
 
-  if (model.state === 'incomplete') {
+  if (model.state === 'in_progress') {
     return (
       <ResultsWorkspaceShell title={RESULT_TITLE} subtitle={RESULT_SUBTITLE} statusLabel="Assessment In Progress">
         {withDevelopmentDiagnostic(
@@ -81,6 +81,22 @@ export function IndividualIntelligenceResultView({ model, firstName }: { model: 
             title="Assessment is in progress"
             description={model.message ?? 'Your latest assessment is still in progress, so results are not available yet.'}
             ctaLabel="Resume assessment"
+            ctaHref="/assessment"
+          />,
+        )}
+      </ResultsWorkspaceShell>
+    )
+  }
+
+  if (model.state === 'completed_processing') {
+    return (
+      <ResultsWorkspaceShell title={RESULT_TITLE} subtitle={RESULT_SUBTITLE} statusLabel="Results Processing">
+        {withDevelopmentDiagnostic(
+          model.state,
+          <ResultEmptyStatePanel
+            title="Your assessment is complete and results are processing"
+            description={model.message ?? 'Your latest assessment has been submitted successfully. Results will appear here once processing completes.'}
+            ctaLabel="Back to assessment workspace"
             ctaHref="/assessment"
           />,
         )}

@@ -4,7 +4,7 @@ import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants';
 import { resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 
-export type IndividualResultsState = 'unauthenticated' | 'empty' | 'incomplete' | 'ready' | 'error';
+export type IndividualResultsState = 'unauthenticated' | 'empty' | 'in_progress' | 'completed_processing' | 'ready' | 'error';
 
 export interface IndividualResultAssessmentMetadata {
   assessmentId: string;
@@ -54,7 +54,12 @@ export interface IndividualResultReadyData {
 export type IndividualResultApiResponse =
   | { ok: false; state: 'unauthenticated'; message: string }
   | { ok: true; state: 'empty'; message: string }
-  | { ok: true; state: 'incomplete'; message: string; data?: Partial<IndividualResultReadyData> }
+  | {
+      ok: true;
+      state: 'in_progress' | 'completed_processing';
+      message: string;
+      data?: Partial<IndividualResultReadyData>;
+    }
   | { ok: true; state: 'ready'; data: IndividualResultReadyData }
   | { ok: false; state: 'error'; message: string };
 
@@ -73,7 +78,7 @@ interface IndividualResultsDependencies {
   resolveAuthenticatedUserId: () => Promise<string | null>;
   getLatestAssessmentForUser: (userId: string) => Promise<AssessmentContextRow | null>;
   getLatestResultForAssessment: (assessmentId: string) => Promise<AssessmentResultRow | null>;
-  getLatestSuccessfulResultForAssessment: (assessmentId: string) => Promise<AssessmentResultRow | null>;
+  getResultById: (resultId: string) => Promise<AssessmentResultRow | null>;
   getLatestReadyResultForUser: (userId: string) => Promise<ReadyResultContextRow | null>;
   getSignalsByResultId: (resultId: string) => Promise<AssessmentResultSignalRow[]>;
 }
@@ -114,16 +119,14 @@ const defaultDependencies: IndividualResultsDependencies = {
 
     return result.rows[0] ?? null;
   },
-  async getLatestSuccessfulResultForAssessment(assessmentId) {
+  async getResultById(resultId) {
     const result = await queryDb<AssessmentResultRow>(
       `SELECT id, assessment_id, assessment_version_id, version_key, scoring_model_key, snapshot_version, status,
               result_payload, response_quality_payload, completed_at, scored_at, created_at, updated_at
        FROM assessment_results
-       WHERE assessment_id = $1
-         AND status = 'complete'
-       ORDER BY created_at DESC
+       WHERE id = $1
        LIMIT 1`,
-      [assessmentId],
+      [resultId],
     );
 
     return result.rows[0] ?? null;
@@ -248,7 +251,7 @@ export async function getLatestIndividualResultForUser(
 
       return {
         ok: true,
-        state: 'incomplete',
+        state: lifecycle.lifecycle.state === 'completed_processing' ? 'completed_processing' : 'in_progress',
         message: lifecycle.lifecycle.message,
         data: {
           assessment: assessment
@@ -263,21 +266,23 @@ export async function getLatestIndividualResultForUser(
       };
     }
 
-    const snapshot = await resolvedDependencies.getLatestSuccessfulResultForAssessment(readySnapshot.assessmentId);
-    if (!snapshot) return { ok: false, state: 'error', message: 'Ready result metadata could not be loaded.' };
+    const snapshot = await resolvedDependencies.getResultById(readySnapshot.resultId);
+    if (!snapshot || snapshot.status !== 'complete') {
+      return { ok: false, state: 'error', message: 'Ready result metadata could not be loaded.' };
+    }
 
     const orderedSignals = sortSignals(await resolvedDependencies.getSignalsByResultId(snapshot.id));
     if (orderedSignals.length === 0) {
       return {
         ok: true,
-        state: 'incomplete',
+        state: 'completed_processing',
         message: 'Result snapshot exists but no signal rows are available yet.',
         data: {
           assessment: {
             assessmentId: snapshot.assessment_id,
-            versionKey: assessment?.versionKey ?? snapshot.version_key,
-            startedAt: assessment?.startedAt ?? null,
-            completedAt: assessment?.completedAt ?? snapshot.completed_at,
+            versionKey: readySnapshot.versionKey ?? snapshot.version_key,
+            startedAt: readySnapshot.assessmentStartedAt,
+            completedAt: readySnapshot.assessmentCompletedAt,
           },
           snapshot: {
             resultId: snapshot.id,
@@ -311,9 +316,9 @@ export async function getLatestIndividualResultForUser(
       data: {
         assessment: {
           assessmentId: snapshot.assessment_id,
-          versionKey: assessment?.versionKey ?? snapshot.version_key,
-          startedAt: assessment?.startedAt ?? null,
-          completedAt: assessment?.completedAt ?? snapshot.completed_at,
+          versionKey: readySnapshot.versionKey ?? snapshot.version_key,
+          startedAt: readySnapshot.assessmentStartedAt,
+          completedAt: readySnapshot.assessmentCompletedAt,
         },
         snapshot: {
           resultId: snapshot.id,
