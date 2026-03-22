@@ -7,7 +7,7 @@ import { currentUser } from '@clerk/nextjs/server'
 export const dynamic = 'force-dynamic'
 
 function normaliseStatePayload(model: IndividualResultApiResponse): IndividualResultApiResponse | { state: string; message?: string } {
-  const knownStates = new Set(['unauthenticated', 'empty', 'incomplete', 'ready', 'error'])
+  const knownStates = new Set(['unauthenticated', 'empty', 'in_progress', 'completed_processing', 'ready', 'error'])
   if (knownStates.has(model.state)) {
     return model
   }

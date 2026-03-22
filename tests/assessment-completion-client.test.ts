@@ -39,7 +39,7 @@ test('completion outcome redirects to results when scoring is ready immediately'
   })
 })
 
-test('completion outcome stays in processing state when scoring is still pending', () => {
+test('completion outcome redirects to results while scoring is still pending', () => {
   const outcome = resolveAssessmentCompletionClientOutcome({
     ok: true,
     assessmentId: 'assessment-1',
@@ -49,7 +49,7 @@ test('completion outcome stays in processing state when scoring is still pending
   })
 
   assert.deepEqual(outcome, {
-    redirectTo: null,
+    redirectTo: '/results/individual',
     lifecycleState: 'completed_processing',
     workspaceEntryState: 'results_processing',
     clearActiveAssessment: true,
@@ -57,7 +57,7 @@ test('completion outcome stays in processing state when scoring is still pending
   })
 })
 
-test('completion outcome surfaces explicit failure state and warning copy', () => {
+test('completion outcome redirects to results and surfaces explicit failure state and warning copy', () => {
   const outcome = resolveAssessmentCompletionClientOutcome({
     ok: true,
     assessmentId: 'assessment-1',
@@ -71,7 +71,7 @@ test('completion outcome surfaces explicit failure state and warning copy', () =
   })
 
   assert.deepEqual(outcome, {
-    redirectTo: null,
+    redirectTo: '/results/individual',
     lifecycleState: 'error',
     workspaceEntryState: 'attention_required',
     clearActiveAssessment: true,

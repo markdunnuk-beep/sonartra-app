@@ -279,12 +279,12 @@ test('empty state renders explanation and assessment CTA', () => {
   assert.doesNotMatch(html, /How to Use This Report/)
 })
 
-test('incomplete state renders visible progress copy and resume CTA', () => {
+test('in-progress state renders visible progress copy and resume CTA', () => {
   const html = renderToStaticMarkup(
     <IndividualIntelligenceResultView
       model={{
         ok: true,
-        state: 'incomplete',
+        state: 'in_progress',
         message: 'Latest assessment is not completed yet.',
       }}
     />,
@@ -293,6 +293,23 @@ test('incomplete state renders visible progress copy and resume CTA', () => {
   assert.match(html, /Assessment is in progress/)
   assert.match(html, /not completed yet/)
   assert.match(html, /Resume assessment/)
+  assert.doesNotMatch(html, /Sonartra Archetype Overview/)
+})
+
+test('completed-processing state renders a stable post-completion handoff message', () => {
+  const html = renderToStaticMarkup(
+    <IndividualIntelligenceResultView
+      model={{
+        ok: true,
+        state: 'completed_processing',
+        message: 'Assessment is completed but persisted result is not available yet.',
+      }}
+    />,
+  )
+
+  assert.match(html, /results are processing/i)
+  assert.match(html, /persisted result is not available yet/i)
+  assert.match(html, /Back to assessment workspace/)
   assert.doesNotMatch(html, /Sonartra Archetype Overview/)
 })
 

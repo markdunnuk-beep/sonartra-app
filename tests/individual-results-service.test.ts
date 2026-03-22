@@ -120,28 +120,27 @@ test('returns empty state when user has no assessments', async () => {
   assert.equal(response.state, 'empty');
 });
 
-test('returns incomplete state when latest assessment is not completed', async () => {
+test('returns in-progress state when latest assessment is not completed', async () => {
   const response = await getLatestIndividualResultForUser({
     resolveAuthenticatedUserId: async () => 'user-1',
-    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext, status: 'in_progress', completed_at: null }),
+    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext, status: 'in_progress', completed_at: null, progress_count: 20, progress_percent: '25' }),
     getLatestReadyResultForUser: async () => null,
   });
 
   assert.equal(response.ok, true);
-  assert.equal(response.state, 'incomplete');
+  assert.equal(response.state, 'in_progress');
 });
 
-test('returns incomplete state when completed assessment has no successful snapshot', async () => {
+test('returns completed-processing state when completed assessment has no successful snapshot', async () => {
   const response = await getLatestIndividualResultForUser({
     resolveAuthenticatedUserId: async () => 'user-1',
     getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext }),
     getLatestResultForAssessment: async () => null,
-    getLatestSuccessfulResultForAssessment: async () => null,
     getLatestReadyResultForUser: async () => null,
   });
 
   assert.equal(response.ok, true);
-  assert.equal(response.state, 'incomplete');
+  assert.equal(response.state, 'completed_processing');
 });
 
 test('returns error state when completed assessment latest snapshot failed and no ready fallback exists', async () => {
@@ -149,7 +148,6 @@ test('returns error state when completed assessment latest snapshot failed and n
     resolveAuthenticatedUserId: async () => 'user-1',
     getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext }),
     getLatestResultForAssessment: async () => ({ ...completeResult, status: 'failed' }),
-    getLatestSuccessfulResultForAssessment: async () => null,
     getLatestReadyResultForUser: async () => null,
     getSignalsByResultId: async () => [],
   });
@@ -163,7 +161,10 @@ test('returns ready state with deterministic signal ordering and derived layer s
     resolveAuthenticatedUserId: async () => 'user-1',
     getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext }),
     getLatestResultForAssessment: async () => completeResult,
-    getLatestSuccessfulResultForAssessment: async () => completeResult,
+    getResultById: async (resultId) => {
+      assert.equal(resultId, readyResultForUser.id);
+      return completeResult;
+    },
     getLatestReadyResultForUser: async () => readyResultForUser,
     getSignalsByResultId: async () => unsortedSignals,
   });
@@ -185,10 +186,18 @@ test('returns ready state with deterministic signal ordering and derived layer s
 test('ready payload is derived from canonical ready-result selection instead of latest in-progress attempt context', async () => {
   const response = await getLatestIndividualResultForUser({
     resolveAuthenticatedUserId: async () => 'user-1',
-    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext, id: 'assessment-new', status: 'in_progress', completed_at: null, version_key: 'wplp80-v2' }),
+    getLatestAssessmentForUser: async () => ({
+      ...baseAssessmentContext,
+      id: 'assessment-new',
+      status: 'in_progress',
+      completed_at: null,
+      progress_count: 12,
+      progress_percent: '15',
+      version_key: 'wplp80-v2',
+    }),
     getLatestReadyResultForUser: async () => ({ ...readyResultForUser, assessment_id: 'assessment-ready' }),
-    getLatestSuccessfulResultForAssessment: async (assessmentId) => {
-      assert.equal(assessmentId, 'assessment-ready');
+    getResultById: async (resultId) => {
+      assert.equal(resultId, readyResultForUser.id);
       return { ...completeResult, assessment_id: 'assessment-ready', version_key: 'wplp80-v1' };
     },
     getSignalsByResultId: async () => unsortedSignals,
@@ -204,8 +213,16 @@ test('ready payload is derived from canonical ready-result selection instead of 
 test('latest ready result remains available when a newer attempt is in progress', async () => {
   const response = await getLatestIndividualResultForUser({
     resolveAuthenticatedUserId: async () => 'user-1',
-    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext, id: 'assessment-2', status: 'in_progress', completed_at: null, version_key: 'wplp80-v2' }),
-    getLatestSuccessfulResultForAssessment: async () => completeResult,
+    getLatestAssessmentForUser: async () => ({
+      ...baseAssessmentContext,
+      id: 'assessment-2',
+      status: 'in_progress',
+      completed_at: null,
+      progress_count: 8,
+      progress_percent: '10',
+      version_key: 'wplp80-v2',
+    }),
+    getResultById: async () => completeResult,
     getLatestReadyResultForUser: async () => readyResultForUser,
     getSignalsByResultId: async () => unsortedSignals,
   });
@@ -215,4 +232,18 @@ test('latest ready result remains available when a newer attempt is in progress'
   if (response.state === 'ready') {
     assert.equal(response.data.assessment.assessmentId, 'assessment-1');
   }
+});
+
+test('returns completed-processing state when ready snapshot metadata exists but signals have not landed yet', async () => {
+  const response = await getLatestIndividualResultForUser({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext }),
+    getLatestResultForAssessment: async () => completeResult,
+    getResultById: async () => completeResult,
+    getLatestReadyResultForUser: async () => readyResultForUser,
+    getSignalsByResultId: async () => [],
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(response.state, 'completed_processing');
 });
