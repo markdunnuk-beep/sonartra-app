@@ -8,7 +8,8 @@ import { buildAdminAuditHref } from '@/lib/admin/domain/audit'
 import { getAdminAssessmentSimulationWorkspaceStatus } from '@/lib/admin/domain/assessment-simulation'
 import { getAdminAssessmentReportPreviewWorkspaceStatus } from '@/lib/admin/domain/assessment-report-output'
 import { getAdminAssessmentDetailData } from '@/lib/admin/server/assessment-management'
-import { getAdminAssessmentScenarioById, listAdminAssessmentVersionScenarios } from '@/lib/admin/server/assessment-regression'
+import { describeDatabaseError, logDatabaseError } from '@/lib/db'
+import { listAdminAssessmentVersionScenarios } from '@/lib/admin/server/assessment-regression'
 
 export default async function AdminAssessmentVersionScenariosPage({
   params,
@@ -17,24 +18,23 @@ export default async function AdminAssessmentVersionScenariosPage({
   params: { assessmentId: string; versionNumber: string }
   searchParams?: { scenarioId?: string }
 }) {
-  const detailData = await getAdminAssessmentDetailData(params.assessmentId)
-  if (!detailData) notFound()
+  try {
+    const detailData = await getAdminAssessmentDetailData(params.assessmentId)
+    if (!detailData) notFound()
 
-  const version = detailData.versions.find((entry) => entry.versionLabel === params.versionNumber)
-  if (!version) notFound()
+    const version = detailData.versions.find((entry) => entry.versionLabel === params.versionNumber)
+    if (!version) notFound()
 
-  const [scenarios, selectedScenario] = await Promise.all([
-    listAdminAssessmentVersionScenarios(version),
-    searchParams?.scenarioId
-      ? getAdminAssessmentScenarioById({ assessmentId: params.assessmentId, versionId: version.id, scenarioId: searchParams.scenarioId })
-      : Promise.resolve(null),
-  ])
+    const scenarios = await listAdminAssessmentVersionScenarios(version)
+    const selectedScenario = searchParams?.scenarioId
+      ? scenarios.find((scenario) => scenario.id === searchParams.scenarioId) ?? null
+      : null
 
-  const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(version)
-  const previewStatus = getAdminAssessmentReportPreviewWorkspaceStatus(version)
+    const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(version)
+    const previewStatus = getAdminAssessmentReportPreviewWorkspaceStatus(version)
 
-  return (
-    <div className="space-y-6 lg:space-y-8">
+    return (
+      <div className="space-y-6 lg:space-y-8">
       <AdminPageHeader
         eyebrow="Assessment regression"
         title={`${detailData.assessment.name} · v${version.versionLabel}`}
@@ -94,6 +94,16 @@ export default async function AdminAssessmentVersionScenariosPage({
         scenarios={scenarios}
         selectedScenario={selectedScenario}
       />
-    </div>
-  )
+      </div>
+    )
+  } catch (error) {
+    logDatabaseError('Admin assessment version scenarios page load failed.', error, {
+      route: '/admin/assessments/[assessmentId]/versions/[versionNumber]/scenarios',
+      assessmentId: params.assessmentId,
+      versionNumber: params.versionNumber,
+      scenarioId: searchParams?.scenarioId ?? null,
+      safeMessage: describeDatabaseError(error),
+    })
+    throw error
+  }
 }

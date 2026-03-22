@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { logDatabaseError } from '@/lib/db';
+import { describeDatabaseError, logDatabaseError } from '@/lib/db';
 
 import { resolveAdminAccess } from '@/lib/admin/access'
 import { canonicalAdminLandingHref } from '@/lib/admin/navigation'
@@ -35,7 +35,7 @@ export async function GET() {
           },
     });
   } catch (error) {
-    logDatabaseError('GET /api/navigation-state failed.', error, { route: '/api/navigation-state' });
+    logDatabaseError('GET /api/navigation-state failed.', error, { route: '/api/navigation-state', safeMessage: describeDatabaseError(error) });
     return NextResponse.json({ error: 'Unable to resolve navigation state.' }, { status: 500 });
   }
 }
