@@ -488,7 +488,7 @@ function createHarness(options?: {
       },
     }
 
-    return work(client)
+    return work(client as never)
   }
 
   const fetchScoringInput = async (assessment: { id: string; assessment_version_id: string; version_key: string; completed_at: string | null; started_at: string | null }) => {
@@ -539,8 +539,8 @@ function createHarness(options?: {
       scoring_model_key: input.scoringModelKey,
       snapshot_version: input.snapshotVersion,
       status: 'complete',
-      result_payload: input.resultPayload as Record<string, unknown>,
-      response_quality_payload: input.responseQualityPayload as Record<string, unknown>,
+      result_payload: input.resultPayload as unknown as Record<string, unknown>,
+      response_quality_payload: input.responseQualityPayload as unknown as Record<string, unknown>,
       completed_at: input.completedAt,
       scored_at: input.scoredAt,
       created_at: iso(45),
@@ -662,7 +662,7 @@ test('admin-to-live Signals MVP happy path flows from published runtime to rende
   const started = await startLiveSignalsAssessment(
     { appUser, source: 'workspace' },
     {
-      queryDb: harness.queryDb,
+      queryDb: harness.queryDb as never,
       withTransaction: harness.withTransaction as never,
       resolveLiveSignalsPublishedVersionState: async () => publishedVersion,
     },
@@ -671,7 +671,7 @@ test('admin-to-live Signals MVP happy path flows from published runtime to rende
   assert.equal(started.kind, 'ok')
   if (started.kind !== 'ok') return
 
-  const questions = await getQuestionsByAssessmentIdWithDependencies(started.body.assessmentId, { queryDb: harness.queryDb })
+  const questions = await getQuestionsByAssessmentIdWithDependencies(started.body.assessmentId, { queryDb: harness.queryDb as never })
   assert.ok(questions)
   assert.equal(questions?.questions.length, 2)
   assert.equal(questions?.questionSet.key, 'signals-runtime-v1')
@@ -713,7 +713,7 @@ test('admin-to-live Signals MVP happy path flows from published runtime to rende
     },
     {
       runInTransaction: harness.withTransaction as never,
-      getLatestResultSnapshot: async () => null,
+      getLatestResultSnapshot: async () => null as never,
     },
   )
 
@@ -765,7 +765,7 @@ test('start flow stays unavailable when no published Signals version exists', as
   const started = await startLiveSignalsAssessment(
     { appUser },
     {
-      queryDb: harness.queryDb,
+      queryDb: harness.queryDb as never,
       withTransaction: harness.withTransaction as never,
       resolveLiveSignalsPublishedVersionState: async () => publishedVersion,
     },
@@ -787,7 +787,7 @@ test('start flow stays unavailable when published Signals runtime is not executa
   const started = await startLiveSignalsAssessment(
     { appUser },
     {
-      queryDb: harness.queryDb,
+      queryDb: harness.queryDb as never,
       withTransaction: harness.withTransaction as never,
       resolveLiveSignalsPublishedVersionState: async () => publishedVersion,
     },
@@ -805,7 +805,7 @@ test('final answer submit edge case succeeds when the last answer is persisted i
   const started = await startLiveSignalsAssessment(
     { appUser },
     {
-      queryDb: harness.queryDb,
+      queryDb: harness.queryDb as never,
       withTransaction: harness.withTransaction as never,
       resolveLiveSignalsPublishedVersionState: async () => publishedVersion,
     },
@@ -850,7 +850,7 @@ test('final answer submit edge case succeeds when the last answer is persisted i
     },
     {
       runInTransaction: harness.withTransaction as never,
-      getLatestResultSnapshot: async () => null,
+      getLatestResultSnapshot: async () => null as never,
     },
   )
 
@@ -870,7 +870,7 @@ test('scoring failure leaves the assessment complete and exposes the individual 
   const started = await startLiveSignalsAssessment(
     { appUser },
     {
-      queryDb: harness.queryDb,
+      queryDb: harness.queryDb as never,
       withTransaction: harness.withTransaction as never,
       resolveLiveSignalsPublishedVersionState: async () => publishedVersion,
     },
@@ -910,7 +910,7 @@ test('scoring failure leaves the assessment complete and exposes the individual 
     },
     {
       runInTransaction: harness.withTransaction as never,
-      getLatestResultSnapshot: async () => null,
+      getLatestResultSnapshot: async () => null as never,
     },
   )
 

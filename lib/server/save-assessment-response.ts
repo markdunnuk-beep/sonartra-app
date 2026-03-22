@@ -29,6 +29,19 @@ export type SaveAssessmentResponseResult =
       }
     }
 
+type SaveAssessmentResponseTransactionResult =
+  | { status: 404 | 409; error: string }
+  | {
+      status: 200
+      payload: {
+        assessmentId: string
+        questionId: number
+        responseValue: number
+        progressCount: number
+        progressPercent: number
+      }
+    }
+
 const defaultDependencies: SaveAssessmentResponseDependencies = {
   withTransaction,
 }
@@ -61,15 +74,18 @@ export async function saveAssessmentResponse(
   }
 
   const deps = { ...defaultDependencies, ...dependencies }
+  const assessmentId = input.assessmentId
+  const questionId = input.questionId
+  const responseValue = input.responseValue
 
-  const response = await deps.withTransaction(async (client) => {
+  const response = await deps.withTransaction<SaveAssessmentResponseTransactionResult>(async (client) => {
     const assessmentResult = await client.query<AssessmentProgressRow>(
       `SELECT a.id, a.user_id, a.status, av.total_questions
        FROM assessments a
        INNER JOIN assessment_versions av ON av.id = a.assessment_version_id
        WHERE a.id = $1
        FOR UPDATE`,
-      [input.assessmentId],
+      [assessmentId],
     )
 
     const assessment = assessmentResult.rows[0]
@@ -122,25 +138,25 @@ export async function saveAssessmentResponse(
        FROM response_upsert
        WHERE a.id = $1
        RETURNING a.progress_count, a.progress_percent`,
-      [input.assessmentId, input.questionId, input.responseValue, input.responseTimeMs ?? null, assessment.total_questions],
+      [assessmentId, questionId, responseValue, input.responseTimeMs ?? null, assessment.total_questions],
     )
 
     const progressCount = progressUpdate.rows[0]?.progress_count ?? assessment.total_questions
     const progressPercent = Number(progressUpdate.rows[0]?.progress_percent ?? 100)
 
     return {
-      status: 200 as const,
-      payload: {
-        assessmentId: input.assessmentId,
-        questionId: input.questionId,
-        responseValue: input.responseValue,
-        progressCount,
-        progressPercent,
-      },
-    }
+        status: 200 as const,
+        payload: {
+          assessmentId,
+          questionId,
+          responseValue,
+          progressCount,
+          progressPercent,
+        },
+      }
   })
 
-  if ('error' in response) {
+  if (response.status !== 200) {
     return { status: response.status, body: { error: response.error } }
   }
 
