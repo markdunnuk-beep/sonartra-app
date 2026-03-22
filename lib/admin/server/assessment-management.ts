@@ -46,6 +46,10 @@ import {
   buildAssessmentVersionDetailQuery,
   buildAssessmentVersionSelectQuery,
 } from '@/lib/admin/server/assessment-version-detail-sql'
+import {
+  getAssessmentRuntimeExecutableIssues,
+  materializeAssessmentRuntimeFromPackage,
+} from '@/lib/admin/server/assessment-runtime-materialization'
 
 interface AssessmentRegistryRow {
   id: string | null
@@ -1971,6 +1975,7 @@ export async function importAdminAssessmentPackage(
              package_validation_report_json = $10::jsonb,
              source_type = 'import',
              validation_status = $11,
+             total_questions = coalesce($12, total_questions),
              ${includeMaterialUpdatedAt ? 'material_updated_at = $8::timestamptz,' : ''}
              updated_at = $8::timestamptz,
              updated_by_identity_id = $9
@@ -1988,6 +1993,7 @@ export async function importAdminAssessmentPackage(
           actor?.id ?? null,
           JSON.stringify(validationReport),
           validationStatus,
+          validation.normalizedPackage?.questions.length ?? null,
         ],
       )
 
@@ -2820,6 +2826,62 @@ export async function publishAdminAssessmentVersion(
         }
       }
 
+      const runtimePackage = evaluatedVersion.normalizedPackage
+      if (!runtimePackage) {
+        return {
+          ok: false,
+          code: 'invalid_transition',
+          message: 'Publish blocked: the attached package could not be normalized for the live runtime.',
+        }
+      }
+
+      const runtimeExecutableIssues = getAssessmentRuntimeExecutableIssues(runtimePackage)
+      if (runtimeExecutableIssues.length > 0) {
+        const blockingSummary = runtimeExecutableIssues[0]?.message ?? 'The package cannot run on the live runtime.'
+
+        await writeAssessmentAuditEvent(client, {
+          createId: deps.createId,
+          actor,
+          nowIso,
+          eventType: 'assessment_publish_blocked_release_governance',
+          summary: `Publish blocked for ${assessmentName} v${evaluatedVersion.versionLabel}: ${blockingSummary}`,
+          assessmentId: input.assessmentId,
+          assessmentName,
+          versionId: input.versionId,
+          versionLabel: evaluatedVersion.versionLabel,
+          metadata: {
+            readinessStatus: publishReadiness.status,
+            runtimeExecutableIssues,
+          },
+        })
+
+        return {
+          ok: false,
+          code: 'invalid_transition',
+          message: `Publish blocked: ${blockingSummary}`,
+        }
+      }
+
+      const runtimeVersionResult = await client.query<{ key: string; name: string }>(
+        `select key, name
+         from assessment_versions
+         where id = $1
+           and assessment_definition_id = $2
+         limit 1`,
+        [input.versionId, input.assessmentId],
+      )
+      const runtimeVersion = runtimeVersionResult.rows[0]
+      if (!runtimeVersion) {
+        return { ok: false, code: 'not_found', message: 'Version not found.' }
+      }
+
+      await materializeAssessmentRuntimeFromPackage(client, {
+        assessmentVersionId: input.versionId,
+        assessmentVersionKey: runtimeVersion.key,
+        assessmentVersionName: runtimeVersion.name,
+        normalizedPackage: runtimePackage,
+      })
+
       await client.query(
         `update assessment_versions
          set lifecycle_status = 'archived',
@@ -2835,6 +2897,7 @@ export async function publishAdminAssessmentVersion(
         `update assessment_versions
          set lifecycle_status = 'published',
              is_active = true,
+             total_questions = $5,
              published_at = $3::timestamptz,
              archived_at = null,
              updated_at = $3::timestamptz,
@@ -2843,7 +2906,7 @@ export async function publishAdminAssessmentVersion(
          where id = $1
            and assessment_definition_id = $2
          returning id`,
-        [input.versionId, input.assessmentId, nowIso, actor?.id ?? null],
+        [input.versionId, input.assessmentId, nowIso, actor?.id ?? null, runtimePackage.questions.length],
       )
 
       if (!publishResult.rows[0]) {

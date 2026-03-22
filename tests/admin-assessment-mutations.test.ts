@@ -74,35 +74,39 @@ const validPackage = JSON.stringify({
     defaultLocale: 'en',
   },
   dimensions: [
-    { id: 'drive', labelKey: 'dimension.drive.label' },
-    { id: 'focus', labelKey: 'dimension.focus.label' },
+    { id: 'Core_Driver', labelKey: 'dimension.core_driver.label' },
+    { id: 'Core_Analyst', labelKey: 'dimension.core_analyst.label' },
   ],
   questions: [
     {
       id: 'q1',
       promptKey: 'question.q1.prompt',
-      dimensionId: 'drive',
+      dimensionId: 'Core_Driver',
       reverseScored: false,
       weight: 1,
       options: [
-        { id: 'q1.a', labelKey: 'question.q1.option.a', value: 1, scoreMap: { drive: 1 } },
-        { id: 'q1.b', labelKey: 'question.q1.option.b', value: 2, scoreMap: { drive: 2, focus: 1 } },
+        { id: 'q1.a', labelKey: 'question.q1.option.a', value: 1, scoreMap: { Core_Driver: 1, Core_Analyst: 4 } },
+        { id: 'q1.b', labelKey: 'question.q1.option.b', value: 2, scoreMap: { Core_Driver: 2, Core_Analyst: 3 } },
+        { id: 'q1.c', labelKey: 'question.q1.option.c', value: 3, scoreMap: { Core_Driver: 3, Core_Analyst: 2 } },
+        { id: 'q1.d', labelKey: 'question.q1.option.d', value: 4, scoreMap: { Core_Driver: 4, Core_Analyst: 1 } },
       ],
     },
   ],
   scoring: {
     dimensionRules: [
-      { dimensionId: 'drive', aggregation: 'sum' },
+      { dimensionId: 'Core_Driver', aggregation: 'sum' },
+      { dimensionId: 'Core_Analyst', aggregation: 'sum' },
     ],
   },
   normalization: {
     scales: [
       {
         id: 'core-scale',
-        dimensionIds: ['drive', 'focus'],
+        dimensionIds: ['Core_Driver', 'Core_Analyst'],
         range: { min: 0, max: 10 },
         bands: [
           { key: 'low', min: 0, max: 3, labelKey: 'band.low.label' },
+          { key: 'mid', min: 4, max: 6, labelKey: 'band.mid.label' },
           { key: 'high', min: 7, max: 10, labelKey: 'band.high.label' },
         ],
       },
@@ -113,7 +117,7 @@ const validPackage = JSON.stringify({
       {
         key: 'core-summary',
         labelKey: 'output.core-summary.label',
-        dimensionIds: ['drive'],
+        dimensionIds: ['Core_Driver', 'Core_Analyst'],
         normalizationScaleId: 'core-scale',
       },
     ],
@@ -123,12 +127,15 @@ const validPackage = JSON.stringify({
       {
         locale: 'en',
         text: {
-          'dimension.drive.label': 'Drive',
-          'dimension.focus.label': 'Focus',
+          'dimension.core_driver.label': 'Core Driver',
+          'dimension.core_analyst.label': 'Core Analyst',
           'question.q1.prompt': 'I naturally set the pace for the team.',
           'question.q1.option.a': 'Rarely',
-          'question.q1.option.b': 'Often',
+          'question.q1.option.b': 'Sometimes',
+          'question.q1.option.c': 'Often',
+          'question.q1.option.d': 'Almost always',
           'band.low.label': 'Low',
+          'band.mid.label': 'Mid',
           'band.high.label': 'High',
           'output.core-summary.label': 'Core summary',
         },
@@ -159,8 +166,8 @@ function makeManagedVersionRow(overrides: Record<string, unknown> = {}) {
       summary: {
         dimensionsCount: 2,
         questionsCount: 1,
-        optionsCount: 2,
-        scoringRuleCount: 1,
+        optionsCount: 4,
+        scoringRuleCount: 2,
         normalizationRuleCount: 1,
         outputRuleCount: 1,
         localeCount: 1,
@@ -606,7 +613,7 @@ test('bulk scenario copy-forward imports valid scenarios, skips invalid ones, an
                 package_imported_at: '2026-03-21T09:00:00.000Z',
                 package_source_filename: 'draft.json',
                 package_imported_by_name: 'Rina Patel',
-                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 2, scoringRuleCount: 1, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
+                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 4, scoringRuleCount: 2, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
                 created_at: '2026-03-21T09:00:00.000Z',
                 updated_at: '2026-03-21T09:00:00.000Z',
                 published_at: null,
@@ -632,7 +639,7 @@ test('bulk scenario copy-forward imports valid scenarios, skips invalid ones, an
                 package_imported_at: '2026-03-20T09:00:00.000Z',
                 package_source_filename: 'published.json',
                 package_imported_by_name: 'Rina Patel',
-                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 2, scoringRuleCount: 1, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
+                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 4, scoringRuleCount: 2, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
                 created_at: '2026-03-20T09:00:00.000Z',
                 updated_at: '2026-03-20T09:00:00.000Z',
                 published_at: '2026-03-20T09:00:00.000Z',
@@ -762,7 +769,7 @@ test('single scenario clone rejects incompatible payloads for the target version
                 package_imported_at: '2026-03-21T09:00:00.000Z',
                 package_source_filename: 'draft.json',
                 package_imported_by_name: 'Rina Patel',
-                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 2, scoringRuleCount: 1, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
+                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 4, scoringRuleCount: 2, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
                 created_at: '2026-03-21T09:00:00.000Z',
                 updated_at: '2026-03-21T09:00:00.000Z',
                 published_at: null,
@@ -788,7 +795,7 @@ test('single scenario clone rejects incompatible payloads for the target version
                 package_imported_at: '2026-03-20T09:00:00.000Z',
                 package_source_filename: 'published.json',
                 package_imported_by_name: 'Rina Patel',
-                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 2, scoringRuleCount: 1, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
+                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 4, scoringRuleCount: 2, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
                 created_at: '2026-03-20T09:00:00.000Z',
                 updated_at: '2026-03-20T09:00:00.000Z',
                 published_at: '2026-03-20T09:00:00.000Z',
@@ -843,7 +850,7 @@ test('suite snapshot persists latest full-run summary without using single simul
   const versionUpdates: unknown[][] = []
   const auditEvents: string[] = []
   const scenarioPayload = JSON.stringify({
-    answers: [{ questionId: 'q1', optionId: 'q1.b' }],
+    answers: [{ questionId: 'q1', optionId: 'q1.d' }],
     locale: 'en',
     source: 'manual_json',
     scenarioKey: null,
@@ -878,7 +885,7 @@ test('suite snapshot persists latest full-run summary without using single simul
                 package_imported_at: '2026-03-21T09:00:00.000Z',
                 package_source_filename: 'draft.json',
                 package_imported_by_name: 'Rina Patel',
-                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 2, scoringRuleCount: 1, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
+                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 4, scoringRuleCount: 2, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
                 created_at: '2026-03-21T09:00:00.000Z',
                 updated_at: '2026-03-21T09:00:00.000Z',
                 published_at: null,
@@ -904,7 +911,7 @@ test('suite snapshot persists latest full-run summary without using single simul
                 package_imported_at: '2026-03-20T09:00:00.000Z',
                 package_source_filename: 'published.json',
                 package_imported_by_name: 'Rina Patel',
-                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 2, scoringRuleCount: 1, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
+                package_validation_report_json: { summary: { dimensionsCount: 2, questionsCount: 1, optionsCount: 4, scoringRuleCount: 2, normalizationRuleCount: 1, outputRuleCount: 1, localeCount: 1 }, errors: [], warnings: [] },
                 created_at: '2026-03-20T09:00:00.000Z',
                 updated_at: '2026-03-20T09:00:00.000Z',
                 published_at: '2026-03-20T09:00:00.000Z',
@@ -1007,7 +1014,7 @@ test('suite snapshot fails fast when regression snapshot schema support is unava
 })
 
 test('publish version succeeds when a valid package is attached and enforces a single published version', async () => {
-  const updates: string[] = []
+  const queries: string[] = []
   const result = await publishAdminAssessmentVersion({
     assessmentId: 'assessment-1',
     versionId: 'version-2',
@@ -1018,6 +1025,8 @@ test('publish version succeeds when a valid package is attached and enforces a s
     getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string) => {
+        queries.push(sql)
+
         if (/from assessment_versions av/i.test(sql)) {
           return { rows: [makeManagedVersionRow({ sign_off_status: 'signed_off', sign_off_at: '2026-03-21T09:30:00.000Z', sign_off_by_name: 'Rina Patel', sign_off_material_updated_at: '2026-03-21T08:00:00.000Z' })] }
         }
@@ -1026,8 +1035,11 @@ test('publish version succeeds when a valid package is attached and enforces a s
           return { rows: [] }
         }
 
-        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'archived'/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'published'/i.test(sql) || /update assessment_definitions/i.test(sql)) {
-          updates.push(sql)
+        if (/select key, name\s+from assessment_versions/i.test(sql)) {
+          return { rows: [{ key: 'signals-v1', name: 'Sonartra Signals' }] }
+        }
+
+        if (/insert into assessment_question_sets/i.test(sql) || /update assessment_question_sets/i.test(sql) || /insert into assessment_questions/i.test(sql) || /delete from assessment_questions/i.test(sql) || /insert into assessment_question_options/i.test(sql) || /delete from assessment_question_options/i.test(sql) || /insert into assessment_option_signal_mappings/i.test(sql) || /delete from assessment_option_signal_mappings/i.test(sql) || /update assessment_versions\s+set publish_readiness_status/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'archived'/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'published'/i.test(sql) || /update assessment_definitions/i.test(sql)) {
           return { rows: /returning id/i.test(sql) ? [{ id: 'version-2' }] : [] }
         }
 
@@ -1047,7 +1059,11 @@ test('publish version succeeds when a valid package is attached and enforces a s
 
   assert.equal(result.ok, true)
   assert.equal(result.code, 'published')
-  assert.equal(updates.length, 4)
+  assert.ok(queries.some((sql) => /insert into assessment_question_sets/i.test(sql)))
+  assert.ok(queries.some((sql) => /insert into assessment_questions/i.test(sql)))
+  assert.ok(queries.some((sql) => /insert into assessment_question_options/i.test(sql)))
+  assert.ok(queries.some((sql) => /insert into assessment_option_signal_mappings/i.test(sql)))
+  assert.ok(queries.some((sql) => /update assessment_versions\s+set lifecycle_status = 'published'[\s\S]*total_questions = \$5/i.test(sql)))
 })
 
 test('publish version is blocked when no valid package exists', async () => {
@@ -1092,6 +1108,88 @@ test('publish version is blocked when no valid package exists', async () => {
   assert.equal(result.ok, false)
   assert.equal(result.code, 'invalid_transition')
   assert.match(result.message, /publish blocked|unknown dimension/i)
+  assert.ok(auditEvents.includes('assessment_publish_blocked_release_governance'))
+})
+
+test('publish version is blocked when the package is valid but not executable by the live runtime', async () => {
+  const auditEvents: string[] = []
+  const result = await publishAdminAssessmentVersion({
+    assessmentId: 'assessment-1',
+    versionId: 'version-2',
+    expectedUpdatedAt: '2026-03-21T09:00:00.000Z',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        if (/from assessment_versions av/i.test(sql)) {
+          return {
+            rows: [
+              makeManagedVersionRow({
+                sign_off_status: 'signed_off',
+                sign_off_at: '2026-03-21T09:30:00.000Z',
+                sign_off_by_name: 'Rina Patel',
+                sign_off_material_updated_at: '2026-03-21T08:00:00.000Z',
+                definition_payload: {
+                  meta: {
+                    schemaVersion: 'sonartra-assessment-package/v1',
+                    assessmentKey: 'signals',
+                    assessmentTitle: 'Signals',
+                    versionLabel: '1.2.0',
+                    defaultLocale: 'en',
+                  },
+                  dimensions: [{ id: 'Unsupported_Signal', labelKey: 'dimension.unsupported.label' }],
+                  questions: [{
+                    id: 'q1',
+                    promptKey: 'question.q1.prompt',
+                    dimensionId: 'Unsupported_Signal',
+                    reverseScored: false,
+                    weight: 1,
+                    options: [
+                      { id: 'q1.a', labelKey: 'question.q1.option.a', value: 1, scoreMap: { Unsupported_Signal: 1 } },
+                    ],
+                  }],
+                  scoring: { dimensionRules: [{ dimensionId: 'Unsupported_Signal', aggregation: 'sum' }] },
+                  normalization: { scales: [{ id: 'core-scale', dimensionIds: ['Unsupported_Signal'], range: { min: 0, max: 1 }, bands: [{ key: 'low', min: 0, max: 1, labelKey: 'band.low.label' }] }] },
+                  outputs: { reportRules: [{ key: 'summary', labelKey: 'output.summary.label', dimensionIds: ['Unsupported_Signal'], normalizationScaleId: 'core-scale' }] },
+                  language: { locales: [{ locale: 'en', text: { 'dimension.unsupported.label': 'Unsupported', 'question.q1.prompt': 'Question', 'question.q1.option.a': 'Option', 'band.low.label': 'Low', 'output.summary.label': 'Summary' } }] },
+                },
+              }),
+            ],
+          }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/insert into access_audit_events/i.test(sql)) {
+          auditEvents.push(String(params[1]))
+          return { rows: [] }
+        }
+
+        if (/insert into assessment_question_sets/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'published'/i.test(sql)) {
+          throw new Error(`Unexpected live-runtime materialization write: ${sql}`)
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-21T10:00:00.000Z'),
+    createId: (() => {
+      const ids = ['audit-1', 'audit-2']
+      return () => ids.shift() ?? 'audit-3'
+    })(),
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'invalid_transition')
+  assert.match(result.message, /does not support signal code/i)
   assert.ok(auditEvents.includes('assessment_publish_blocked_release_governance'))
 })
 
