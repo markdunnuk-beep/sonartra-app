@@ -37,6 +37,10 @@ import {
 import { queryDb, withTransaction, describeDatabaseError, logDatabaseError } from '@/lib/db'
 import { getScopedAdminAuditActivity, mapScopedAuditEventsToAssessmentActivity } from '@/lib/admin/server/audit-workspace'
 import {
+  ASSESSMENT_VERSION_REGRESSION_SNAPSHOT_COLUMNS,
+  ASSESSMENT_VERSION_RELEASE_NOTES_COLUMNS,
+  ASSESSMENT_VERSION_RELEASE_READINESS_COLUMNS,
+  ASSESSMENT_VERSION_RELEASE_SIGN_OFF_COLUMNS,
   getAdminAssessmentVersionSchemaCapabilities,
   hasAssessmentVersionPackageColumn,
   hasAssessmentVersionOptionalGovernanceAndRegressionColumn,
@@ -1080,7 +1084,7 @@ interface AssessmentVersionGovernanceWritePolicy {
 }
 
 class AssessmentVersionSchemaCompatibilityError extends Error {
-  constructor(action: string, feature: AssessmentVersionGovernanceWriteFeature, missingColumns: string[]) {
+  constructor(action: string, feature: string, missingColumns: string[]) {
     const featureLabel = feature.replaceAll('_', ' ')
     super(
       missingColumns.length > 0
@@ -1167,24 +1171,10 @@ function createAssessmentVersionGovernanceWritePolicy(
     'package_imported_by_identity_id',
     'package_validation_report_json',
   ])
-  const releaseReadiness = resolveAssessmentVersionGovernanceWriteSupport(capabilities, [
-    'publish_readiness_status',
-    'readiness_check_summary_json',
-    'last_readiness_evaluated_at',
-  ])
-  const releaseSignOff = resolveAssessmentVersionGovernanceWriteSupport(capabilities, [
-    'sign_off_status',
-    'sign_off_at',
-    'sign_off_by_identity_id',
-    'sign_off_material_updated_at',
-    'material_updated_at',
-  ])
-  const releaseNotes = resolveAssessmentVersionGovernanceWriteSupport(capabilities, [
-    'release_notes',
-  ])
-  const regressionSnapshot = resolveAssessmentVersionGovernanceWriteSupport(capabilities, [
-    'latest_regression_suite_snapshot_json',
-  ])
+  const releaseReadiness = resolveAssessmentVersionGovernanceWriteSupport(capabilities, ASSESSMENT_VERSION_RELEASE_READINESS_COLUMNS)
+  const releaseSignOff = resolveAssessmentVersionGovernanceWriteSupport(capabilities, ASSESSMENT_VERSION_RELEASE_SIGN_OFF_COLUMNS)
+  const releaseNotes = resolveAssessmentVersionGovernanceWriteSupport(capabilities, ASSESSMENT_VERSION_RELEASE_NOTES_COLUMNS)
+  const regressionSnapshot = resolveAssessmentVersionGovernanceWriteSupport(capabilities, ASSESSMENT_VERSION_REGRESSION_SNAPSHOT_COLUMNS)
 
   const supportByFeature: Record<AssessmentVersionGovernanceWriteFeature, AssessmentVersionGovernanceWriteSupport> = {
     package_metadata: packageMetadata,
@@ -2989,8 +2979,17 @@ export async function publishAdminAssessmentVersion(
         client.query.bind(client),
         deps.getAssessmentVersionSchemaCapabilities,
       ))
-      writePolicy.assertSupported('release_readiness', 'publishing assessment versions')
-      writePolicy.assertSupported('release_sign_off', 'publishing assessment versions')
+      const publishGovernanceMissingColumns = Array.from(new Set([
+        ...writePolicy.releaseReadiness.missingColumns,
+        ...writePolicy.releaseSignOff.missingColumns,
+      ]))
+      if (publishGovernanceMissingColumns.length > 0) {
+        throw new AssessmentVersionSchemaCompatibilityError(
+          'publishing assessment versions',
+          'release_governance',
+          publishGovernanceMissingColumns,
+        )
+      }
       await runPublishStage('runtime_schema_compatibility', {
         assessmentId: input.assessmentId,
         versionId: input.versionId,

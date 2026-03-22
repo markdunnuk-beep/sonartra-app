@@ -17,6 +17,7 @@ For `assessment_versions`, treat newer package-era, governance, and regression f
 - `lib/admin/server/assessment-version-schema-capabilities.ts` centralizes optional package-era, governance, and regression column discovery for `assessment_versions`.
 - `lib/admin/server/assessment-version-detail-sql.ts` keeps detail reads capability-driven, including package-era projections/joins plus governance/regression fallbacks when optional columns are missing.
 - `lib/admin/server/assessment-management.ts` uses the same capability snapshot for admin detail reads and explicit write gating for package metadata, release readiness, sign-off, release notes, and regression snapshot writes. Migration-required writes now return `schema_incompatible` instead of surfacing raw SQL failures.
+- Publishing specifically depends on the union of the release-readiness columns (`publish_readiness_status`, `readiness_check_summary_json`, `last_readiness_evaluated_at`) and release sign-off columns (`sign_off_status`, `sign_off_at`, `sign_off_by_identity_id`, `sign_off_material_updated_at`, `material_updated_at`). These all arrive via `db/migrations/0010_assessment_version_release_governance.sql`.
 - `lib/admin/server/assessment-regression.ts` loads version detail through the shared capability-driven SQL builder, so package-era compatibility reads follow the same policy there too.
 
 ### Remaining scope notes
