@@ -5,6 +5,7 @@ import { Client } from 'pg';
 import { resolveMigrationFiles } from './migration-files.mjs';
 
 const migrationsDir = path.join(process.cwd(), 'db', 'migrations');
+const schemaMigrationsTableName = 'public.schema_migrations';
 
 function isIgnorablePreambleLine(line) {
   const trimmed = line.trim();
@@ -57,7 +58,7 @@ export function normalizeMigrationSql(sql) {
 
 async function ensureMigrationTrackingTable(client) {
   await client.query(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
+    CREATE TABLE IF NOT EXISTS ${schemaMigrationsTableName} (
       id TEXT PRIMARY KEY,
       applied_at TIMESTAMP DEFAULT now()
     )
@@ -65,7 +66,7 @@ async function ensureMigrationTrackingTable(client) {
 }
 
 async function getAppliedMigrationIds(client) {
-  const result = await client.query('SELECT id FROM schema_migrations ORDER BY id ASC');
+  const result = await client.query(`SELECT id FROM ${schemaMigrationsTableName} ORDER BY id ASC`);
   return new Set(result.rows.map((row) => row.id));
 }
 
@@ -87,7 +88,21 @@ export async function getMigrationDiagnostics(client) {
       current_database() AS database_name,
       current_schema() AS schema_name,
       current_user AS database_user,
-      current_setting('search_path') AS search_path
+      current_setting('search_path') AS search_path,
+      (
+        SELECT n.nspname
+        FROM pg_class c
+        INNER JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.oid = to_regclass('assessment_versions')
+      ) AS assessment_versions_schema,
+      to_regclass('assessment_versions')::text AS assessment_versions_regclass,
+      (
+        SELECT n.nspname
+        FROM pg_class c
+        INNER JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.oid = to_regclass('${schemaMigrationsTableName}')
+      ) AS schema_migrations_schema,
+      to_regclass('${schemaMigrationsTableName}')::text AS schema_migrations_regclass
   `);
 
   return result.rows[0] ?? null;
@@ -106,7 +121,7 @@ async function applyMigration(client, fileName) {
   try {
     await client.query('BEGIN');
     await client.query(sql);
-    await client.query('INSERT INTO schema_migrations (id) VALUES ($1)', [fileName]);
+    await client.query(`INSERT INTO ${schemaMigrationsTableName} (id) VALUES ($1)`, [fileName]);
     await client.query('COMMIT');
     console.log(`✓ Applied ${fileName}`);
   } catch (error) {
@@ -150,7 +165,9 @@ async function runMigrations() {
 
     const diagnostics = await getMigrationDiagnostics(client);
     if (diagnostics) {
-      console.log(`→ Migration target database=${diagnostics.database_name} schema=${diagnostics.schema_name} user=${diagnostics.database_user} search_path=${diagnostics.search_path}`);
+      console.log(
+        `→ Migration target database=${diagnostics.database_name} schema=${diagnostics.schema_name} user=${diagnostics.database_user} search_path=${diagnostics.search_path} assessment_versions=${diagnostics.assessment_versions_regclass ?? 'missing'} assessment_versions_schema=${diagnostics.assessment_versions_schema ?? 'missing'} schema_migrations=${diagnostics.schema_migrations_regclass ?? 'missing'} schema_migrations_schema=${diagnostics.schema_migrations_schema ?? 'missing'}`,
+      );
     }
 
     const appliedMigrationIds = await getAppliedMigrationIds(client);

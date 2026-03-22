@@ -21,6 +21,23 @@ interface DatabaseErrorDiagnostics {
   causeMessage?: string
 }
 
+export interface DatabaseSessionDiagnostics {
+  database_name: string | null
+  schema_name: string | null
+  search_path: string | null
+  assessment_versions_schema: string | null
+  assessment_versions_regclass: string | null
+  schema_migrations_schema: string | null
+  schema_migrations_regclass: string | null
+}
+
+type DatabaseQueryExecutor = <T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: unknown[]
+) => Promise<QueryResult<T>>
+
+const loggedDatabaseDiagnosticKeys = new Set<string>()
+
 export class DatabaseConfigurationError extends Error {
   override readonly cause?: unknown
 
@@ -245,6 +262,63 @@ export function logDatabaseError(context: string, error: unknown, metadata?: Rec
     causeCode: diagnostics.causeCode,
     causeMessage: diagnostics.causeMessage,
   })
+}
+
+export async function getDatabaseSessionDiagnostics(
+  executor: DatabaseQueryExecutor = queryDb,
+): Promise<DatabaseSessionDiagnostics | null> {
+  const result = await executor<DatabaseSessionDiagnostics>(
+    `select
+       current_database() as database_name,
+       current_schema() as schema_name,
+       current_setting('search_path') as search_path,
+       (
+         select n.nspname
+         from pg_class c
+         inner join pg_namespace n on n.oid = c.relnamespace
+         where c.oid = to_regclass('assessment_versions')
+       ) as assessment_versions_schema,
+       to_regclass('assessment_versions')::text as assessment_versions_regclass,
+       (
+         select n.nspname
+         from pg_class c
+         inner join pg_namespace n on n.oid = c.relnamespace
+         where c.oid = to_regclass('schema_migrations')
+       ) as schema_migrations_schema,
+       to_regclass('schema_migrations')::text as schema_migrations_regclass`,
+  )
+
+  return result.rows[0] ?? null
+}
+
+export async function logDatabaseSessionDiagnostics(
+  context: string,
+  options: {
+    executor?: DatabaseQueryExecutor
+    metadata?: Record<string, unknown>
+    onceKey?: string
+  } = {},
+): Promise<void> {
+  const { executor = queryDb, metadata, onceKey } = options
+
+  if (onceKey && loggedDatabaseDiagnosticKeys.has(onceKey)) {
+    return
+  }
+
+  try {
+    const diagnostics = await getDatabaseSessionDiagnostics(executor)
+
+    if (onceKey) {
+      loggedDatabaseDiagnosticKeys.add(onceKey)
+    }
+
+    console.info(context, {
+      ...(metadata ?? {}),
+      ...(diagnostics ?? {}),
+    })
+  } catch (error) {
+    logDatabaseError(`${context} (failed to load database session diagnostics).`, error, metadata)
+  }
 }
 
 export function describeDatabaseError(error: unknown): string {
