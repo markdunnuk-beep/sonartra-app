@@ -29,9 +29,11 @@ import type {
 
 const STATUS_ORDER: Record<AssessmentRepositoryStatus, number> = {
   in_progress: 0,
-  not_started: 1,
-  complete: 2,
-  coming_soon: 3,
+  processing: 1,
+  not_started: 2,
+  complete: 3,
+  error: 4,
+  coming_soon: 5,
 }
 
 const PLAN_ORDER = {
@@ -238,7 +240,7 @@ export function sortAssessments(items: AssessmentRepositoryItem[]): AssessmentRe
 export function buildAssessmentSummaryMetrics(items: AssessmentRepositoryItem[]): AssessmentSummaryMetric[] {
   const readyToStart = items.filter((item) => item.status === 'not_started').length
   const inProgress = items.filter((item) => item.status === 'in_progress').length
-  const resultsReady = items.filter((item) => item.status === 'complete').length
+  const resultsReady = items.filter((item) => item.resultsAvailable || item.lifecycleState === 'ready').length
   const releasePending = items.filter((item) => item.status === 'coming_soon').length
 
   return [
@@ -282,7 +284,7 @@ export function matchesProgressFilter(item: AssessmentRepositoryItem, filter: As
     case 'in_progress':
       return item.status === 'in_progress'
     case 'completed':
-      return item.status === 'complete'
+      return item.resultsAvailable || item.lifecycleState === 'ready'
     case 'all':
     default:
       return true
@@ -318,12 +320,16 @@ export function buildAssessmentSections(items: AssessmentRepositoryItem[], filte
   ].filter((section) => section.items.length > 0)
 }
 
-export function formatStatusLabel(status: AssessmentRepositoryStatus): string {
+export function formatStatusLabel(status: AssessmentRepositoryStatus, lifecycleState?: AssessmentRepositoryItem['lifecycleState']): string {
   switch (status) {
     case 'in_progress':
       return 'In Progress'
+    case 'processing':
+      return lifecycleState === 'completed_processing' ? 'Processing' : 'Processing'
     case 'complete':
-      return 'Complete'
+      return lifecycleState === 'ready' ? 'Results Ready' : 'Complete'
+    case 'error':
+      return 'Attention Needed'
     case 'coming_soon':
       return 'Coming Soon'
     case 'not_started':
@@ -339,8 +345,16 @@ export function getCollapsedMetadata(item: AssessmentRepositoryItem): string[] {
     return [...base, `${item.progressPercent}% complete`]
   }
 
+  if (item.status === 'processing') {
+    return [...base, 'Results processing']
+  }
+
   if (item.status === 'complete' && item.resultsAvailable) {
     return [...base, 'Results ready']
+  }
+
+  if (item.status === 'error') {
+    return [...base, 'Follow-up needed']
   }
 
   if (item.status === 'coming_soon') {
@@ -356,6 +370,9 @@ export function getCollapsedAction(item: AssessmentRepositoryItem): AssessmentRe
       return item.assessmentHref ? { label: 'Start', href: item.assessmentHref, action: 'launch' } : null
     case 'in_progress':
       return item.assessmentHref ? { label: 'Resume', href: item.assessmentHref, action: 'resume' } : null
+    case 'processing':
+    case 'error':
+      return null
     case 'complete':
       return item.resultsHref ? { label: 'View Results', href: item.resultsHref, action: 'view_results' } : null
     case 'coming_soon':
@@ -370,6 +387,9 @@ export function getExpandedActions(item: AssessmentRepositoryItem): AssessmentRe
       return item.assessmentHref ? [{ label: 'Start Assessment', href: item.assessmentHref, action: 'launch' }] : []
     case 'in_progress':
       return item.assessmentHref ? [{ label: 'Resume Assessment', href: item.assessmentHref, action: 'resume' }] : []
+    case 'processing':
+    case 'error':
+      return []
     case 'complete': {
       const actions: AssessmentRepositoryAction[] = []
 
@@ -390,6 +410,20 @@ export function getExpandedActions(item: AssessmentRepositoryItem): AssessmentRe
 }
 
 export function getPassiveState(item: AssessmentRepositoryItem): AssessmentPassiveState | null {
+  if (item.status === 'processing') {
+    return {
+      label: 'Results processing',
+      detail: 'Your latest completed attempt is still being scored. Results will appear here once processing finishes.',
+    }
+  }
+
+  if (item.status === 'error') {
+    return {
+      label: 'Processing issue',
+      detail: 'The latest completed attempt could not be turned into a ready result yet. Please try again shortly.',
+    }
+  }
+
   if (item.status === 'coming_soon') {
     return {
       label: 'Release pending',
@@ -419,6 +453,9 @@ export function getActionState(item: AssessmentRepositoryItem): AssessmentAction
         label: 'Resume now',
         detail: 'Continue from the latest autosaved response set.',
       }
+    case 'processing':
+    case 'error':
+      return null
     case 'complete':
       return {
         label: 'Results ready',
@@ -440,7 +477,7 @@ function isActionableResultsCandidate(item: AssessmentRepositoryItem): boolean {
 }
 
 function getOperationalMetadata(item: AssessmentRepositoryItem): string[] {
-  const metadata = [item.category === 'team' ? 'Team diagnostic' : 'Individual diagnostic', `${item.estimatedMinutes} min`, formatStatusLabel(item.status)]
+  const metadata = [item.category === 'team' ? 'Team diagnostic' : 'Individual diagnostic', `${item.estimatedMinutes} min`, formatStatusLabel(item.status, item.lifecycleState)]
 
   if (item.status === 'in_progress' && typeof item.progressPercent === 'number') {
     return [metadata[0], `${item.progressPercent}% complete`, metadata[1]]

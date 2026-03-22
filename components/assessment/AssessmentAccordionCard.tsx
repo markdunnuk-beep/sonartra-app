@@ -77,7 +77,7 @@ export function AssessmentAccordionCard({
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2.5">
               <h3 className="text-xl font-semibold tracking-tight text-textPrimary">{item.title}</h3>
-              <AssessmentStatusBadge status={item.status} />
+              <AssessmentStatusBadge item={item} />
             </div>
             <p
               className="max-w-3xl overflow-hidden text-sm leading-7 text-textSecondary [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
