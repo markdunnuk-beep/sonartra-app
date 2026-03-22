@@ -311,3 +311,74 @@ test('getAssessmentRuntimeExecutableIssues reports non-executable live runtime p
     },
   ])
 })
+
+test('materializeAssessmentRuntimeFromPackage logs structured stage diagnostics when option writes fail', async () => {
+  const pkg = buildExecutablePackage()
+  const originalConsoleError = console.error
+  const consoleCalls: unknown[][] = []
+  console.error = (...args: unknown[]) => {
+    consoleCalls.push(args)
+  }
+
+  try {
+    await assert.rejects(() => materializeAssessmentRuntimeFromPackage({
+      query: async (sql: string) => {
+        if (/insert into assessment_question_sets/i.test(sql)) {
+          return { rows: [{ id: 'question-set-1' }] }
+        }
+
+        if (/update assessment_question_sets/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/insert into assessment_questions/i.test(sql)) {
+          return { rows: [{ id: 'question-1' }] }
+        }
+
+        if (/insert into assessment_question_options/i.test(sql)) {
+          const error = new Error('null value in column "option_text" of relation "assessment_question_options" violates not-null constraint') as Error & {
+            code?: string
+            table?: string
+            column?: string
+            constraint?: string
+            detail?: string
+          }
+          error.code = '23502'
+          error.table = 'assessment_question_options'
+          error.column = 'option_text'
+          error.constraint = 'assessment_question_options_option_text_key'
+          error.detail = 'Failing row contains null option_text.'
+          throw error
+        }
+
+        throw new Error(`Unexpected query: ${sql}`)
+      },
+    } as never, {
+      assessmentVersionId: 'version-1',
+      assessmentVersionKey: 'signals-v2',
+      assessmentVersionName: 'Signals',
+      normalizedPackage: pkg,
+    }))
+
+    const diagnostic = consoleCalls.find((call) => call[0] === '[admin-assessment-runtime-materialization] Stage failed.')
+    assert.ok(diagnostic)
+    assert.deepEqual(diagnostic?.[1], {
+      stage: 'option_upsert',
+      postgresCode: '23502',
+      constraint: 'assessment_question_options_option_text_key',
+      table: 'assessment_question_options',
+      column: 'option_text',
+      detail: 'Failing row contains null option_text.',
+      message: 'null value in column "option_text" of relation "assessment_question_options" violates not-null constraint',
+      assessmentVersionId: 'version-1',
+      assessmentVersionKey: 'signals-v2',
+      questionSetId: 'question-set-1',
+      questionId: 'q1',
+      runtimeQuestionId: 'question-1',
+      optionId: 'q1.a',
+      optionIndex: 0,
+    })
+  } finally {
+    console.error = originalConsoleError
+  }
+})

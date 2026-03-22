@@ -400,10 +400,16 @@ test('report preview workspace status and surface block invalid package states c
 
 test('canonical report preview route uses version-level path and notFound handling', async () => {
   const source = await readFile(new URL('../app/admin/assessments/[assessmentId]/versions/[versionNumber]/report-preview/page.tsx', import.meta.url), 'utf8')
+  const surfaceSource = await readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionReportPreviewSurface.tsx', import.meta.url), 'utf8')
+  const workspaceSource = await readFile(new URL('../components/admin/surfaces/AdminAssessmentSimulationWorkspace.tsx', import.meta.url), 'utf8')
 
   assert.match(source, /AdminAssessmentVersionReportPreviewSurface/)
   assert.match(source, /getAdminAssessmentDetailData/)
   assert.match(source, /notFound\(\)/)
+  assert.doesNotMatch(surfaceSource, /renderPostResults/)
+  assert.match(surfaceSource, /postResultsVariant=\"report_preview\"/)
+  assert.doesNotMatch(workspaceSource, /renderPostResults/)
+  assert.match(workspaceSource, /AdminAssessmentReportOutputPreviewPanel/)
 })
 
 test('version detail and parent versions surfaces expose report-preview visibility', async () => {

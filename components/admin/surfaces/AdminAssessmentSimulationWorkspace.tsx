@@ -9,6 +9,7 @@ import {
   submitAdminAssessmentScenarioSuiteRunAction,
   submitAdminAssessmentSimulationAction,
 } from '@/app/admin/assessments/[assessmentId]/actions'
+import { AdminAssessmentReportOutputPreviewPanel } from '@/components/admin/surfaces/AdminAssessmentReportOutputPreviewPanel'
 import { Badge, EmptyState, MetaGrid, SurfaceSection, Table } from '@/components/admin/surfaces/AdminWireframePrimitives'
 import { Button } from '@/components/ui/Button'
 import type {
@@ -24,7 +25,6 @@ import {
   type AdminAssessmentSimulationActionState,
   type AdminAssessmentSimulationInputMode,
   type AdminAssessmentSimulationRequest,
-  type AdminAssessmentSimulationResult,
 } from '@/lib/admin/domain/assessment-simulation'
 
 type FormMode = AdminAssessmentSimulationInputMode
@@ -98,14 +98,14 @@ export function AdminAssessmentSimulationWorkspace({
   version,
   relatedVersions = [],
   workspaceCopy,
-  renderPostResults,
+  postResultsVariant = 'none',
   initialRequestPayload,
 }: {
   assessmentId: string
   version: AdminAssessmentVersionRecord
   relatedVersions?: AdminAssessmentVersionRecord[]
   workspaceCopy?: AdminAssessmentSimulationWorkspaceCopy
-  renderPostResults?: (result: AdminAssessmentSimulationResult) => React.ReactNode
+  postResultsVariant?: 'none' | 'report_preview'
   initialRequestPayload?: string | null
 }) {
   const [state, action] = useFormState(submitAdminAssessmentSimulationAction, INITIAL_STATE)
@@ -407,7 +407,11 @@ export function AdminAssessmentSimulationWorkspace({
               <summary className="cursor-pointer text-sm font-medium text-textPrimary">Debug payload</summary>
               <pre className="mt-3 overflow-x-auto rounded-2xl border border-white/[0.06] bg-panel/40 p-4 text-xs leading-6 text-textSecondary">{JSON.stringify({ input: state.result.debug.responsePayload, request: state.result.request }, null, 2)}</pre>
             </details>
-            {renderPostResults ? <div className="pt-2">{renderPostResults(state.result)}</div> : null}
+            {postResultsVariant === 'report_preview' ? (
+              <div className="pt-2">
+                <AdminAssessmentReportOutputPreviewPanel version={version} simulationResult={state.result} />
+              </div>
+            ) : null}
           </div>
         ) : (
           <EmptyState title="No simulation result yet" detail="Run a simulation to inspect input coverage, raw scoring, normalization, output triggers, and trace evidence for this version." />

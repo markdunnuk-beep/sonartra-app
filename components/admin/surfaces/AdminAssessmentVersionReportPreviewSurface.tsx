@@ -1,7 +1,6 @@
 import React from 'react'
 import { Activity, ArrowLeft, FileText, FlaskConical } from 'lucide-react'
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader'
-import { AdminAssessmentReportOutputPreviewPanel } from '@/components/admin/surfaces/AdminAssessmentReportOutputPreviewPanel'
 import { AdminAssessmentSimulationWorkspace } from '@/components/admin/surfaces/AdminAssessmentSimulationWorkspace'
 import { Badge, EmptyState, MetaGrid, SurfaceSection } from '@/components/admin/surfaces/AdminWireframePrimitives'
 import { Button } from '@/components/ui/Button'
@@ -116,7 +115,7 @@ export function AdminAssessmentVersionReportPreviewSurface({
             resultsEyebrow: 'Structured web + PDF-ready model',
             resultsDescription: 'After the sample scenario runs, this section shows the structured summary model, PDF-ready content blocks, traceability, warnings, and output-quality evidence.',
           }}
-          renderPostResults={(result) => <AdminAssessmentReportOutputPreviewPanel version={version} simulationResult={result} />}
+          postResultsVariant="report_preview"
           initialRequestPayload={selectedScenarioPayload}
         />
       ) : (
