@@ -1,3 +1,4 @@
+// See docs/admin-assessment-version-compatibility.md for the shared assessment_versions compatibility policy, including package-era capability-driven reads.
 import { auth, currentUser } from '@clerk/nextjs/server'
 import type { PoolClient } from 'pg'
 import { resolveAdminAccess } from '@/lib/admin/access'

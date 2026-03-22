@@ -1,3 +1,4 @@
+// See docs/admin-assessment-version-compatibility.md for the assessment_versions compatibility policy behind these capability-driven read projections.
 import {
   hasAssessmentVersionPackageColumn,
   hasAssessmentVersionOptionalGovernanceAndRegressionColumn,
