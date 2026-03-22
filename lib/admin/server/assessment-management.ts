@@ -894,10 +894,29 @@ function unwrapErrorCause(error: unknown): unknown {
   return current
 }
 
-function extractDatabaseFailureDetails(error: unknown): { code: string | null; message: string } {
+function extractDatabaseFailureDetails(error: unknown): {
+  code: string | null
+  constraint: string | null
+  table: string | null
+  column: string | null
+  detail: string | null
+  message: string
+} {
   const raw = unwrapErrorCause(error)
   const code = raw && typeof raw === 'object' && 'code' in raw && typeof (raw as { code?: unknown }).code === 'string'
     ? (raw as { code: string }).code
+    : null
+  const constraint = raw && typeof raw === 'object' && 'constraint' in raw && typeof (raw as { constraint?: unknown }).constraint === 'string'
+    ? (raw as { constraint: string }).constraint
+    : null
+  const table = raw && typeof raw === 'object' && 'table' in raw && typeof (raw as { table?: unknown }).table === 'string'
+    ? (raw as { table: string }).table
+    : null
+  const column = raw && typeof raw === 'object' && 'column' in raw && typeof (raw as { column?: unknown }).column === 'string'
+    ? (raw as { column: string }).column
+    : null
+  const detail = raw && typeof raw === 'object' && 'detail' in raw && typeof (raw as { detail?: unknown }).detail === 'string'
+    ? (raw as { detail: string }).detail
     : null
   const message = raw instanceof Error
     ? raw.message
@@ -907,7 +926,79 @@ function extractDatabaseFailureDetails(error: unknown): { code: string | null; m
         ? error.message
         : 'Unknown database error.'
 
-  return { code, message }
+  return { code, constraint, table, column, detail, message }
+}
+
+class AssessmentPublishStageError extends Error {
+  stage: string
+  metadata: Record<string, unknown>
+
+  constructor(stage: string, metadata: Record<string, unknown>, cause: unknown) {
+    super(`Publish stage failed: ${stage}`)
+    this.name = 'AssessmentPublishStageError'
+    this.stage = stage
+    this.metadata = metadata
+    this.cause = cause
+  }
+}
+
+function findPublishStageFailure(error: unknown): { publishStage: string | null; publishMetadata: Record<string, unknown>; materializationStage: string | null; materializationMetadata: Record<string, unknown> } {
+  let current = error
+  let publishStage: string | null = null
+  let materializationStage: string | null = null
+  let publishMetadata: Record<string, unknown> = {}
+  let materializationMetadata: Record<string, unknown> = {}
+
+  while (current && typeof current === 'object') {
+    if (current instanceof AssessmentPublishStageError && !publishStage) {
+      publishStage = current.stage
+      publishMetadata = current.metadata
+    }
+
+    if (current instanceof Error && current.name === 'AssessmentRuntimeMaterializationStageError' && !materializationStage) {
+      const runtimeStageError = current as Error & { stage?: unknown; metadata?: unknown }
+      materializationStage = typeof runtimeStageError.stage === 'string' ? runtimeStageError.stage : null
+      materializationMetadata = runtimeStageError.metadata && typeof runtimeStageError.metadata === 'object'
+        ? runtimeStageError.metadata as Record<string, unknown>
+        : {}
+    }
+
+    if (!('cause' in current)) {
+      break
+    }
+
+    const cause = (current as { cause?: unknown }).cause
+    if (!cause) {
+      break
+    }
+
+    current = cause
+  }
+
+  return { publishStage, publishMetadata, materializationStage, materializationMetadata }
+}
+
+async function runPublishStage<T>(
+  stage: string,
+  metadata: Record<string, unknown>,
+  work: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await work()
+  } catch (error) {
+    const details = extractDatabaseFailureDetails(error)
+    console.error('[admin-assessment-management] Publish stage failed.', {
+      stage,
+      postgresCode: details.code,
+      constraint: details.constraint,
+      table: details.table,
+      column: details.column,
+      detail: details.detail,
+      message: details.message,
+      ...metadata,
+    })
+    throw new AssessmentPublishStageError(stage, metadata, error)
+  }
 }
 
 function classifyAssessmentRegistryLoadFailure(error: unknown): AdminAssessmentRegistryNotice {
@@ -1132,12 +1223,22 @@ async function resolveAssessmentVersionGovernanceWritePolicy(
 function buildAssessmentVersionSchemaCompatibilityResult<T extends { ok: boolean; code: string; message: string }>(
   error: unknown,
 ): T | null {
-  if (error instanceof AssessmentVersionSchemaCompatibilityError) {
-    return {
-      ok: false,
-      code: 'schema_incompatible',
-      message: error.message,
-    } as T
+  let current = error
+
+  while (current) {
+    if (current instanceof AssessmentVersionSchemaCompatibilityError) {
+      return {
+        ok: false,
+        code: 'schema_incompatible',
+        message: current.message,
+      } as T
+    }
+
+    if (!(current && typeof current === 'object' && 'cause' in current)) {
+      break
+    }
+
+    current = (current as { cause?: unknown }).cause
   }
 
   return null
@@ -1146,12 +1247,22 @@ function buildAssessmentVersionSchemaCompatibilityResult<T extends { ok: boolean
 function buildAssessmentRuntimeSchemaCompatibilityResult<T extends { ok: boolean; code: string; message: string }>(
   error: unknown,
 ): T | null {
-  if (error instanceof AssessmentRuntimeSchemaCompatibilityError) {
-    return {
-      ok: false,
-      code: 'schema_incompatible',
-      message: error.message,
-    } as T
+  let current = error
+
+  while (current) {
+    if (current instanceof AssessmentRuntimeSchemaCompatibilityError) {
+      return {
+        ok: false,
+        code: 'schema_incompatible',
+        message: current.message,
+      } as T
+    }
+
+    if (!(current && typeof current === 'object' && 'cause' in current)) {
+      break
+    }
+
+    current = (current as { cause?: unknown }).cause
   }
 
   return null
@@ -1173,6 +1284,7 @@ async function assertAssessmentRuntimeSchemaCompatibility(
 function mapPublishDatabaseFailure(error: unknown): AdminAssessmentVersionMutationResult | null {
   const { code, message } = extractDatabaseFailureDetails(error)
   const normalizedMessage = message.toLowerCase()
+  const { publishStage, materializationStage } = findPublishStageFailure(error)
 
   const touchesRuntimeMaterialization = [
     'assessment_question_sets',
@@ -1180,6 +1292,17 @@ function mapPublishDatabaseFailure(error: unknown): AdminAssessmentVersionMutati
     'assessment_question_options',
     'assessment_option_signal_mappings',
   ].some((token) => normalizedMessage.includes(token))
+    || publishStage === 'runtime_materialization'
+
+  const touchesGovernance = publishStage === 'release_readiness_persist'
+    || ['publish_readiness_status', 'readiness_check_summary_json', 'sign_off_status', 'sign_off_material_updated_at'].some((token) => normalizedMessage.includes(token))
+
+  const touchesLivePointer = publishStage === 'live_pointer_update'
+    || ['assessment_definitions', 'current_published_version_id'].some((token) => normalizedMessage.includes(token))
+
+  const touchesLifecycleTransition = publishStage === 'archive_existing_published_versions'
+    || publishStage === 'publish_version_update'
+    || ['lifecycle_status', 'published_at', 'archived_at', 'assessment_versions'].some((token) => normalizedMessage.includes(token))
 
   if ((code === '42P01' || code === '42703') && touchesRuntimeMaterialization) {
     return {
@@ -1201,7 +1324,57 @@ function mapPublishDatabaseFailure(error: unknown): AdminAssessmentVersionMutati
     return {
       ok: false,
       code: 'invalid_transition',
-      message: 'Publish could not complete because the imported package could not be materialized into the live runtime question bank safely. Review the package for duplicate, missing, or unsupported runtime values and try again.',
+      message: materializationStage
+        ? `Publish could not complete because the imported package could not be materialized into the live runtime question bank safely. The failure occurred during ${materializationStage.replace(/_/g, ' ')}. Review the package for duplicate, missing, or unsupported runtime values and try again.`
+        : 'Publish could not complete because the imported package could not be materialized into the live runtime question bank safely. Review the package for duplicate, missing, or unsupported runtime values and try again.',
+    }
+  }
+
+  if ((code === '42P01' || code === '42703') && touchesGovernance) {
+    return {
+      ok: false,
+      code: 'schema_incompatible',
+      message: 'Publish could not refresh release-governance evidence because the assessment version governance schema is missing or outdated. Apply the assessment admin migrations and retry.',
+    }
+  }
+
+  if ((code === '23503' || code === '23505' || code === '23514' || code === '23502') && touchesGovernance) {
+    return {
+      ok: false,
+      code: 'invalid_transition',
+      message: 'Publish could not record release-governance readiness evidence safely. Refresh readiness/sign-off data and retry publishing.',
+    }
+  }
+
+  if ((code === '42P01' || code === '42703') && touchesLivePointer) {
+    return {
+      ok: false,
+      code: 'schema_incompatible',
+      message: 'Publish could not move the live assessment pointer because the assessment definitions schema is missing or outdated. Apply the assessment admin migrations and retry.',
+    }
+  }
+
+  if ((code === '23503' || code === '23505' || code === '23514' || code === '23502') && touchesLivePointer) {
+    return {
+      ok: false,
+      code: 'invalid_transition',
+      message: 'Publish could not update the live assessment pointer safely. Reload the assessment detail, confirm the target version is still valid, and retry.',
+    }
+  }
+
+  if ((code === '42P01' || code === '42703') && touchesLifecycleTransition) {
+    return {
+      ok: false,
+      code: 'schema_incompatible',
+      message: 'Publish could not update assessment version lifecycle records because the assessment_versions publish schema is missing or outdated. Apply the assessment admin migrations and retry.',
+    }
+  }
+
+  if ((code === '23503' || code === '23505' || code === '23514' || code === '23502') && touchesLifecycleTransition) {
+    return {
+      ok: false,
+      code: 'invalid_transition',
+      message: 'Publish could not update the draft/published lifecycle state safely. Reload the version state and retry publishing.',
     }
   }
 
@@ -2813,20 +2986,29 @@ export async function publishAdminAssessmentVersion(
 
   try {
     return await deps.withTransaction(async (client) => {
-      const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
+      const writePolicy = await runPublishStage('governance_write_policy', {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+      }, () => resolveAssessmentVersionGovernanceWritePolicy(
         client.query.bind(client),
         deps.getAssessmentVersionSchemaCapabilities,
-      )
+      ))
       writePolicy.assertSupported('release_readiness', 'publishing assessment versions')
       writePolicy.assertSupported('release_sign_off', 'publishing assessment versions')
-      await assertAssessmentRuntimeSchemaCompatibility(client.query.bind(client), 'publishing assessment versions')
+      await runPublishStage('runtime_schema_compatibility', {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+      }, () => assertAssessmentRuntimeSchemaCompatibility(client.query.bind(client), 'publishing assessment versions'))
 
-      const versionRow = await loadAssessmentVersionRowById(
+      const versionRow = await runPublishStage('version_load', {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+      }, () => loadAssessmentVersionRowById(
         client,
         input.assessmentId,
         input.versionId,
         deps.getAssessmentVersionSchemaCapabilities,
-      )
+      ))
       const assessmentName = normaliseNullableField(versionRow?.assessment_name) ?? 'Assessment'
 
       if (!versionRow) {
@@ -2851,7 +3033,10 @@ export async function publishAdminAssessmentVersion(
 
       const actor = await deps.getActorIdentity(client)
       const nowIso = deps.now().toISOString()
-      const readinessState = await persistVersionReleaseReadiness(client, {
+      const readinessState = await runPublishStage('release_readiness_persist', {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+      }, () => persistVersionReleaseReadiness(client, {
         assessmentId: input.assessmentId,
         versionId: input.versionId,
         actor,
@@ -2860,7 +3045,7 @@ export async function publishAdminAssessmentVersion(
         reason: 'publish_attempt',
         getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
         onUnsupported: 'error',
-      })
+      }))
       const evaluatedVersion = readinessState.version
       if (!evaluatedVersion) {
         return { ok: false, code: 'not_found', message: 'Version not found.' }
@@ -2956,27 +3141,36 @@ export async function publishAdminAssessmentVersion(
         }
       }
 
-      const runtimeVersionResult = await client.query<{ key: string; name: string }>(
+      const runtimeVersionResult = await runPublishStage('runtime_version_lookup', {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+      }, () => client.query<{ key: string; name: string }>(
         `select key, name
          from assessment_versions
          where id = $1
            and assessment_definition_id = $2
          limit 1`,
         [input.versionId, input.assessmentId],
-      )
+      ))
       const runtimeVersion = runtimeVersionResult.rows[0]
       if (!runtimeVersion) {
         return { ok: false, code: 'not_found', message: 'Version not found.' }
       }
 
-      await materializeAssessmentRuntimeFromPackage(client, {
+      await runPublishStage('runtime_materialization', {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+      }, () => materializeAssessmentRuntimeFromPackage(client, {
         assessmentVersionId: input.versionId,
         assessmentVersionKey: runtimeVersion.key,
         assessmentVersionName: runtimeVersion.name,
         normalizedPackage: runtimePackage,
-      })
+      }))
 
-      await client.query(
+      await runPublishStage('archive_existing_published_versions', {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+      }, () => client.query(
         `update assessment_versions
          set lifecycle_status = 'archived',
              archived_at = case when lifecycle_status = 'published' then $2::timestamptz else archived_at end,
@@ -2985,9 +3179,12 @@ export async function publishAdminAssessmentVersion(
          where assessment_definition_id = $1
            and lifecycle_status = 'published'`,
         [input.assessmentId, nowIso, actor?.id ?? null],
-      )
+      ))
 
-      const publishResult = await client.query(
+      const publishResult = await runPublishStage('publish_version_update', {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+      }, () => client.query(
         `update assessment_versions
          set lifecycle_status = 'published',
              is_active = true,
@@ -3001,7 +3198,7 @@ export async function publishAdminAssessmentVersion(
            and assessment_definition_id = $2
          returning id`,
         [input.versionId, input.assessmentId, nowIso, actor?.id ?? null, runtimePackage.questions.length],
-      )
+      ))
 
       if (!publishResult.rows[0]) {
         return {
@@ -3011,7 +3208,10 @@ export async function publishAdminAssessmentVersion(
         }
       }
 
-      await client.query(
+      await runPublishStage('live_pointer_update', {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+      }, () => client.query(
         `update assessment_definitions
          set lifecycle_status = 'published',
              current_published_version_id = $2,
@@ -3019,9 +3219,12 @@ export async function publishAdminAssessmentVersion(
              updated_by_identity_id = $4
          where id = $1`,
         [input.assessmentId, input.versionId, nowIso, actor?.id ?? null],
-      )
+      ))
 
-      await writeAssessmentAuditEvent(client, {
+      await runPublishStage('audit_publish_event', {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+      }, () => writeAssessmentAuditEvent(client, {
         createId: deps.createId,
         actor,
         nowIso,
@@ -3037,7 +3240,7 @@ export async function publishAdminAssessmentVersion(
           warningChecks: publishReadiness.checks.filter((check) => check.status === 'warning').map((check) => check.key),
           signOffStatus: evaluatedSignOff.status,
         },
-      })
+      }))
 
       return {
         ok: true,

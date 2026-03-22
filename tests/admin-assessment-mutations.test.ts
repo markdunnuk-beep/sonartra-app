@@ -1342,6 +1342,100 @@ test('publish maps runtime materialization constraint failures into a clean bloc
   assert.match(result.message, /could not be materialized into the live runtime question bank safely/i)
 })
 
+test('publish maps live-pointer update failures into a targeted admin-safe error and logs the failing stage', async () => {
+  const originalConsoleError = console.error
+  const consoleCalls: unknown[][] = []
+  console.error = (...args: unknown[]) => {
+    consoleCalls.push(args)
+  }
+
+  try {
+    const result = await publishAdminAssessmentVersion({
+      assessmentId: 'assessment-1',
+      versionId: 'version-2',
+      expectedUpdatedAt: '2026-03-21T09:00:00.000Z',
+    }, {
+      resolveAdminAccess: async () => createBaseAccess(),
+      getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+      getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+      withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+        query: async (sql: string, params: unknown[] = []) => {
+          const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params)
+          if (runtimeSchemaResult) {
+            return runtimeSchemaResult
+          }
+
+          if (/from assessment_versions av/i.test(sql)) {
+            return { rows: [makeManagedVersionRow({ sign_off_status: 'signed_off', sign_off_at: '2026-03-21T09:30:00.000Z', sign_off_by_name: 'Rina Patel', sign_off_material_updated_at: '2026-03-21T08:00:00.000Z' })] }
+          }
+
+          if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+            return { rows: [] }
+          }
+
+          if (/update assessment_versions\s+set publish_readiness_status/i.test(sql) || /insert into access_audit_events/i.test(sql)) {
+            return { rows: [] }
+          }
+
+          if (/select key, name\s+from assessment_versions/i.test(sql)) {
+            return { rows: [{ key: 'signals-v1', name: 'Sonartra Signals' }] }
+          }
+
+          if (/insert into assessment_question_sets/i.test(sql)) {
+            return { rows: [{ id: 'question-set-1' }] }
+          }
+
+          if (/update assessment_question_sets/i.test(sql) || /insert into assessment_questions/i.test(sql) || /insert into assessment_question_options/i.test(sql) || /insert into assessment_option_signal_mappings/i.test(sql) || /delete from assessment_option_signal_mappings/i.test(sql) || /delete from assessment_question_options/i.test(sql) || /delete from assessment_questions/i.test(sql)) {
+            return { rows: [{ id: 'question-1' }] }
+          }
+
+          if (/update assessment_versions\s+set lifecycle_status = 'archived'/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'published'/i.test(sql)) {
+            return { rows: [{ id: 'version-2' }] }
+          }
+
+          if (/update assessment_definitions/i.test(sql)) {
+            const error = new Error('insert or update on table "assessment_definitions" violates foreign key constraint "assessment_definitions_current_published_version_id_fkey"') as Error & {
+              code?: string
+              table?: string
+              column?: string
+              constraint?: string
+              detail?: string
+            }
+            error.code = '23503'
+            error.table = 'assessment_definitions'
+            error.column = 'current_published_version_id'
+            error.constraint = 'assessment_definitions_current_published_version_id_fkey'
+            error.detail = 'Key (current_published_version_id)=(version-2) is not present in table "assessment_versions".'
+            throw error
+          }
+
+          throw new Error(`Unexpected transactional query: ${sql}`)
+        },
+      } as never),
+    } as never)
+
+    assert.equal(result.ok, false)
+    assert.equal(result.code, 'invalid_transition')
+    assert.match(result.message, /live assessment pointer/i)
+
+    const diagnostic = consoleCalls.find((call) => call[0] === '[admin-assessment-management] Publish stage failed.')
+    assert.ok(diagnostic)
+    assert.deepEqual(diagnostic?.[1], {
+      stage: 'live_pointer_update',
+      postgresCode: '23503',
+      constraint: 'assessment_definitions_current_published_version_id_fkey',
+      table: 'assessment_definitions',
+      column: 'current_published_version_id',
+      detail: 'Key (current_published_version_id)=(version-2) is not present in table "assessment_versions".',
+      message: 'insert or update on table "assessment_definitions" violates foreign key constraint "assessment_definitions_current_published_version_id_fkey"',
+      assessmentId: 'assessment-1',
+      versionId: 'version-2',
+    })
+  } finally {
+    console.error = originalConsoleError
+  }
+})
+
 test('archive version succeeds and requires confirmation', async () => {
   const missingConfirmation = await archiveAdminAssessmentVersion({
     assessmentId: 'assessment-1',
