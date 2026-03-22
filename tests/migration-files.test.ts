@@ -4,8 +4,10 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-// @ts-expect-error -- test imports a small JS helper used by the migration runner.
+// @ts-expect-error -- tests import small JS helpers used by the migration runner.
 import { resolveMigrationFiles } from '../scripts/migration-files.mjs'
+// @ts-expect-error -- tests import a small JS helper used by the migration runner.
+import { normalizeMigrationSql } from '../scripts/run-migrations.mjs'
 
 async function createTempMigrationsDir() {
   const dir = await mkdtemp(path.join(tmpdir(), 'sonartra-migrations-'))
@@ -41,4 +43,31 @@ test('migration resolver includes seed migrations only when explicitly enabled',
     '0008_assessment_version_packages.sql',
   ])
   assert.deepEqual(result.skippedSeedFiles, [])
+})
+
+test('repo migration set for npm run db:migrate includes release governance migration 0010', async () => {
+  const migrationsDir = path.join(process.cwd(), 'db', 'migrations')
+  const result = await resolveMigrationFiles(migrationsDir, {})
+
+  assert.ok(result.migrationFiles.includes('0010_assessment_version_release_governance.sql'))
+})
+
+test('migration SQL normalization removes file-level BEGIN/COMMIT wrappers to preserve atomic recording', () => {
+  const sql = `-- comment\n\nBEGIN;\nALTER TABLE assessment_versions ADD COLUMN IF NOT EXISTS publish_readiness_status TEXT;\nCOMMIT;\n`
+
+  const result = normalizeMigrationSql(sql)
+
+  assert.equal(result.hadExplicitTransactionWrapper, true)
+  assert.doesNotMatch(result.sql, /^\s*BEGIN;?/m)
+  assert.doesNotMatch(result.sql, /^\s*COMMIT;?/m)
+  assert.match(result.sql, /ALTER TABLE assessment_versions ADD COLUMN IF NOT EXISTS publish_readiness_status TEXT;/)
+})
+
+test('migration SQL normalization leaves wrapper-free SQL unchanged', () => {
+  const sql = 'CREATE TABLE example(id INT);\n'
+
+  const result = normalizeMigrationSql(sql)
+
+  assert.equal(result.hadExplicitTransactionWrapper, false)
+  assert.equal(result.sql, sql)
 })
