@@ -14,6 +14,21 @@ export interface CompleteAssessmentRequest {
   assessmentId: string;
 }
 
+
+export type CompleteAssessmentResponse =
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      assessmentId: string;
+      assessmentStatus: 'completed';
+      resultStatus: 'pending' | 'succeeded' | 'failed';
+      resultId: string | null;
+      warning?: {
+        code: 'RESULT_GENERATION_FAILED';
+        message: string;
+      };
+    };
+
 export interface AssessmentVersionRow {
   id: string;
   key: string;

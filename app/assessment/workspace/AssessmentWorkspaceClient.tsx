@@ -13,12 +13,14 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { getAssessmentRepositoryInventory, getAssessmentRepositoryRecommendation } from '@/lib/assessment/assessment-repository-selectors'
 import { deriveAssessmentWorkspaceFraming, resolveAssessmentWorkspaceEntryState, type AssessmentWorkspaceEntryState } from '@/lib/assessment/assessment-workspace-framing'
+import { buildAssessmentCompletionSubmissionPlan, resolveAssessmentCompletionClientOutcome } from '@/lib/assessment/assessment-completion-client'
 import { isFinalQuestionIndex, shouldClearReviewModeOnAnswer } from '@/lib/assessment-player'
 import { deriveAssessmentSessionState, getResumeQuestionIndex } from '@/lib/assessment-session'
 import { deriveAssessmentEntryPhase } from '@/lib/assessment-entry-state'
 import { mapLifecyclePresentation } from '@/lib/lifecycle-presentation'
 import { type IndividualLifecycleResolution, type IndividualLifecycleState } from '@/lib/server/assessment-readiness'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { CompleteAssessmentResponse } from '@/lib/assessment-types'
 
 const ACTIVE_ASSESSMENT_STORAGE_KEY = 'sonartra_active_assessment_id'
 const WORKSPACE_ASSESSMENT_DEFINITION_ID = 'signals'
@@ -256,6 +258,8 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
         pendingSavesRef.current.delete(questionNumber)
       }
     })
+
+    return savePromise
   }
 
   const hydrateAssessment = (data: AssessmentQuestionsResponse) => {
@@ -368,13 +372,13 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
 
   const persistCurrentQuestion = () => {
     const activeQuestion = questions[index]
-    if (!activeQuestion) return
+    if (!activeQuestion) return null
 
-    const currentAnswer = answers[activeQuestion.questionNumber]
-    if (currentAnswer === undefined) return
+    const currentAnswer = answersRef.current[activeQuestion.questionNumber]
+    if (currentAnswer === undefined) return null
 
     const responseTimeMs = Math.max(0, Date.now() - questionShownAtRef.current)
-    saveResponseInBackground(activeQuestion.questionNumber, currentAnswer, responseTimeMs)
+    return saveResponseInBackground(activeQuestion.questionNumber, currentAnswer, responseTimeMs)
   }
 
   const goNext = () => {
@@ -416,18 +420,23 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
     if (shouldClearReviewModeOnAnswer({ reviewMode, hadAnswer })) {
       setReviewMode(false)
     }
+    answersRef.current = { ...answersRef.current, [currentQuestion.questionNumber]: responseValue }
     setAnswers((prev) => ({ ...prev, [currentQuestion.questionNumber]: responseValue }))
   }
 
   const completeAssessment = async () => {
     if (!assessmentId) return
 
-    if (!allAnswered) {
-      setReviewMode(true)
-      setAssessmentError(`You still have ${unansweredCount} unanswered question${unansweredCount === 1 ? '' : 's'}. Complete all questions before submission.`)
+    const submissionPlan = buildAssessmentCompletionSubmissionPlan(questions, answersRef.current, index)
 
-      if (sessionState.firstUnansweredIndex !== null) {
-        goToQuestion(sessionState.firstUnansweredIndex)
+    if (!submissionPlan.isSubmittable) {
+      setReviewMode(true)
+      setAssessmentError(
+        `You still have ${submissionPlan.unansweredCount} unanswered question${submissionPlan.unansweredCount === 1 ? '' : 's'}. Complete all questions before submission.`,
+      )
+
+      if (submissionPlan.firstUnansweredIndex !== null) {
+        goToQuestion(submissionPlan.firstUnansweredIndex)
       }
 
       return
@@ -435,8 +444,15 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
 
     setCompleting(true)
     setAssessmentError(null)
+    setStartError(null)
 
     try {
+      const currentQuestionSave = persistCurrentQuestion()
+
+      if (currentQuestionSave) {
+        await currentQuestionSave
+      }
+
       if (pendingSavesRef.current.size > 0) {
         await Promise.allSettled([...pendingSavesRef.current.values()])
       }
@@ -447,18 +463,29 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
         body: JSON.stringify({ assessmentId }),
       })
 
-      const data = (await response.json()) as { error?: string }
-      if (!response.ok) {
-        throw new Error(data.error ?? 'Unable to complete assessment.')
+      const data = (await response.json()) as CompleteAssessmentResponse
+      if (!response.ok || !data.ok) {
+        throw new Error(data.ok ? 'Unable to complete assessment.' : data.error ?? 'Unable to complete assessment.')
       }
 
-      setQuestions([])
-      setAnswers({})
-      setIndex(0)
-      setViewState('intro')
-      setLifecycleState('completed_processing')
-      setWorkspaceEntryState('results_processing')
-      window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
+      const outcome = resolveAssessmentCompletionClientOutcome(data)
+
+      if (outcome.clearActiveAssessment) {
+        setQuestions([])
+        setAnswers({})
+        answersRef.current = {}
+        setIndex(0)
+        setViewState('intro')
+        window.localStorage.removeItem(ACTIVE_ASSESSMENT_STORAGE_KEY)
+      }
+
+      setLifecycleState(outcome.lifecycleState)
+      setWorkspaceEntryState(outcome.workspaceEntryState)
+      setStartError(outcome.notice)
+
+      if (outcome.redirectTo) {
+        window.location.assign(outcome.redirectTo)
+      }
     } catch (completeError) {
       console.error(completeError)
       setAssessmentError(completeError instanceof Error ? completeError.message : 'Unable to complete assessment.')

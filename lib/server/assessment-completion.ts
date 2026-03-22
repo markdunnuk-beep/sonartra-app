@@ -1,5 +1,6 @@
 import { PoolClient } from 'pg';
 
+import type { CompleteAssessmentResponse } from '@/lib/assessment-types';
 import { queryDb, withTransaction } from '@/lib/db';
 import { SIGNAL_CODE_TO_LAYER, WPLP80_SCORING_MODEL_KEY } from '@/lib/scoring/constants';
 import { scoreAssessment } from '@/lib/scoring/engine';
@@ -40,19 +41,7 @@ interface MappingRow {
 
 export interface CompleteAssessmentResult {
   httpStatus: number;
-  body:
-    | { ok: false; error: string }
-    | {
-        ok: true;
-        assessmentId: string;
-        assessmentStatus: 'completed';
-        resultStatus: 'pending' | 'succeeded' | 'failed';
-        resultId: string | null;
-        warning?: {
-          code: 'RESULT_GENERATION_FAILED';
-          message: string;
-        };
-      };
+  body: CompleteAssessmentResponse;
 }
 
 interface CompletionDependencies {
@@ -272,7 +261,7 @@ export async function completeAssessmentWithResults(
       kind: 'ok' as const,
       assessment,
       latestResult,
-      shouldScore: !(latestResult?.status === 'complete' && assessment.scoring_status === 'scored'),
+      shouldScore: !((latestResult?.status === 'complete' && assessment.scoring_status === 'scored') || latestResult?.status === 'pending'),
     };
     } catch (error) {
       logFailure(error);
@@ -291,7 +280,12 @@ export async function completeAssessmentWithResults(
         ok: true,
         assessmentId,
         assessmentStatus: 'completed',
-        resultStatus: lifecycle.latestResult?.status === 'failed' ? 'failed' : 'succeeded',
+        resultStatus:
+          lifecycle.latestResult?.status === 'failed'
+            ? 'failed'
+            : lifecycle.latestResult?.status === 'pending'
+              ? 'pending'
+              : 'succeeded',
         resultId: lifecycle.latestResult?.id ?? null,
       },
     };

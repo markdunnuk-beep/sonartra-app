@@ -173,6 +173,69 @@ test('completion validation uses version total_questions and reports mismatch', 
   });
 });
 
+
+test('repeated completion preserves pending handoff when scoring is still processing', async () => {
+  let fetchScoringInputCalls = 0
+  let persistSuccessCalls = 0
+
+  const result = await completeAssessmentWithResults(
+    'assessment-1',
+    {
+      fetchScoringInput: async () => {
+        fetchScoringInputCalls += 1
+        throw new Error('should not fetch scoring input when a pending result already exists')
+      },
+      score: () => {
+        throw new Error('should not score when a pending result already exists')
+      },
+      persistSuccess: async () => {
+        persistSuccessCalls += 1
+        return { assessmentResultId: 'result-1' }
+      },
+      persistFailed: async () => ({ assessmentResultId: 'unused' }),
+    },
+    {
+      runInTransaction: async (work) =>
+        work({
+          query: async (text: string) => {
+            if (text.includes('FROM assessments a') && text.includes('assessment_versions')) {
+              return {
+                rows: [
+                  {
+                    id: 'assessment-1',
+                    status: 'completed',
+                    total_questions: 80,
+                    assessment_version_id: 'version-1',
+                    version_key: 'wplp80-v1',
+                    started_at: '2026-01-01T10:00:00.000Z',
+                    completed_at: '2026-01-01T10:05:00.000Z',
+                    scoring_status: 'pending',
+                  },
+                ],
+              }
+            }
+
+            if (text.includes('COUNT(*)::int AS response_count')) {
+              return { rows: [{ response_count: '80' }] }
+            }
+
+            throw new Error(`Unexpected query: ${text}`)
+          },
+        } as never),
+      getLatestResultSnapshot: async () => ({ id: 'result-pending-1', status: 'pending' }),
+    }
+  )
+
+  assert.equal(result.httpStatus, 200)
+  assert.equal(result.body.ok, true)
+  if (!result.body.ok) return
+
+  assert.equal(result.body.resultStatus, 'pending')
+  assert.equal(result.body.resultId, 'result-pending-1')
+  assert.equal(fetchScoringInputCalls, 0)
+  assert.equal(persistSuccessCalls, 0)
+})
+
 test('repeated completion remains idempotent when scored snapshot already exists', async () => {
   let persistSuccessCalls = 0;
 
