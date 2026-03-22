@@ -65,6 +65,45 @@ const PACKAGE_ERA_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchema
 
 const LEGACY_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([])
 
+const RUNTIME_TABLE_NAMES = [
+  'assessment_question_sets',
+  'assessment_questions',
+  'assessment_question_options',
+  'assessment_option_signal_mappings',
+] as const
+
+const RUNTIME_TABLE_COLUMNS: Record<(typeof RUNTIME_TABLE_NAMES)[number], string[]> = {
+  assessment_question_sets: ['id', 'assessment_version_id', 'key', 'name', 'description', 'is_active'],
+  assessment_questions: ['id', 'question_set_id', 'question_number', 'question_key', 'prompt', 'section_key', 'section_name', 'reverse_scored', 'question_weight_default', 'scoring_family', 'notes', 'is_active', 'metadata_json'],
+  assessment_question_options: ['id', 'question_id', 'option_key', 'option_text', 'display_order', 'numeric_value'],
+  assessment_option_signal_mappings: ['id', 'question_option_id', 'signal_code', 'signal_weight'],
+}
+
+function matchRuntimeSchemaQuery(
+  sql: string,
+  params: unknown[] = [],
+  options: { missingTables?: string[]; missingColumns?: Record<string, string[]> } = {},
+) {
+  if (/select to_regclass\(current_schema\(\) \|\| '\.' \|\| \$1::text\) is not null as table_exists/i.test(sql)) {
+    const tableName = String(params[0] ?? '')
+    return { rows: [{ table_exists: !(options.missingTables ?? []).includes(tableName) }] }
+  }
+
+  if (/from information_schema\.columns/i.test(sql) && /table_name = any\(\$1::text\[\]\)/i.test(sql)) {
+    const tableNames = Array.isArray(params[0]) ? params[0].map((value) => String(value)) : []
+    return {
+      rows: tableNames.flatMap((tableName) => {
+        const missingColumns = new Set(options.missingColumns?.[tableName] ?? [])
+        return (RUNTIME_TABLE_COLUMNS[tableName as keyof typeof RUNTIME_TABLE_COLUMNS] ?? [])
+          .filter((columnName) => !missingColumns.has(columnName))
+          .map((column_name) => ({ table_name: tableName, column_name }))
+      }),
+    }
+  }
+
+  return null
+}
+
 const validPackage = JSON.stringify({
   meta: {
     schemaVersion: 'sonartra-assessment-package/v1',
@@ -1024,7 +1063,12 @@ test('publish version succeeds when a valid package is attached and enforces a s
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
     getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
-      query: async (sql: string) => {
+      query: async (sql: string, params: unknown[] = []) => {
+        const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params)
+        if (runtimeSchemaResult) {
+          return runtimeSchemaResult
+        }
+
         queries.push(sql)
 
         if (/from assessment_versions av/i.test(sql)) {
@@ -1078,6 +1122,11 @@ test('publish version is blocked when no valid package exists', async () => {
     getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
+        const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params)
+        if (runtimeSchemaResult) {
+          return runtimeSchemaResult
+        }
+
         if (/from assessment_versions av/i.test(sql)) {
           return { rows: [makeManagedVersionRow({ package_status: 'invalid', definition_payload: null, package_validation_report_json: { summary: null, errors: [{ path: 'questions[0].dimensionId', message: 'Unknown dimension.' }], warnings: [] } })] }
         }
@@ -1123,6 +1172,11 @@ test('publish version is blocked when the package is valid but not executable by
     getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
+        const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params)
+        if (runtimeSchemaResult) {
+          return runtimeSchemaResult
+        }
+
         if (/from assessment_versions av/i.test(sql)) {
           return {
             rows: [
@@ -1191,6 +1245,101 @@ test('publish version is blocked when the package is valid but not executable by
   assert.equal(result.code, 'invalid_transition')
   assert.match(result.message, /does not support signal code/i)
   assert.ok(auditEvents.includes('assessment_publish_blocked_release_governance'))
+})
+
+test('publish fails fast with a schema compatibility error when runtime materialization tables are unavailable', async () => {
+  let runtimeWrites = 0
+
+  const result = await publishAdminAssessmentVersion({
+    assessmentId: 'assessment-1',
+    versionId: 'version-2',
+    expectedUpdatedAt: '2026-03-21T09:00:00.000Z',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params, { missingTables: ['assessment_question_sets'] })
+        if (runtimeSchemaResult) {
+          return runtimeSchemaResult
+        }
+
+        if (/insert into assessment_question_sets/i.test(sql) || /insert into assessment_questions/i.test(sql)) {
+          runtimeWrites += 1
+          throw new Error(`Unexpected runtime write: ${sql}`)
+        }
+
+        if (/from assessment_versions av/i.test(sql)) {
+          return { rows: [makeManagedVersionRow({ sign_off_status: 'signed_off', sign_off_at: '2026-03-21T09:30:00.000Z', sign_off_by_name: 'Rina Patel', sign_off_material_updated_at: '2026-03-21T08:00:00.000Z' })] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql) || /insert into access_audit_events/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'schema_incompatible')
+  assert.match(result.message, /runtime schema is incompatible with publishing assessment versions/i)
+  assert.match(result.message, /assessment_question_sets/i)
+  assert.equal(runtimeWrites, 0)
+})
+
+test('publish maps runtime materialization constraint failures into a clean blocking error', async () => {
+  const result = await publishAdminAssessmentVersion({
+    assessmentId: 'assessment-1',
+    versionId: 'version-2',
+    expectedUpdatedAt: '2026-03-21T09:00:00.000Z',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params)
+        if (runtimeSchemaResult) {
+          return runtimeSchemaResult
+        }
+
+        if (/from assessment_versions av/i.test(sql)) {
+          return { rows: [makeManagedVersionRow({ sign_off_status: 'signed_off', sign_off_at: '2026-03-21T09:30:00.000Z', sign_off_by_name: 'Rina Patel', sign_off_material_updated_at: '2026-03-21T08:00:00.000Z' })] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql) || /insert into access_audit_events/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/select key, name\s+from assessment_versions/i.test(sql)) {
+          return { rows: [{ key: 'signals-v1', name: 'Sonartra Signals' }] }
+        }
+
+        if (/insert into assessment_question_sets/i.test(sql)) {
+          const error = new Error('null value in column "option_text" of relation "assessment_question_options" violates not-null constraint') as Error & { code?: string }
+          error.code = '23502'
+          throw error
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'invalid_transition')
+  assert.match(result.message, /could not be materialized into the live runtime question bank safely/i)
 })
 
 test('archive version succeeds and requires confirmation', async () => {

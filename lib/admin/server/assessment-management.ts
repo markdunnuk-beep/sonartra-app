@@ -50,6 +50,11 @@ import {
   getAssessmentRuntimeExecutableIssues,
   materializeAssessmentRuntimeFromPackage,
 } from '@/lib/admin/server/assessment-runtime-materialization'
+import {
+  getAdminAssessmentRuntimeSchemaCapabilities,
+  getMissingAssessmentRuntimeColumns,
+  getMissingAssessmentRuntimeTables,
+} from '@/lib/admin/server/assessment-runtime-schema-capabilities'
 
 interface AssessmentRegistryRow {
   id: string | null
@@ -995,6 +1000,29 @@ class AssessmentVersionSchemaCompatibilityError extends Error {
   }
 }
 
+class AssessmentRuntimeSchemaCompatibilityError extends Error {
+  constructor(action: string, details: { missingTables: string[]; missingColumns: Array<{ tableName: string; columns: string[] }> }) {
+    const issues: string[] = []
+
+    if (details.missingTables.length > 0) {
+      issues.push(`missing table${details.missingTables.length === 1 ? '' : 's'} (${details.missingTables.join(', ')})`)
+    }
+
+    if (details.missingColumns.length > 0) {
+      issues.push(
+        `missing column${details.missingColumns.length === 1 ? '' : 's'} (${details.missingColumns.map(({ tableName, columns }) => `${tableName}.${columns.join(', ')}`).join('; ')})`,
+      )
+    }
+
+    super(
+      issues.length > 0
+        ? `Assessment runtime schema is incompatible with ${action}: ${issues.join(' and ')}. Apply the live runtime question-bank migrations and retry.`
+        : `Assessment runtime schema is incompatible with ${action}. Apply the live runtime question-bank migrations and retry.`,
+    )
+    this.name = 'AssessmentRuntimeSchemaCompatibilityError'
+  }
+}
+
 function resolveAssessmentVersionGovernanceWriteSupport(
   capabilities: Awaited<ReturnType<typeof getAdminAssessmentVersionSchemaCapabilities>>,
   columns: readonly string[],
@@ -1110,6 +1138,71 @@ function buildAssessmentVersionSchemaCompatibilityResult<T extends { ok: boolean
       code: 'schema_incompatible',
       message: error.message,
     } as T
+  }
+
+  return null
+}
+
+function buildAssessmentRuntimeSchemaCompatibilityResult<T extends { ok: boolean; code: string; message: string }>(
+  error: unknown,
+): T | null {
+  if (error instanceof AssessmentRuntimeSchemaCompatibilityError) {
+    return {
+      ok: false,
+      code: 'schema_incompatible',
+      message: error.message,
+    } as T
+  }
+
+  return null
+}
+
+async function assertAssessmentRuntimeSchemaCompatibility(
+  query: typeof queryDb,
+  action: string,
+): Promise<void> {
+  const capabilities = await getAdminAssessmentRuntimeSchemaCapabilities({ queryDb: query })
+  const missingTables = getMissingAssessmentRuntimeTables(capabilities)
+  const missingColumns = getMissingAssessmentRuntimeColumns(capabilities)
+
+  if (missingTables.length > 0 || missingColumns.length > 0) {
+    throw new AssessmentRuntimeSchemaCompatibilityError(action, { missingTables, missingColumns })
+  }
+}
+
+function mapPublishDatabaseFailure(error: unknown): AdminAssessmentVersionMutationResult | null {
+  const { code, message } = extractDatabaseFailureDetails(error)
+  const normalizedMessage = message.toLowerCase()
+
+  const touchesRuntimeMaterialization = [
+    'assessment_question_sets',
+    'assessment_questions',
+    'assessment_question_options',
+    'assessment_option_signal_mappings',
+  ].some((token) => normalizedMessage.includes(token))
+
+  if ((code === '42P01' || code === '42703') && touchesRuntimeMaterialization) {
+    return {
+      ok: false,
+      code: 'schema_incompatible',
+      message: 'Publish could not materialize the live runtime question bank because the runtime schema is missing or outdated. Apply the live runtime question-bank migrations and retry.',
+    }
+  }
+
+  if (code === '23503' && touchesRuntimeMaterialization) {
+    return {
+      ok: false,
+      code: 'invalid_transition',
+      message: 'Publish could not complete because the live runtime question bank references a missing runtime record. Re-import the package or contact support if the problem persists.',
+    }
+  }
+
+  if ((code === '23505' || code === '23514' || code === '23502') && touchesRuntimeMaterialization) {
+    return {
+      ok: false,
+      code: 'invalid_transition',
+      message: 'Publish could not complete because the imported package could not be materialized into the live runtime question bank safely. Review the package for duplicate, missing, or unsupported runtime values and try again.',
+    }
   }
 
   return null
@@ -2726,6 +2819,7 @@ export async function publishAdminAssessmentVersion(
       )
       writePolicy.assertSupported('release_readiness', 'publishing assessment versions')
       writePolicy.assertSupported('release_sign_off', 'publishing assessment versions')
+      await assertAssessmentRuntimeSchemaCompatibility(client.query.bind(client), 'publishing assessment versions')
 
       const versionRow = await loadAssessmentVersionRowById(
         client,
@@ -2957,6 +3051,14 @@ export async function publishAdminAssessmentVersion(
     const compatibilityFailure = buildAssessmentVersionSchemaCompatibilityResult<AdminAssessmentVersionMutationResult>(error)
     if (compatibilityFailure) {
       return compatibilityFailure
+    }
+    const runtimeCompatibilityFailure = buildAssessmentRuntimeSchemaCompatibilityResult<AdminAssessmentVersionMutationResult>(error)
+    if (runtimeCompatibilityFailure) {
+      return runtimeCompatibilityFailure
+    }
+    const mappedDatabaseFailure = mapPublishDatabaseFailure(error)
+    if (mappedDatabaseFailure) {
+      return mappedDatabaseFailure
     }
     console.error('[admin-assessment-management] Failed to publish version.', error)
     return {

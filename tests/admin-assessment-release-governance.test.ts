@@ -39,6 +39,35 @@ const MODERN_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapab
 
 const LEGACY_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([])
 
+const RUNTIME_TABLE_NAMES = [
+  'assessment_question_sets',
+  'assessment_questions',
+  'assessment_question_options',
+  'assessment_option_signal_mappings',
+] as const
+
+const RUNTIME_TABLE_COLUMNS: Record<(typeof RUNTIME_TABLE_NAMES)[number], string[]> = {
+  assessment_question_sets: ['id', 'assessment_version_id', 'key', 'name', 'description', 'is_active'],
+  assessment_questions: ['id', 'question_set_id', 'question_number', 'question_key', 'prompt', 'section_key', 'section_name', 'reverse_scored', 'question_weight_default', 'scoring_family', 'notes', 'is_active', 'metadata_json'],
+  assessment_question_options: ['id', 'question_id', 'option_key', 'option_text', 'display_order', 'numeric_value'],
+  assessment_option_signal_mappings: ['id', 'question_option_id', 'signal_code', 'signal_weight'],
+}
+
+function matchRuntimeSchemaQuery(sql: string, params: unknown[] = []) {
+  if (/select to_regclass\(current_schema\(\) \|\| '\.' \|\| \$1::text\) is not null as table_exists/i.test(sql)) {
+    return { rows: [{ table_exists: true }] }
+  }
+
+  if (/from information_schema\.columns/i.test(sql) && /table_name = any\(\$1::text\[\]\)/i.test(sql)) {
+    const tableNames = Array.isArray(params[0]) ? params[0].map((value) => String(value)) : []
+    return {
+      rows: tableNames.flatMap((tableName) => (RUNTIME_TABLE_COLUMNS[tableName as keyof typeof RUNTIME_TABLE_COLUMNS] ?? []).map((column_name) => ({ table_name: tableName, column_name }))),
+    }
+  }
+
+  return null
+}
+
 function createBaseAccess() {
   return {
     isAuthenticated: true,
@@ -125,6 +154,11 @@ test('publish is warning-gated until sign-off is recorded', async () => {
     getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
+        const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params)
+        if (runtimeSchemaResult) {
+          return runtimeSchemaResult
+        }
+
         if (/from assessment_versions av[\s\S]*where av.id = \$1[\s\S]*assessment_definition_id = \$2/i.test(sql)) {
           return { rows: [baseRow] }
         }
@@ -165,6 +199,11 @@ test('publish loader uses modern compatibility-safe assessment_versions queries 
     getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
+        const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params)
+        if (runtimeSchemaResult) {
+          return runtimeSchemaResult
+        }
+
         if (/from assessment_versions av[\s\S]*where av.id = \$1 and av.assessment_definition_id = \$2[\s\S]*limit 1/i.test(sql)) {
           byIdQueries.push(sql)
           return { rows: [baseRow] }
@@ -214,6 +253,11 @@ test('publish fails fast with a schema compatibility error in legacy capability 
     getAssessmentVersionSchemaCapabilities: async () => LEGACY_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
+        const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params)
+        if (runtimeSchemaResult) {
+          return runtimeSchemaResult
+        }
+
         if (/from assessment_versions av[\s\S]*where av.id = \$1 and av.assessment_definition_id = \$2[\s\S]*limit 1/i.test(sql)) {
           byIdQueries.push(sql)
           return { rows: [] }
