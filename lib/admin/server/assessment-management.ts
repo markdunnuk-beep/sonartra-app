@@ -36,6 +36,11 @@ import {
 } from '@/lib/admin/domain/assessment-simulation'
 import { queryDb, withTransaction, describeDatabaseError } from '@/lib/db'
 import { getScopedAdminAuditActivity, mapScopedAuditEventsToAssessmentActivity } from '@/lib/admin/server/audit-workspace'
+import {
+  getAdminAssessmentVersionSchemaCapabilities,
+  hasAssessmentVersionOptionalGovernanceAndRegressionColumn,
+  type AdminAssessmentVersionSchemaCapabilities,
+} from '@/lib/admin/server/assessment-version-schema-capabilities'
 
 interface AssessmentRegistryRow {
   id: string | null
@@ -133,6 +138,7 @@ interface AssessmentRegistryQueryDependencies {
 interface AssessmentDetailQueryDependencies {
   queryDb: typeof queryDb
   getScopedAdminAuditActivity: typeof getScopedAdminAuditActivity
+  getAssessmentVersionSchemaCapabilities: typeof getAdminAssessmentVersionSchemaCapabilities
 }
 
 const defaultAssessmentRegistryQueryDependencies: AssessmentRegistryQueryDependencies = {
@@ -142,6 +148,7 @@ const defaultAssessmentRegistryQueryDependencies: AssessmentRegistryQueryDepende
 const defaultAssessmentDetailQueryDependencies: AssessmentDetailQueryDependencies = {
   queryDb,
   getScopedAdminAuditActivity,
+  getAssessmentVersionSchemaCapabilities: getAdminAssessmentVersionSchemaCapabilities,
 }
 
 export interface AdminCreateAssessmentInput {
@@ -760,50 +767,58 @@ function mapAssessmentSummaryRow(row: AssessmentSummaryRow | undefined): AdminAs
   }
 }
 
+function mapAssessmentVersionRowToDomain(
+  row: AssessmentVersionRow,
+  savedScenarios: AdminAssessmentSavedScenarioRecord[] = [],
+): AdminAssessmentVersionRecord | null {
+  const id = normaliseRequiredString(row.id)
+  const assessmentId = normaliseRequiredString(row.assessment_definition_id)
+  const versionLabel = normaliseRequiredString(row.version_label)
+  const lifecycleStatus = isLifecycleStatus(row.lifecycle_status) ? row.lifecycle_status : null
+  const sourceType = row.source_type === 'import' || row.source_type === 'system' || row.source_type === 'manual'
+    ? row.source_type
+    : 'manual'
+  const createdAt = normaliseTimestamp(row.created_at)
+  const updatedAt = normaliseTimestamp(row.updated_at)
+
+  if (!id || !assessmentId || !versionLabel || !lifecycleStatus || !createdAt || !updatedAt) {
+    return null
+  }
+
+  const governance = mapStoredReleaseGovernance(row)
+
+  return {
+    id,
+    assessmentId,
+    versionLabel,
+    lifecycleStatus,
+    sourceType,
+    notes: normaliseNullableField(row.notes),
+    hasDefinitionPayload: Boolean(row.has_definition_payload),
+    validationStatus: normaliseNullableField(row.validation_status),
+    packageInfo: mapPackageInfo(row),
+    normalizedPackage: parseStoredNormalizedAssessmentPackage(row.definition_payload),
+    createdAt,
+    updatedAt,
+    publishedAt: normaliseTimestamp(row.published_at),
+    archivedAt: normaliseTimestamp(row.archived_at),
+    createdByName: normaliseNullableField(row.created_by_name),
+    updatedByName: normaliseNullableField(row.updated_by_name),
+    publishedByName: normaliseNullableField(row.published_by_name),
+    latestSuiteSnapshot: mapLatestSuiteSnapshot(row.latest_regression_suite_snapshot_json),
+    releaseGovernance: governance.releaseGovernance,
+    materialUpdatedAt: governance.materialUpdatedAt,
+    savedScenarios,
+  }
+}
+
 export function mapAssessmentVersionRows(
   rows: AssessmentVersionRow[],
   scenariosByVersion: Map<string, AdminAssessmentSavedScenarioRecord[]> = new Map(),
 ): AdminAssessmentVersionRecord[] {
   return (rows ?? []).flatMap((row) => {
-    const id = normaliseRequiredString(row.id)
-    const assessmentId = normaliseRequiredString(row.assessment_definition_id)
-    const versionLabel = normaliseRequiredString(row.version_label)
-    const lifecycleStatus = isLifecycleStatus(row.lifecycle_status) ? row.lifecycle_status : null
-    const sourceType = row.source_type === 'import' || row.source_type === 'system' || row.source_type === 'manual'
-      ? row.source_type
-      : 'manual'
-    const createdAt = normaliseTimestamp(row.created_at)
-    const updatedAt = normaliseTimestamp(row.updated_at)
-
-    if (!id || !assessmentId || !versionLabel || !lifecycleStatus || !createdAt || !updatedAt) {
-      return []
-    }
-
-    const governance = mapStoredReleaseGovernance(row)
-
-    return [{
-      id,
-      assessmentId,
-      versionLabel,
-      lifecycleStatus,
-      sourceType,
-      notes: normaliseNullableField(row.notes),
-      hasDefinitionPayload: Boolean(row.has_definition_payload),
-      validationStatus: normaliseNullableField(row.validation_status),
-      packageInfo: mapPackageInfo(row),
-      normalizedPackage: parseStoredNormalizedAssessmentPackage(row.definition_payload),
-      createdAt,
-      updatedAt,
-      publishedAt: normaliseTimestamp(row.published_at),
-      archivedAt: normaliseTimestamp(row.archived_at),
-      createdByName: normaliseNullableField(row.created_by_name),
-      updatedByName: normaliseNullableField(row.updated_by_name),
-      publishedByName: normaliseNullableField(row.published_by_name),
-      latestSuiteSnapshot: mapLatestSuiteSnapshot(row.latest_regression_suite_snapshot_json),
-      releaseGovernance: governance.releaseGovernance,
-      materialUpdatedAt: governance.materialUpdatedAt,
-      savedScenarios: scenariosByVersion.get(id) ?? [],
-    }]
+    const version = mapAssessmentVersionRowToDomain(row, scenariosByVersion.get(normaliseRequiredString(row.id) ?? '') ?? [])
+    return version ? [version] : []
   })
 }
 
@@ -909,61 +924,36 @@ function isMissingRelationError(error: unknown, relationName: string): boolean {
   return code === '42P01' && message.toLowerCase().includes(`relation "${relationName.toLowerCase()}" does not exist`)
 }
 
-const OPTIONAL_ASSESSMENT_VERSION_COLUMNS = [
-  'av.publish_readiness_status',
-  'av.readiness_check_summary_json',
-  'av.last_readiness_evaluated_at',
-  'av.sign_off_status',
-  'av.sign_off_at',
-  'av.sign_off_by_identity_id',
-  'av.sign_off_material_updated_at',
-  'av.release_notes',
-  'av.material_updated_at',
-  'av.latest_regression_suite_snapshot_json',
-] as const
-
-function hasMissingOptionalVersionColumn(
-  error: unknown,
-  allowedColumns: readonly string[] = OPTIONAL_ASSESSMENT_VERSION_COLUMNS,
-): boolean {
-  const { code, message } = extractDatabaseFailureDetails(error)
-
-  if (code !== '42703') {
-    return false
+function getAssessmentVersionDetailColumnExpression(
+  capabilities: AdminAssessmentVersionSchemaCapabilities,
+  columnName: Parameters<typeof hasAssessmentVersionOptionalGovernanceAndRegressionColumn>[1],
+  fallbackSql: string,
+  cast = '',
+): string {
+  if (!hasAssessmentVersionOptionalGovernanceAndRegressionColumn(capabilities, columnName)) {
+    return fallbackSql
   }
 
-  const normalizedMessage = message.toLowerCase()
-  return allowedColumns.some((columnName) => normalizedMessage.includes(`column ${columnName.toLowerCase()} does not exist`))
+  return `av.${columnName}${cast}`
 }
 
-function buildAssessmentVersionsDetailQuery(includeOptionalGovernanceAndRegression: boolean): string {
-  const optionalSelect = includeOptionalGovernanceAndRegression
-    ? `
-         av.publish_readiness_status,
-         av.readiness_check_summary_json,
-         av.last_readiness_evaluated_at,
-         av.sign_off_status,
-         av.sign_off_at,
-         sign_off_by.full_name as sign_off_by_name,
-         av.sign_off_material_updated_at,
-         av.release_notes,
-         av.material_updated_at,
-         av.latest_regression_suite_snapshot_json`
-    : `
-         'not_ready'::text as publish_readiness_status,
-         null::jsonb as readiness_check_summary_json,
-         null::timestamptz as last_readiness_evaluated_at,
-         null::text as sign_off_status,
-         null::timestamptz as sign_off_at,
-         null::text as sign_off_by_name,
-         null::timestamptz as sign_off_material_updated_at,
-         null::text as release_notes,
-         av.updated_at as material_updated_at,
-         null::jsonb as latest_regression_suite_snapshot_json`
-  const signOffJoin = includeOptionalGovernanceAndRegression
+function buildAssessmentVersionsDetailQuery(capabilities: AdminAssessmentVersionSchemaCapabilities): string {
+  const publishReadinessStatusColumn = getAssessmentVersionDetailColumnExpression(capabilities, 'publish_readiness_status', `'not_ready'::text`)
+  const readinessCheckSummaryColumn = getAssessmentVersionDetailColumnExpression(capabilities, 'readiness_check_summary_json', 'null::jsonb')
+  const lastReadinessEvaluatedAtColumn = getAssessmentVersionDetailColumnExpression(capabilities, 'last_readiness_evaluated_at', 'null::timestamptz')
+  const signOffStatusColumn = getAssessmentVersionDetailColumnExpression(capabilities, 'sign_off_status', 'null::text')
+  const signOffAtColumn = getAssessmentVersionDetailColumnExpression(capabilities, 'sign_off_at', 'null::timestamptz')
+  const signOffMaterialUpdatedAtColumn = getAssessmentVersionDetailColumnExpression(capabilities, 'sign_off_material_updated_at', 'null::timestamptz')
+  const releaseNotesColumn = getAssessmentVersionDetailColumnExpression(capabilities, 'release_notes', 'null::text')
+  const materialUpdatedAtColumn = getAssessmentVersionDetailColumnExpression(capabilities, 'material_updated_at', 'av.updated_at')
+  const latestRegressionSuiteSnapshotColumn = getAssessmentVersionDetailColumnExpression(capabilities, 'latest_regression_suite_snapshot_json', 'null::jsonb')
+  const signOffJoin = hasAssessmentVersionOptionalGovernanceAndRegressionColumn(capabilities, 'sign_off_by_identity_id')
     ? `
        left join admin_identities sign_off_by on sign_off_by.id = av.sign_off_by_identity_id`
     : ''
+  const signOffByNameColumn = hasAssessmentVersionOptionalGovernanceAndRegressionColumn(capabilities, 'sign_off_by_identity_id')
+    ? 'sign_off_by.full_name'
+    : 'null::text'
 
   return `select
          av.id,
@@ -982,7 +972,16 @@ function buildAssessmentVersionsDetailQuery(includeOptionalGovernanceAndRegressi
          av.package_source_filename,
          package_imported_by.full_name as package_imported_by_name,
          av.package_validation_report_json,
-         ${optionalSelect},
+         ${publishReadinessStatusColumn} as publish_readiness_status,
+         ${readinessCheckSummaryColumn} as readiness_check_summary_json,
+         ${lastReadinessEvaluatedAtColumn} as last_readiness_evaluated_at,
+         ${signOffStatusColumn} as sign_off_status,
+         ${signOffAtColumn} as sign_off_at,
+         ${signOffByNameColumn} as sign_off_by_name,
+         ${signOffMaterialUpdatedAtColumn} as sign_off_material_updated_at,
+         ${releaseNotesColumn} as release_notes,
+         ${materialUpdatedAtColumn} as material_updated_at,
+         ${latestRegressionSuiteSnapshotColumn} as latest_regression_suite_snapshot_json,
          av.created_at,
          av.updated_at,
          av.published_at,
@@ -1002,21 +1001,29 @@ function buildAssessmentVersionsDetailQuery(includeOptionalGovernanceAndRegressi
          av.version_label desc`
 }
 
+function mapAssessmentVersionDetailRow(row: AssessmentVersionRow): AssessmentVersionRow {
+  return {
+    ...row,
+    publish_readiness_status: row.publish_readiness_status ?? 'not_ready',
+    readiness_check_summary_json: row.readiness_check_summary_json ?? null,
+    last_readiness_evaluated_at: row.last_readiness_evaluated_at ?? null,
+    sign_off_status: row.sign_off_status ?? null,
+    sign_off_at: row.sign_off_at ?? null,
+    sign_off_by_name: row.sign_off_by_name ?? null,
+    sign_off_material_updated_at: row.sign_off_material_updated_at ?? null,
+    release_notes: row.release_notes ?? null,
+    material_updated_at: row.material_updated_at ?? row.updated_at ?? null,
+    latest_regression_suite_snapshot_json: row.latest_regression_suite_snapshot_json ?? null,
+  }
+}
+
 async function loadAssessmentVersionDetailRows(
   assessmentId: string,
-  query: typeof queryDb,
+  deps: Pick<AssessmentDetailQueryDependencies, 'queryDb' | 'getAssessmentVersionSchemaCapabilities'>,
 ): Promise<AssessmentVersionRow[]> {
-  try {
-    const result = await query<AssessmentVersionRow>(buildAssessmentVersionsDetailQuery(true), [assessmentId])
-    return result.rows ?? []
-  } catch (error) {
-    if (hasMissingOptionalVersionColumn(error)) {
-      const fallbackResult = await query<AssessmentVersionRow>(buildAssessmentVersionsDetailQuery(false), [assessmentId])
-      return fallbackResult.rows ?? []
-    }
-
-    throw error
-  }
+  const capabilities = await deps.getAssessmentVersionSchemaCapabilities({ queryDb: deps.queryDb })
+  const result = await deps.queryDb<AssessmentVersionRow>(buildAssessmentVersionsDetailQuery(capabilities), [assessmentId])
+  return (result.rows ?? []).map(mapAssessmentVersionDetailRow)
 }
 
 async function loadAssessmentSavedScenarioRows(
@@ -1167,7 +1174,7 @@ export async function getAdminAssessmentDetailData(
       limit 1`,
       [assessmentId],
     ),
-    loadAssessmentVersionDetailRows(assessmentId, deps.queryDb),
+    loadAssessmentVersionDetailRows(assessmentId, deps),
     loadAssessmentSavedScenarioRows(assessmentId, deps.queryDb),
     deps.getScopedAdminAuditActivity({ entityType: 'assessment', entityId: assessmentId, includeSecondaryEntityType: 'assessment_version', limit: 40 }),
   ])
