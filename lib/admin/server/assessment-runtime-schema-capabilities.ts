@@ -51,27 +51,32 @@ export function getMissingAssessmentRuntimeColumns(
 export async function getAdminAssessmentRuntimeSchemaCapabilities(
   deps: AssessmentRuntimeSchemaCapabilityDependencies = defaultAssessmentRuntimeSchemaCapabilityDependencies,
 ): Promise<AdminAssessmentRuntimeSchemaCapabilities> {
-  const tableChecks = await Promise.all(
-    REQUIRED_ASSESSMENT_RUNTIME_TABLES.map(async (tableName) => {
-      const result = await deps.queryDb<{ table_exists: boolean | null }>(
-        `select to_regclass(current_schema() || '.' || $1::text) is not null as table_exists`,
-        [tableName],
-      )
+  const tableResult = await deps.queryDb<{ table_name: string | null }>(
+    `select table_name
+     from information_schema.tables
+     where table_schema = current_schema()
+       and table_name = any($1::text[])`,
+    [REQUIRED_ASSESSMENT_RUNTIME_TABLES],
+  )
 
-      return { tableName, exists: Boolean(result.rows[0]?.table_exists) }
+  const existingTableNames = new Set<AssessmentRuntimeTableName>(
+    (tableResult.rows ?? []).flatMap((row) => {
+      const tableName = row.table_name
+      return typeof tableName === 'string' && REQUIRED_ASSESSMENT_RUNTIME_TABLES.includes(tableName as AssessmentRuntimeTableName)
+        ? [tableName as AssessmentRuntimeTableName]
+        : []
     }),
   )
 
-  const existingTableNames = tableChecks.filter((entry) => entry.exists).map((entry) => entry.tableName)
   const columnsByTable = new Map<AssessmentRuntimeTableName, Set<string>>()
 
-  if (existingTableNames.length > 0) {
+  if (existingTableNames.size > 0) {
     const columnResult = await deps.queryDb<{ table_name: string | null; column_name: string | null }>(
       `select table_name, column_name
        from information_schema.columns
        where table_schema = current_schema()
          and table_name = any($1::text[])`,
-      [existingTableNames],
+      [Array.from(existingTableNames)],
     )
 
     for (const tableName of existingTableNames) {
@@ -89,7 +94,7 @@ export async function getAdminAssessmentRuntimeSchemaCapabilities(
   return {
     tables: REQUIRED_ASSESSMENT_RUNTIME_TABLES.reduce((result, tableName) => {
       result[tableName] = {
-        exists: tableChecks.find((entry) => entry.tableName === tableName)?.exists ?? false,
+        exists: existingTableNames.has(tableName),
         columns: columnsByTable.get(tableName) ?? new Set<string>(),
       }
       return result
