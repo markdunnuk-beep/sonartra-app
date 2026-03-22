@@ -14,6 +14,9 @@ interface LiveSignalsPublishedVersionRow {
   assessment_version_name: string | null
   total_questions: number | null
   is_active: boolean | null
+  active_question_set_id: string | null
+  active_question_count: number
+  questions_with_runtime_metadata: number
 }
 
 export interface LiveSignalsPublishedVersionResolution {
@@ -28,11 +31,36 @@ export interface LiveSignalsPublishedVersionResolution {
   isActive: boolean
 }
 
-export async function resolveLiveSignalsPublishedVersion(
+export type LiveSignalsPublishedVersionDiagnosticCode =
+  | 'no_published_version'
+  | 'runtime_not_materialized'
+  | 'runtime_question_count_mismatch'
+  | 'runtime_metadata_mismatch'
+
+export interface LiveSignalsPublishedVersionDiagnostic {
+  code: LiveSignalsPublishedVersionDiagnosticCode
+  message: string
+}
+
+export interface LiveSignalsPublishedVersionState {
+  version: LiveSignalsPublishedVersionResolution | null
+  diagnostic: LiveSignalsPublishedVersionDiagnostic
+}
+
+function buildUnavailableState(
+  diagnostic: LiveSignalsPublishedVersionDiagnostic,
+): LiveSignalsPublishedVersionState {
+  return {
+    version: null,
+    diagnostic,
+  }
+}
+
+export async function resolveLiveSignalsPublishedVersionState(
   deps: {
     queryDb?: QueryDbLike
   } = {},
-): Promise<LiveSignalsPublishedVersionResolution | null> {
+): Promise<LiveSignalsPublishedVersionState> {
   const runQuery = deps.queryDb ?? queryDb
   const result = await runQuery(
     `SELECT
@@ -44,14 +72,40 @@ export async function resolveLiveSignalsPublishedVersion(
        av.key AS assessment_version_key,
        av.name AS assessment_version_name,
        av.total_questions,
-       av.is_active
+       av.is_active,
+       qs.id AS active_question_set_id,
+       COUNT(DISTINCT q.id)::int AS active_question_count,
+       COUNT(DISTINCT CASE
+         WHEN q.metadata_json ? 'packageQuestionId'
+          AND q.metadata_json ? 'promptKey'
+          AND q.metadata_json ? 'dimensionId'
+         THEN q.id
+         ELSE NULL
+       END)::int AS questions_with_runtime_metadata
      FROM assessment_definitions ad
      LEFT JOIN assessment_versions av
        ON av.id = ad.current_published_version_id
       AND av.assessment_definition_id = ad.id
       AND av.lifecycle_status = 'published'
+     LEFT JOIN assessment_question_sets qs
+       ON qs.assessment_version_id = av.id
+      AND qs.is_active = TRUE
+     LEFT JOIN assessment_questions q
+       ON q.question_set_id = qs.id
+      AND q.is_active = TRUE
      WHERE ad.key = $1
        AND ad.lifecycle_status = 'published'
+     GROUP BY
+       ad.id,
+       ad.key,
+       ad.slug,
+       ad.current_published_version_id,
+       av.id,
+       av.key,
+       av.name,
+       av.total_questions,
+       av.is_active,
+       qs.id
      LIMIT 1`,
     [LIVE_SIGNALS_ASSESSMENT_KEY],
   )
@@ -67,18 +121,57 @@ export async function resolveLiveSignalsPublishedVersion(
     typeof row.total_questions !== 'number' ||
     typeof row.is_active !== 'boolean'
   ) {
-    return null
+    return buildUnavailableState({
+      code: 'no_published_version',
+      message: 'No active published Sonartra Signals version is available.',
+    })
+  }
+
+  if (!row.active_question_set_id) {
+    return buildUnavailableState({
+      code: 'runtime_not_materialized',
+      message: 'The published Sonartra Signals version is not runnable yet because runtime materialization has not completed.',
+    })
+  }
+
+  if (row.active_question_count !== row.total_questions) {
+    return buildUnavailableState({
+      code: 'runtime_question_count_mismatch',
+      message: `The published Sonartra Signals version is not runnable because runtime materialization produced ${row.active_question_count} active questions but the published version expects ${row.total_questions}.`,
+    })
+  }
+
+  if (row.questions_with_runtime_metadata !== row.active_question_count) {
+    return buildUnavailableState({
+      code: 'runtime_metadata_mismatch',
+      message: `The published Sonartra Signals version is not runnable because runtime metadata is incomplete for ${row.active_question_count - row.questions_with_runtime_metadata} active question(s).`,
+    })
   }
 
   return {
-    assessmentDefinitionId: row.assessment_definition_id,
-    assessmentDefinitionKey: row.assessment_definition_key,
-    assessmentDefinitionSlug: row.assessment_definition_slug,
-    currentPublishedVersionId: row.current_published_version_id,
-    assessmentVersionId: row.assessment_version_id,
-    assessmentVersionKey: row.assessment_version_key,
-    assessmentVersionName: row.assessment_version_name,
-    totalQuestions: row.total_questions,
-    isActive: row.is_active,
+    version: {
+      assessmentDefinitionId: row.assessment_definition_id,
+      assessmentDefinitionKey: row.assessment_definition_key,
+      assessmentDefinitionSlug: row.assessment_definition_slug,
+      currentPublishedVersionId: row.current_published_version_id,
+      assessmentVersionId: row.assessment_version_id,
+      assessmentVersionKey: row.assessment_version_key,
+      assessmentVersionName: row.assessment_version_name,
+      totalQuestions: row.total_questions,
+      isActive: row.is_active,
+    },
+    diagnostic: {
+      code: 'no_published_version',
+      message: 'No active published Sonartra Signals version is available.',
+    },
   }
+}
+
+export async function resolveLiveSignalsPublishedVersion(
+  deps: {
+    queryDb?: QueryDbLike
+  } = {},
+): Promise<LiveSignalsPublishedVersionResolution | null> {
+  const state = await resolveLiveSignalsPublishedVersionState(deps)
+  return state.version
 }

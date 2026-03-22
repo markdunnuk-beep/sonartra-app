@@ -37,6 +37,10 @@ test('blocks starts when no active published Signals version is available', asyn
     { appUser },
     {
       queryDb: async () => ({ rows: [] }) as never,
+      resolveLiveSignalsPublishedVersionState: async () => ({
+        version: null,
+        diagnostic: { code: 'no_published_version', message: 'No active published Sonartra Signals version is available.' },
+      }),
       withTransaction: async () => {
         transactionCalled = true
         throw new Error('transaction should not be called')
@@ -47,7 +51,40 @@ test('blocks starts when no active published Signals version is available', asyn
   assert.equal(result.kind, 'unavailable')
   assert.equal(result.status, 404)
   assert.match(result.body.error, /No active published Sonartra Signals version is available\./)
+  assert.equal(result.body.code, 'no_published_version')
   assert.equal(transactionCalled, false)
+})
+
+test('start helper blocks launches when the published live Signals version is not materialized for runtime execution', async () => {
+  const response = await startLiveSignalsAssessment(
+    {
+      appUser: {
+        clerkUserId: 'clerk-1',
+        dbUserId: 'user-1',
+        email: 'user@example.com',
+      },
+      source: 'direct',
+    },
+    {
+      queryDb: async () => ({ rows: [] }) as never,
+      resolveLiveSignalsPublishedVersionState: async () => ({
+        version: null,
+        diagnostic: {
+          code: 'runtime_not_materialized',
+          message: 'The published Sonartra Signals version is not runnable yet because runtime materialization has not completed.',
+        },
+      }),
+      withTransaction: async () => {
+        throw new Error('withTransaction should not be called when the runtime is not executable')
+      },
+    },
+  )
+
+  assert.equal(response.status, 404)
+  assert.deepEqual(response.body, {
+    error: 'The published Sonartra Signals version is not runnable yet because runtime materialization has not completed.',
+    code: 'runtime_not_materialized',
+  })
 })
 
 test('resumes the latest unfinished Signals attempt across versions under the same definition', async () => {
@@ -58,21 +95,6 @@ test('resumes the latest unfinished Signals attempt across versions under the sa
     {
       queryDb: async (sql, params) => {
         calls.push({ sql, params })
-
-        if (calls.length === 1) {
-          return {
-            rows: [
-              {
-                id: 'version-current',
-                key: 'wplp80-v2',
-                name: 'WPLP-80 v2',
-                total_questions: 80,
-                is_active: true,
-                assessment_definition_id: 'definition-signals',
-              },
-            ],
-          } as never
-        }
 
         return {
           rows: [
@@ -86,6 +108,20 @@ test('resumes the latest unfinished Signals attempt across versions under the sa
           ],
         } as never
       },
+      resolveLiveSignalsPublishedVersionState: async () => ({
+        version: {
+          assessmentDefinitionId: 'definition-signals',
+          assessmentDefinitionKey: 'sonartra_signals',
+          assessmentDefinitionSlug: 'sonartra-signals',
+          currentPublishedVersionId: 'version-current',
+          assessmentVersionId: 'version-current',
+          assessmentVersionKey: 'wplp80-v2',
+          assessmentVersionName: 'WPLP-80 v2',
+          totalQuestions: 80,
+          isActive: true,
+        },
+        diagnostic: { code: 'no_published_version', message: 'No active published Sonartra Signals version is available.' },
+      }),
       withTransaction: async () => {
         throw new Error('transaction should not be called when resuming')
       },
@@ -102,11 +138,9 @@ test('resumes the latest unfinished Signals attempt across versions under the sa
     name: 'WPLP-80 v1',
     totalQuestions: 80,
   })
-  assert.equal(calls.length, 2)
-  assert.match(calls[0]!.sql, /from assessment_definitions ad/i)
-  assert.deepEqual(calls[0]!.params, ['sonartra_signals'])
-  assert.match(calls[1]!.sql, /av\.assessment_definition_id = \$2/i)
-  assert.deepEqual(calls[1]!.params, ['user-1', 'definition-signals'])
+  assert.equal(calls.length, 1)
+  assert.match(calls[0]!.sql, /av\.assessment_definition_id = \$2/i)
+  assert.deepEqual(calls[0]!.params, ['user-1', 'definition-signals'])
 })
 
 test('creates a new attempt against the current published version when no unfinished attempt exists', async () => {
@@ -118,24 +152,22 @@ test('creates a new attempt against the current published version when no unfini
     {
       queryDb: async (sql, params) => {
         queryCalls.push({ sql, params })
-
-        if (queryCalls.length === 1) {
-          return {
-            rows: [
-              {
-                id: 'version-current',
-                key: 'wplp80-v2',
-                name: 'WPLP-80 v2',
-                total_questions: 80,
-                is_active: true,
-                assessment_definition_id: 'definition-signals',
-              },
-            ],
-          } as never
-        }
-
         return { rows: [] } as never
       },
+      resolveLiveSignalsPublishedVersionState: async () => ({
+        version: {
+          assessmentDefinitionId: 'definition-signals',
+          assessmentDefinitionKey: 'sonartra_signals',
+          assessmentDefinitionSlug: 'sonartra-signals',
+          currentPublishedVersionId: 'version-current',
+          assessmentVersionId: 'version-current',
+          assessmentVersionKey: 'wplp80-v2',
+          assessmentVersionName: 'WPLP-80 v2',
+          totalQuestions: 80,
+          isActive: true,
+        },
+        diagnostic: { code: 'no_published_version', message: 'No active published Sonartra Signals version is available.' },
+      }),
       withTransaction: async (work) =>
         work({
           query: async (sql: string, params?: unknown[]) => {
@@ -156,7 +188,7 @@ test('creates a new attempt against the current published version when no unfini
     name: 'WPLP-80 v2',
     totalQuestions: 80,
   })
-  assert.equal(queryCalls.length, 2)
+  assert.equal(queryCalls.length, 1)
   assert.equal(insertCalls.length, 1)
   assert.match(insertCalls[0]!.sql, /insert into assessments/i)
   assert.deepEqual(insertCalls[0]!.params, ['user-1', 'version-current', 'workspace'])

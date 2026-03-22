@@ -80,7 +80,25 @@ function makeQueryDb(options: {
 
 test('hides inventory when no published live Signals version is available', async () => {
   const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
-    resolveLiveSignalsPublishedVersion: async () => null,
+    resolveLiveSignalsPublishedVersionState: async () => ({
+      version: null,
+      diagnostic: { code: 'no_published_version', message: 'No active published Sonartra Signals version is available.' },
+    }),
+    queryDb: makeQueryDb({}),
+  })
+
+  assert.deepEqual(inventory, [])
+})
+
+test('hides inventory when the published Signals version has not been materialized into the live runtime', async () => {
+  const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
+    resolveLiveSignalsPublishedVersionState: async () => ({
+      version: null,
+      diagnostic: {
+        code: 'runtime_not_materialized',
+        message: 'The published Sonartra Signals version is not runnable yet because runtime materialization has not completed.',
+      },
+    }),
     queryDb: makeQueryDb({}),
   })
 
@@ -89,7 +107,10 @@ test('hides inventory when no published live Signals version is available', asyn
 
 test('returns a startable Signals inventory item when a published live version exists and the user has not started', async () => {
   const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
-    resolveLiveSignalsPublishedVersion: async () => publishedVersion,
+    resolveLiveSignalsPublishedVersionState: async () => ({
+      version: publishedVersion,
+      diagnostic: { code: 'no_published_version', message: 'No active published Sonartra Signals version is available.' },
+    }),
     queryDb: makeQueryDb({}),
   })
 
@@ -105,7 +126,10 @@ test('returns a startable Signals inventory item when a published live version e
 
 test('returns in-progress lifecycle metadata from the latest live Signals attempt', async () => {
   const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
-    resolveLiveSignalsPublishedVersion: async () => publishedVersion,
+    resolveLiveSignalsPublishedVersionState: async () => ({
+      version: publishedVersion,
+      diagnostic: { code: 'no_published_version', message: 'No active published Sonartra Signals version is available.' },
+    }),
     queryDb: makeQueryDb({
       latestAssessment: {
         ...baseAssessment,
@@ -127,7 +151,10 @@ test('returns in-progress lifecycle metadata from the latest live Signals attemp
 
 test('returns processing lifecycle when the latest completed attempt has no ready result yet', async () => {
   const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
-    resolveLiveSignalsPublishedVersion: async () => publishedVersion,
+    resolveLiveSignalsPublishedVersionState: async () => ({
+      version: publishedVersion,
+      diagnostic: { code: 'no_published_version', message: 'No active published Sonartra Signals version is available.' },
+    }),
     queryDb: makeQueryDb({
       latestAssessment: {
         ...baseAssessment,
@@ -153,7 +180,10 @@ test('returns processing lifecycle when the latest completed attempt has no read
 
 test('returns ready lifecycle when the latest completed attempt has a successful scored result', async () => {
   const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
-    resolveLiveSignalsPublishedVersion: async () => publishedVersion,
+    resolveLiveSignalsPublishedVersionState: async () => ({
+      version: publishedVersion,
+      diagnostic: { code: 'no_published_version', message: 'No active published Sonartra Signals version is available.' },
+    }),
     queryDb: makeQueryDb({
       latestAssessment: {
         ...baseAssessment,
@@ -186,7 +216,10 @@ test('returns ready lifecycle when the latest completed attempt has a successful
 
 test('returns error lifecycle when the latest completed attempt failed result generation', async () => {
   const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
-    resolveLiveSignalsPublishedVersion: async () => publishedVersion,
+    resolveLiveSignalsPublishedVersionState: async () => ({
+      version: publishedVersion,
+      diagnostic: { code: 'no_published_version', message: 'No active published Sonartra Signals version is available.' },
+    }),
     queryDb: makeQueryDb({
       latestAssessment: {
         ...baseAssessment,

@@ -14,7 +14,10 @@ import type {
 import type { AssessmentResultRow, AssessmentRow } from '@/lib/assessment-types'
 import { queryDb } from '@/lib/db'
 import { getCurrentAssessmentRepositoryContext } from '@/lib/assessment/assessment-repository-context'
-import { resolveLiveSignalsPublishedVersion, type LiveSignalsPublishedVersionResolution } from '@/lib/server/live-signals-runtime'
+import {
+  resolveLiveSignalsPublishedVersionState,
+  type LiveSignalsPublishedVersionState,
+} from '@/lib/server/live-signals-runtime'
 
 const LIVE_SIGNALS_REPOSITORY_ID = 'signals'
 
@@ -31,12 +34,12 @@ interface AssessmentInventoryReadyResultRow extends AssessmentResultRow {
 
 interface InventoryDependencies {
   queryDb: typeof queryDb
-  resolveLiveSignalsPublishedVersion: () => Promise<LiveSignalsPublishedVersionResolution | null>
+  resolveLiveSignalsPublishedVersionState: () => Promise<LiveSignalsPublishedVersionState>
 }
 
 const defaultDependencies: InventoryDependencies = {
   queryDb,
-  resolveLiveSignalsPublishedVersion,
+  resolveLiveSignalsPublishedVersionState,
 }
 
 function getSignalsDefinition() {
@@ -234,9 +237,13 @@ export async function loadLiveAssessmentRepositoryInventory(
   dependencies: Partial<InventoryDependencies> = {},
 ): Promise<AssessmentRepositoryItem[]> {
   const deps = { ...defaultDependencies, ...dependencies }
-  const publishedVersion = await deps.resolveLiveSignalsPublishedVersion()
+  const publishedVersionState = await deps.resolveLiveSignalsPublishedVersionState()
+  const publishedVersion = publishedVersionState.version
 
   if (!publishedVersion?.isActive) {
+    if (publishedVersionState.diagnostic.code !== 'no_published_version') {
+      console.warn('[signals.inventory] live Signals version hidden because runtime is not executable', publishedVersionState.diagnostic)
+    }
     return []
   }
 
