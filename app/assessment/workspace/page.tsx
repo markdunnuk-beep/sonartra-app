@@ -3,6 +3,8 @@ import AssessmentWorkspaceClient from './AssessmentWorkspaceClient'
 import { resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness'
 import { redirect } from 'next/navigation'
 
+export const dynamic = 'force-dynamic'
+
 interface AssessmentWorkspacePageProps {
   searchParams?: {
     assessmentId?: string | string[]

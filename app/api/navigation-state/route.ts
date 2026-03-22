@@ -5,6 +5,8 @@ import { canonicalAdminLandingHref } from '@/lib/admin/navigation'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 import { getNavigationLifecycleState } from '@/lib/server/navigation-state';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const appUser = await resolveAuthenticatedAppUser();

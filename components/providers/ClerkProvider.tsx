@@ -8,29 +8,30 @@ import {
   getGenericAuthFallbackRedirectUrl,
 } from '@/lib/auth-redirects'
 
-function getClerkPublishableKey(): string {
-  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim()
-
-  if (!publishableKey) {
-    throw new Error('Missing NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY')
-  }
-
-  return publishableKey
+function getClerkPublishableKey(): string | null {
+  return process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() || null
 }
 
 export function ClerkProvider({ children }: { children: ReactNode }) {
-  // Silent fallback keys are intentionally disallowed because they can mask bad env config,
-  // trigger Clerk instance/domain mismatches, and cause server-side auth failures.
   const publishableKey = getClerkPublishableKey()
   const fallbackRedirectUrl = getGenericAuthFallbackRedirectUrl()
 
   useEffect(() => {
+    if (!publishableKey) {
+      console.warn('Missing NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY; rendering without Clerk provider.')
+      return
+    }
+
     const warning = formatGenericAuthRedirectOverrideWarning()
 
     if (warning) {
       console.warn(warning)
     }
-  }, [])
+  }, [publishableKey])
+
+  if (!publishableKey) {
+    return <>{children}</>
+  }
 
   return (
     <ClerkRootProvider
