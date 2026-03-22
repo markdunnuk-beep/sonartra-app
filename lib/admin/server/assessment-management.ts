@@ -38,6 +38,7 @@ import { queryDb, withTransaction, describeDatabaseError } from '@/lib/db'
 import { getScopedAdminAuditActivity, mapScopedAuditEventsToAssessmentActivity } from '@/lib/admin/server/audit-workspace'
 import {
   getAdminAssessmentVersionSchemaCapabilities,
+  hasAssessmentVersionPackageColumn,
   hasAssessmentVersionOptionalGovernanceAndRegressionColumn,
 } from '@/lib/admin/server/assessment-version-schema-capabilities'
 import {
@@ -955,6 +956,7 @@ async function resolveAssessmentVersionSchemaCapabilities(
 }
 
 type AssessmentVersionGovernanceWriteFeature =
+  | 'package_metadata'
   | 'release_readiness'
   | 'release_sign_off'
   | 'release_notes'
@@ -969,6 +971,7 @@ interface AssessmentVersionGovernanceWriteSupport {
 }
 
 interface AssessmentVersionGovernanceWritePolicy {
+  packageMetadata: AssessmentVersionGovernanceWriteSupport
   releaseReadiness: AssessmentVersionGovernanceWriteSupport
   releaseSignOff: AssessmentVersionGovernanceWriteSupport
   releaseNotes: AssessmentVersionGovernanceWriteSupport
@@ -1008,9 +1011,39 @@ function resolveAssessmentVersionGovernanceWriteSupport(
   return { mode: 'partial', columns: [...columns], missingColumns }
 }
 
+function resolveAssessmentVersionPackageWriteSupport(
+  capabilities: Awaited<ReturnType<typeof getAdminAssessmentVersionSchemaCapabilities>>,
+  columns: readonly string[],
+): AssessmentVersionGovernanceWriteSupport {
+  const missingColumns = columns.filter((columnName) => !hasAssessmentVersionPackageColumn(
+    capabilities,
+    columnName as Parameters<typeof hasAssessmentVersionPackageColumn>[1],
+  ))
+
+  if (missingColumns.length === 0) {
+    return { mode: 'supported', columns: [...columns], missingColumns }
+  }
+
+  if (missingColumns.length === columns.length) {
+    return { mode: 'unsupported', columns: [...columns], missingColumns }
+  }
+
+  return { mode: 'partial', columns: [...columns], missingColumns }
+}
+
 function createAssessmentVersionGovernanceWritePolicy(
   capabilities: Awaited<ReturnType<typeof getAdminAssessmentVersionSchemaCapabilities>>,
 ): AssessmentVersionGovernanceWritePolicy {
+  const packageMetadata = resolveAssessmentVersionPackageWriteSupport(capabilities, [
+    'package_raw_payload',
+    'package_schema_version',
+    'package_status',
+    'package_source_type',
+    'package_source_filename',
+    'package_imported_at',
+    'package_imported_by_identity_id',
+    'package_validation_report_json',
+  ])
   const releaseReadiness = resolveAssessmentVersionGovernanceWriteSupport(capabilities, [
     'publish_readiness_status',
     'readiness_check_summary_json',
@@ -1031,6 +1064,7 @@ function createAssessmentVersionGovernanceWritePolicy(
   ])
 
   const supportByFeature: Record<AssessmentVersionGovernanceWriteFeature, AssessmentVersionGovernanceWriteSupport> = {
+    package_metadata: packageMetadata,
     release_readiness: releaseReadiness,
     release_sign_off: releaseSignOff,
     release_notes: releaseNotes,
@@ -1038,6 +1072,7 @@ function createAssessmentVersionGovernanceWritePolicy(
   }
 
   return {
+    packageMetadata,
     releaseReadiness,
     releaseSignOff,
     releaseNotes,
@@ -1874,15 +1909,22 @@ export async function importAdminAssessmentPackage(
 
   try {
     return await deps.withTransaction(async (client) => {
+      const capabilities = await resolveAssessmentVersionSchemaCapabilities(
+        client.query.bind(client),
+        deps.getAssessmentVersionSchemaCapabilities,
+      )
       const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
         client.query.bind(client),
         deps.getAssessmentVersionSchemaCapabilities,
       )
+      if (writePolicy.packageMetadata.mode !== 'supported') {
+        writePolicy.assertSupported('package_metadata', 'importing assessment packages')
+      }
       const version = await loadAssessmentVersionRowById(
         client,
         input.assessmentId,
         input.versionId,
-        deps.getAssessmentVersionSchemaCapabilities,
+        async () => capabilities,
       )
       const assessmentName = normaliseNullableField(version?.assessment_name) ?? 'Assessment'
       const existingVersion = version ? mapAssessmentVersionRows([version])[0] ?? null : null
@@ -2086,45 +2128,14 @@ export async function simulateAdminAssessmentVersion(
 
   try {
     return await deps.withTransaction(async (client) => {
-      const versionResult = await client.query<AssessmentVersionRow & { assessment_name: string | null }>(
-        `select
-           av.id,
-           av.assessment_definition_id,
-           av.version_label,
-           av.lifecycle_status,
-           av.source_type,
-           av.notes,
-           (av.definition_payload is not null) as has_definition_payload,
-           av.definition_payload,
-           av.validation_status,
-           av.package_status,
-           av.package_schema_version,
-           av.package_source_type,
-           av.package_imported_at,
-           av.package_source_filename,
-           package_imported_by.full_name as package_imported_by_name,
-           av.package_validation_report_json,
-           av.created_at,
-           av.updated_at,
-           av.published_at,
-           av.archived_at,
-           created_by.full_name as created_by_name,
-           updated_by.full_name as updated_by_name,
-           published_by.full_name as published_by_name,
-           ad.name as assessment_name
-         from assessment_versions av
-         inner join assessment_definitions ad on ad.id = av.assessment_definition_id
-         left join admin_identities created_by on created_by.id = av.created_by_identity_id
-         left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
-         left join admin_identities published_by on published_by.id = av.published_by_identity_id
-         left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
-         where av.id = $1
-           and av.assessment_definition_id = $2
-         limit 1`,
-        [input.versionId, input.assessmentId],
+      const versionRow = await loadAssessmentVersionRowById(
+        client,
+        input.assessmentId,
+        input.versionId,
+        deps.getAssessmentVersionSchemaCapabilities,
       )
-      const version = mapAssessmentVersionRows(versionResult.rows ?? [])[0]
-      const assessmentName = normaliseNullableField(versionResult.rows[0]?.assessment_name) ?? 'Assessment'
+      const version = versionRow ? mapAssessmentVersionRows([versionRow])[0] ?? null : null
+      const assessmentName = normaliseNullableField(versionRow?.assessment_name) ?? 'Assessment'
 
       if (!version) {
         return {
@@ -3234,7 +3245,6 @@ export async function archiveAdminAssessmentVersion(
            ad.name as assessment_name
          from assessment_versions av
          inner join assessment_definitions ad on ad.id = av.assessment_definition_id
-         left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
          where av.id = $1
            and av.assessment_definition_id = $2
          limit 1`,

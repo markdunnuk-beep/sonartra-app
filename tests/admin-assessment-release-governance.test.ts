@@ -17,6 +17,14 @@ function buildAssessmentVersionSchemaCapabilities(columns: string[]): AdminAsses
 }
 
 const MODERN_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([
+  'package_raw_payload',
+  'package_schema_version',
+  'package_status',
+  'package_source_type',
+  'package_source_filename',
+  'package_imported_at',
+  'package_imported_by_identity_id',
+  'package_validation_report_json',
   'publish_readiness_status',
   'readiness_check_summary_json',
   'last_readiness_evaluated_at',
@@ -184,9 +192,14 @@ test('publish loader uses modern compatibility-safe assessment_versions queries 
   assert.equal(result.ok, false)
   assert.equal(byIdQueries.length, 1)
   assert.equal(assessmentQueries.length, 1)
+  assert.match(byIdQueries[0] ?? '', /av\.package_schema_version/i)
+  assert.match(byIdQueries[0] ?? '', /av\.package_validation_report_json/i)
+  assert.match(byIdQueries[0] ?? '', /package_imported_by\.id = av\.package_imported_by_identity_id/i)
   assert.match(byIdQueries[0] ?? '', /av\.publish_readiness_status/i)
   assert.match(byIdQueries[0] ?? '', /av\.latest_regression_suite_snapshot_json/i)
   assert.match(byIdQueries[0] ?? '', /sign_off_by\.id = av\.sign_off_by_identity_id/i)
+  assert.match(assessmentQueries[0] ?? '', /av\.package_schema_version/i)
+  assert.match(assessmentQueries[0] ?? '', /av\.package_validation_report_json/i)
   assert.match(assessmentQueries[0] ?? '', /av\.publish_readiness_status/i)
   assert.match(assessmentQueries[0] ?? '', /av\.latest_regression_suite_snapshot_json/i)
 })

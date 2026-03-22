@@ -32,6 +32,14 @@ function buildAssessmentVersionSchemaCapabilities(columns: string[]): AdminAsses
 }
 
 const MODERN_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([
+  'package_raw_payload',
+  'package_schema_version',
+  'package_status',
+  'package_source_type',
+  'package_source_filename',
+  'package_imported_at',
+  'package_imported_by_identity_id',
+  'package_validation_report_json',
   'publish_readiness_status',
   'readiness_check_summary_json',
   'last_readiness_evaluated_at',
@@ -42,6 +50,17 @@ const MODERN_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapab
   'release_notes',
   'material_updated_at',
   'latest_regression_suite_snapshot_json',
+])
+
+const PACKAGE_ERA_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([
+  'package_raw_payload',
+  'package_schema_version',
+  'package_status',
+  'package_source_type',
+  'package_source_filename',
+  'package_imported_at',
+  'package_imported_by_identity_id',
+  'package_validation_report_json',
 ])
 
 const LEGACY_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([])
@@ -396,7 +415,7 @@ test('package import skips governance metadata writes when release governance co
   }, {
     resolveAdminAccess: async () => createBaseAccess(),
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
-    getAssessmentVersionSchemaCapabilities: async () => LEGACY_ASSESSMENT_VERSION_CAPABILITIES,
+    getAssessmentVersionSchemaCapabilities: async () => PACKAGE_ERA_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av/i.test(sql)) {
@@ -442,6 +461,34 @@ test('package import skips governance metadata writes when release governance co
   assert.ok(auditEvents.includes('assessment_package_imported'))
   assert.ok(!auditEvents.includes('assessment_release_readiness_evaluated'))
   assert.ok(!auditEvents.includes('assessment_release_sign_off_invalidated'))
+})
+
+test('package import fails fast when package metadata columns are unavailable', async () => {
+  let writeCount = 0
+  const result = await importAdminAssessmentPackage({
+    assessmentId: 'assessment-1',
+    versionId: 'version-2',
+    packageText: validPackage,
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getAssessmentVersionSchemaCapabilities: async () => LEGACY_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string) => {
+        if (/update assessment_versions/i.test(sql) || /update assessment_definitions/i.test(sql) || /insert into access_audit_events/i.test(sql)) {
+          writeCount += 1
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'schema_incompatible')
+  assert.match(result.message, /importing assessment packages/i)
+  assert.match(result.message, /package_raw_payload|package_schema_version|package_status/i)
+  assert.equal(writeCount, 0)
 })
 
 test('package import rejects malformed JSON before any database writes', async () => {

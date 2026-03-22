@@ -17,6 +17,8 @@ import {
   type AdminAssessmentScenarioRegressionResult,
 } from '@/lib/admin/domain/assessment-regression'
 import { getAdminAssessmentDetailData, mapAssessmentVersionRows } from '@/lib/admin/server/assessment-management'
+import { getAdminAssessmentVersionSchemaCapabilities } from '@/lib/admin/server/assessment-version-schema-capabilities'
+import { buildAssessmentVersionByIdQuery } from '@/lib/admin/server/assessment-version-detail-sql'
 import { describeDatabaseError, queryDb, withTransaction } from '@/lib/db'
 
 interface ActorRow {
@@ -232,41 +234,10 @@ async function writeScenarioAuditEvent(
 }
 
 async function getVersionByIds(query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>, assessmentId: string, versionId: string): Promise<{ version: AdminAssessmentVersionRecord | null; assessmentName: string | null }> {
+  const capabilities = await getAdminAssessmentVersionSchemaCapabilities({ queryDb: query as typeof queryDb })
   const result = await query(
-    `select
-       av.id,
-       av.assessment_definition_id,
-       av.version_label,
-       av.lifecycle_status,
-       av.source_type,
-       av.notes,
-       (av.definition_payload is not null) as has_definition_payload,
-       av.definition_payload,
-       av.validation_status,
-       av.package_status,
-       av.package_schema_version,
-       av.package_source_type,
-       av.package_imported_at,
-       av.package_source_filename,
-       package_imported_by.full_name as package_imported_by_name,
-       av.package_validation_report_json,
-       av.created_at,
-       av.updated_at,
-       av.published_at,
-       av.archived_at,
-       created_by.full_name as created_by_name,
-       updated_by.full_name as updated_by_name,
-       published_by.full_name as published_by_name,
-       ad.name as assessment_name
-     from assessment_versions av
-     inner join assessment_definitions ad on ad.id = av.assessment_definition_id
-     left join admin_identities created_by on created_by.id = av.created_by_identity_id
-     left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
-     left join admin_identities published_by on published_by.id = av.published_by_identity_id
-     left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
-     where av.assessment_definition_id = $1 and av.id = $2
-     limit 1`,
-    [assessmentId, versionId],
+    buildAssessmentVersionByIdQuery(capabilities, { includeAssessmentName: true }),
+    [versionId, assessmentId],
   )
 
   return {
