@@ -7,6 +7,10 @@ import {
   VersionQuestionsResponse,
 } from '@/lib/question-bank-types';
 
+interface QuestionBankDependencies {
+  queryDb: typeof queryDb;
+}
+
 interface QuestionWithOptionRow {
   question_number: number;
   question_key: string;
@@ -85,7 +89,17 @@ export async function resolveVersionAndActiveQuestionSet(versionKey: string): Pr
   version: AssessmentVersionRow;
   questionSet: AssessmentQuestionSetRow;
 } | null> {
-  const result = await queryDb<VersionQuestionSetJoinRow>(
+  return resolveVersionAndActiveQuestionSetWithDependencies(versionKey, { queryDb });
+}
+
+export async function resolveVersionAndActiveQuestionSetWithDependencies(
+  versionKey: string,
+  dependencies: QuestionBankDependencies,
+): Promise<{
+  version: AssessmentVersionRow;
+  questionSet: AssessmentQuestionSetRow;
+} | null> {
+  const result = await dependencies.queryDb<VersionQuestionSetJoinRow>(
     `SELECT
        av.id,
        av.key,
@@ -133,8 +147,11 @@ export async function resolveVersionAndActiveQuestionSet(versionKey: string): Pr
   };
 }
 
-export async function getQuestionsWithOptions(questionSetId: string): Promise<QuestionPayload[]> {
-  const result = await queryDb<QuestionWithOptionRow>(
+export async function getQuestionsWithOptions(
+  questionSetId: string,
+  dependencies: QuestionBankDependencies = { queryDb },
+): Promise<QuestionPayload[]> {
+  const result = await dependencies.queryDb<QuestionWithOptionRow>(
     `SELECT
        q.question_number,
        q.question_key,
@@ -158,10 +175,17 @@ export async function getQuestionsWithOptions(questionSetId: string): Promise<Qu
 }
 
 export async function getQuestionsByVersionKey(versionKey: string): Promise<VersionQuestionsResponse | null> {
-  const resolved = await resolveVersionAndActiveQuestionSet(versionKey);
+  return getQuestionsByVersionKeyWithDependencies(versionKey, { queryDb });
+}
+
+export async function getQuestionsByVersionKeyWithDependencies(
+  versionKey: string,
+  dependencies: QuestionBankDependencies,
+): Promise<VersionQuestionsResponse | null> {
+  const resolved = await resolveVersionAndActiveQuestionSetWithDependencies(versionKey, dependencies);
   if (!resolved) return null;
 
-  const questions = await getQuestionsWithOptions(resolved.questionSet.id);
+  const questions = await getQuestionsWithOptions(resolved.questionSet.id, dependencies);
 
   return {
     version: {
@@ -182,7 +206,14 @@ export async function getQuestionsByVersionKey(versionKey: string): Promise<Vers
 }
 
 export async function getQuestionsByAssessmentId(assessmentId: string): Promise<AssessmentQuestionsResponse | null> {
-  const assessmentResult = await queryDb<AssessmentRow>(
+  return getQuestionsByAssessmentIdWithDependencies(assessmentId, { queryDb });
+}
+
+export async function getQuestionsByAssessmentIdWithDependencies(
+  assessmentId: string,
+  dependencies: QuestionBankDependencies,
+): Promise<AssessmentQuestionsResponse | null> {
+  const assessmentResult = await dependencies.queryDb<AssessmentRow>(
     `SELECT *
      FROM assessments
      WHERE id = $1`,
@@ -192,7 +223,7 @@ export async function getQuestionsByAssessmentId(assessmentId: string): Promise<
   const assessment = assessmentResult.rows[0];
   if (!assessment) return null;
 
-  const versionResult = await queryDb<AssessmentVersionRow>(
+  const versionResult = await dependencies.queryDb<AssessmentVersionRow>(
     `SELECT id, key, name, total_questions, is_active
      FROM assessment_versions
      WHERE id = $1`,
@@ -202,12 +233,12 @@ export async function getQuestionsByAssessmentId(assessmentId: string): Promise<
   const version = versionResult.rows[0];
   if (!version) return null;
 
-  const resolved = await resolveVersionAndActiveQuestionSet(version.key);
+  const resolved = await resolveVersionAndActiveQuestionSetWithDependencies(version.key, dependencies);
   if (!resolved) return null;
 
   const [questions, responsesResult] = await Promise.all([
-    getQuestionsWithOptions(resolved.questionSet.id),
-    queryDb<AssessmentResponseLiteRow>(
+    getQuestionsWithOptions(resolved.questionSet.id, dependencies),
+    dependencies.queryDb<AssessmentResponseLiteRow>(
       `SELECT question_id, response_value, response_time_ms, is_changed, updated_at
        FROM assessment_responses
        WHERE assessment_id = $1
