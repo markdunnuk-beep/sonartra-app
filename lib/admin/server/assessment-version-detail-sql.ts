@@ -1,6 +1,8 @@
 import {
+  hasAssessmentVersionPackageColumn,
   hasAssessmentVersionOptionalGovernanceAndRegressionColumn,
   type AdminAssessmentVersionSchemaCapabilities,
+  type AssessmentVersionOptionalPackageColumn,
   type AssessmentVersionOptionalGovernanceOrRegressionColumn,
 } from '@/lib/admin/server/assessment-version-schema-capabilities'
 
@@ -23,10 +25,35 @@ function getOptionalAssessmentVersionExpression(
   return `av.${columnName}`
 }
 
+function getOptionalAssessmentVersionPackageExpression(
+  capabilities: AdminAssessmentVersionSchemaCapabilities,
+  columnName: AssessmentVersionOptionalPackageColumn,
+  fallbackSql: string,
+): string {
+  if (!hasAssessmentVersionPackageColumn(capabilities, columnName)) {
+    return fallbackSql
+  }
+
+  return `av.${columnName}`
+}
+
 function getAssessmentVersionDetailProjectionBlock(
   capabilities: AdminAssessmentVersionSchemaCapabilities,
   options: Pick<AssessmentVersionSelectQueryOptions, 'includeAssessmentName'> = {},
 ): string {
+  const packageStatusColumn = getOptionalAssessmentVersionPackageExpression(
+    capabilities,
+    'package_status',
+    `case
+           when av.definition_payload is not null then 'valid'::text
+           else 'missing'::text
+         end`,
+  )
+  const packageSchemaVersionColumn = getOptionalAssessmentVersionPackageExpression(capabilities, 'package_schema_version', 'null::text')
+  const packageSourceTypeColumn = getOptionalAssessmentVersionPackageExpression(capabilities, 'package_source_type', 'null::text')
+  const packageImportedAtColumn = getOptionalAssessmentVersionPackageExpression(capabilities, 'package_imported_at', 'null::timestamptz')
+  const packageSourceFilenameColumn = getOptionalAssessmentVersionPackageExpression(capabilities, 'package_source_filename', 'null::text')
+  const packageValidationReportColumn = getOptionalAssessmentVersionPackageExpression(capabilities, 'package_validation_report_json', 'null::jsonb')
   const publishReadinessStatusColumn = getOptionalAssessmentVersionExpression(capabilities, 'publish_readiness_status', `'not_ready'::text`)
   const readinessCheckSummaryColumn = getOptionalAssessmentVersionExpression(capabilities, 'readiness_check_summary_json', 'null::jsonb')
   const lastReadinessEvaluatedAtColumn = getOptionalAssessmentVersionExpression(capabilities, 'last_readiness_evaluated_at', 'null::timestamptz')
@@ -38,6 +65,9 @@ function getAssessmentVersionDetailProjectionBlock(
   const latestRegressionSuiteSnapshotColumn = getOptionalAssessmentVersionExpression(capabilities, 'latest_regression_suite_snapshot_json', 'null::jsonb')
   const signOffByNameColumn = hasAssessmentVersionOptionalGovernanceAndRegressionColumn(capabilities, 'sign_off_by_identity_id')
     ? 'sign_off_by.full_name'
+    : 'null::text'
+  const packageImportedByNameColumn = hasAssessmentVersionPackageColumn(capabilities, 'package_imported_by_identity_id')
+    ? 'package_imported_by.full_name'
     : 'null::text'
   const assessmentNameColumn = options.includeAssessmentName
     ? ',\n         ad.name as assessment_name'
@@ -52,13 +82,13 @@ function getAssessmentVersionDetailProjectionBlock(
          (av.definition_payload is not null) as has_definition_payload,
          av.definition_payload,
          av.validation_status,
-         av.package_status,
-         av.package_schema_version,
-         av.package_source_type,
-         av.package_imported_at,
-         av.package_source_filename,
-         package_imported_by.full_name as package_imported_by_name,
-         av.package_validation_report_json,
+         ${packageStatusColumn} as package_status,
+         ${packageSchemaVersionColumn} as package_schema_version,
+         ${packageSourceTypeColumn} as package_source_type,
+         ${packageImportedAtColumn} as package_imported_at,
+         ${packageSourceFilenameColumn} as package_source_filename,
+         ${packageImportedByNameColumn} as package_imported_by_name,
+         ${packageValidationReportColumn} as package_validation_report_json,
          ${publishReadinessStatusColumn} as publish_readiness_status,
          ${readinessCheckSummaryColumn} as readiness_check_summary_json,
          ${lastReadinessEvaluatedAtColumn} as last_readiness_evaluated_at,
@@ -86,6 +116,10 @@ function getAssessmentVersionDetailJoinBlock(
     ? `
        left join admin_identities sign_off_by on sign_off_by.id = av.sign_off_by_identity_id`
     : ''
+  const packageImportedByJoin = hasAssessmentVersionPackageColumn(capabilities, 'package_imported_by_identity_id')
+    ? `
+       left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id`
+    : ''
   const assessmentJoin = options.includeAssessmentName
     ? `
        inner join assessment_definitions ad on ad.id = av.assessment_definition_id`
@@ -94,8 +128,7 @@ function getAssessmentVersionDetailJoinBlock(
   return `from assessment_versions av${assessmentJoin}
        left join admin_identities created_by on created_by.id = av.created_by_identity_id
        left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
-       left join admin_identities published_by on published_by.id = av.published_by_identity_id${signOffJoin}
-       left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id`
+       left join admin_identities published_by on published_by.id = av.published_by_identity_id${signOffJoin}${packageImportedByJoin}`
 }
 
 export function buildAssessmentVersionSelectQuery(

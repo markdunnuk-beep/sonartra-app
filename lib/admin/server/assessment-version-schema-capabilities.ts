@@ -1,5 +1,16 @@
 import { queryDb } from '@/lib/db'
 
+export const OPTIONAL_ASSESSMENT_VERSION_PACKAGE_COLUMNS = [
+  'package_raw_payload',
+  'package_schema_version',
+  'package_status',
+  'package_source_type',
+  'package_source_filename',
+  'package_imported_at',
+  'package_imported_by_identity_id',
+  'package_validation_report_json',
+] as const
+
 export const OPTIONAL_ASSESSMENT_VERSION_GOVERNANCE_AND_REGRESSION_COLUMNS = [
   'publish_readiness_status',
   'readiness_check_summary_json',
@@ -16,6 +27,9 @@ export const OPTIONAL_ASSESSMENT_VERSION_GOVERNANCE_AND_REGRESSION_COLUMNS = [
 export type AssessmentVersionOptionalGovernanceOrRegressionColumn =
   (typeof OPTIONAL_ASSESSMENT_VERSION_GOVERNANCE_AND_REGRESSION_COLUMNS)[number]
 
+export type AssessmentVersionOptionalPackageColumn =
+  (typeof OPTIONAL_ASSESSMENT_VERSION_PACKAGE_COLUMNS)[number]
+
 export interface AdminAssessmentVersionSchemaCapabilities {
   hasAssessmentVersionsTable: boolean
   assessmentVersionColumns: Set<string>
@@ -27,6 +41,13 @@ interface AssessmentVersionSchemaCapabilityDependencies {
 
 const defaultAssessmentVersionSchemaCapabilityDependencies: AssessmentVersionSchemaCapabilityDependencies = {
   queryDb,
+}
+
+export function hasAssessmentVersionPackageColumn(
+  capabilities: AdminAssessmentVersionSchemaCapabilities,
+  columnName: AssessmentVersionOptionalPackageColumn,
+): boolean {
+  return capabilities.assessmentVersionColumns.has(columnName)
 }
 
 export function hasAssessmentVersionOptionalGovernanceAndRegressionColumn(

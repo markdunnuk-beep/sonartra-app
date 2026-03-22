@@ -22,6 +22,14 @@ function buildAssessmentVersionSchemaCapabilities(columns: string[]): AdminAsses
 }
 
 const MODERN_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([
+  'package_raw_payload',
+  'package_schema_version',
+  'package_status',
+  'package_source_type',
+  'package_source_filename',
+  'package_imported_at',
+  'package_imported_by_identity_id',
+  'package_validation_report_json',
   'publish_readiness_status',
   'readiness_check_summary_json',
   'last_readiness_evaluated_at',
@@ -191,6 +199,9 @@ test('assessment detail loader uses modern capability mode when governance and r
   const version = detailData?.versions[0]
   assert.ok(version)
   assert.equal(versionQueries.length, 1)
+  assert.match(versionQueries[0] ?? '', /av\.package_schema_version/i)
+  assert.match(versionQueries[0] ?? '', /av\.package_validation_report_json/i)
+  assert.match(versionQueries[0] ?? '', /package_imported_by\.id = av\.package_imported_by_identity_id/i)
   assert.match(versionQueries[0] ?? '', /av\.latest_regression_suite_snapshot_json/i)
   assert.match(versionQueries[0] ?? '', /av\.sign_off_by_identity_id/i)
   assert.equal(version?.savedScenarios.length, 1)
@@ -215,6 +226,13 @@ test('assessment detail loader uses legacy capability mode when governance and r
         versionQueries.push(sql)
         return {
           rows: [makeVersionRow({
+            package_status: 'missing',
+            package_schema_version: null,
+            package_source_type: null,
+            package_imported_at: null,
+            package_source_filename: null,
+            package_imported_by_name: null,
+            package_validation_report_json: null,
             publish_readiness_status: 'not_ready',
             readiness_check_summary_json: null,
             last_readiness_evaluated_at: null,
@@ -242,8 +260,14 @@ test('assessment detail loader uses legacy capability mode when governance and r
   const version = detailData?.versions[0]
   assert.ok(version)
   assert.equal(versionQueries.length, 1)
+  assert.doesNotMatch(versionQueries[0] ?? '', /av\.package_schema_version/i)
+  assert.doesNotMatch(versionQueries[0] ?? '', /av\.package_validation_report_json/i)
+  assert.doesNotMatch(versionQueries[0] ?? '', /package_imported_by\.id = av\.package_imported_by_identity_id/i)
   assert.doesNotMatch(versionQueries[0] ?? '', /av\.sign_off_by_identity_id/i)
   assert.doesNotMatch(versionQueries[0] ?? '', /av\.latest_regression_suite_snapshot_json/i)
+  assert.equal(version?.packageInfo.status, 'missing')
+  assert.equal(version?.packageInfo.schemaVersion, null)
+  assert.equal(version?.packageInfo.importedByName, null)
   assert.deepEqual(version?.releaseGovernance?.signOff, {
     status: 'unsigned',
     signedOffBy: null,
