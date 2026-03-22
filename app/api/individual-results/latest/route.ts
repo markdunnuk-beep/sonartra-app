@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 
 import { getLatestIndividualResultForUser } from '@/lib/server/individual-results';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const response = await getLatestIndividualResultForUser();
 

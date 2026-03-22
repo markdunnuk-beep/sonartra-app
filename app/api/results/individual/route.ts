@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 
 import { getAuthenticatedIndividualIntelligenceResult } from '@/lib/server/individual-intelligence-result';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const model = await getAuthenticatedIndividualIntelligenceResult();
