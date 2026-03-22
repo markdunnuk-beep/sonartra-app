@@ -1,0 +1,72 @@
+import { queryDb } from '@/lib/db'
+
+export const OPTIONAL_ASSESSMENT_VERSION_GOVERNANCE_AND_REGRESSION_COLUMNS = [
+  'publish_readiness_status',
+  'readiness_check_summary_json',
+  'last_readiness_evaluated_at',
+  'sign_off_status',
+  'sign_off_at',
+  'sign_off_by_identity_id',
+  'sign_off_material_updated_at',
+  'release_notes',
+  'material_updated_at',
+  'latest_regression_suite_snapshot_json',
+] as const
+
+export type AssessmentVersionOptionalGovernanceOrRegressionColumn =
+  (typeof OPTIONAL_ASSESSMENT_VERSION_GOVERNANCE_AND_REGRESSION_COLUMNS)[number]
+
+export interface AdminAssessmentVersionSchemaCapabilities {
+  hasAssessmentVersionsTable: boolean
+  assessmentVersionColumns: Set<string>
+}
+
+interface AssessmentVersionSchemaCapabilityDependencies {
+  queryDb: typeof queryDb
+}
+
+const defaultAssessmentVersionSchemaCapabilityDependencies: AssessmentVersionSchemaCapabilityDependencies = {
+  queryDb,
+}
+
+export function hasAssessmentVersionOptionalGovernanceAndRegressionColumn(
+  capabilities: AdminAssessmentVersionSchemaCapabilities,
+  columnName: AssessmentVersionOptionalGovernanceOrRegressionColumn,
+): boolean {
+  return capabilities.assessmentVersionColumns.has(columnName)
+}
+
+export function hasAssessmentVersionOptionalGovernanceAndRegressionSupport(
+  capabilities: AdminAssessmentVersionSchemaCapabilities,
+): boolean {
+  return OPTIONAL_ASSESSMENT_VERSION_GOVERNANCE_AND_REGRESSION_COLUMNS.every((columnName) => capabilities.assessmentVersionColumns.has(columnName))
+}
+
+export async function getAdminAssessmentVersionSchemaCapabilities(
+  deps: AssessmentVersionSchemaCapabilityDependencies = defaultAssessmentVersionSchemaCapabilityDependencies,
+): Promise<AdminAssessmentVersionSchemaCapabilities> {
+  const tableResult = await deps.queryDb<{ has_assessment_versions_table: boolean | null }>(
+    `select to_regclass(current_schema() || '.assessment_versions') is not null as has_assessment_versions_table`,
+  )
+
+  const hasAssessmentVersionsTable = Boolean(tableResult.rows[0]?.has_assessment_versions_table)
+
+  if (!hasAssessmentVersionsTable) {
+    return {
+      hasAssessmentVersionsTable,
+      assessmentVersionColumns: new Set<string>(),
+    }
+  }
+
+  const columnResult = await deps.queryDb<{ column_name: string | null }>(
+    `select column_name
+     from information_schema.columns
+     where table_schema = current_schema()
+       and table_name = 'assessment_versions'`,
+  )
+
+  return {
+    hasAssessmentVersionsTable,
+    assessmentVersionColumns: new Set((columnResult.rows ?? []).flatMap((row) => row.column_name ? [row.column_name] : [])),
+  }
+}
