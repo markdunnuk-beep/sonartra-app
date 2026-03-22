@@ -19,9 +19,16 @@ interface NavigationStateResponse {
   }
 }
 
-export function Sidebar() {
+const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim())
+
+function SidebarContent({
+  userDisplayName,
+  authenticatedControlsEnabled,
+}: {
+  userDisplayName: string | null
+  authenticatedControlsEnabled: boolean
+}) {
   const pathname = usePathname()
-  const { user } = useUser()
   const [hasCompletedAssessment, setHasCompletedAssessment] = useState(false)
   const [adminHref, setAdminHref] = useState<string | null>(null)
 
@@ -53,16 +60,6 @@ export function Sidebar() {
       active = false
     }
   }, [])
-
-  const userDisplayName = useMemo(
-    () =>
-      deriveUserDisplayName({
-        firstName: user?.firstName,
-        lastName: user?.lastName,
-        emailAddress: user?.primaryEmailAddress?.emailAddress,
-      }),
-    [user?.firstName, user?.lastName, user?.primaryEmailAddress?.emailAddress]
-  )
 
   const links = useMemo(() => getSidebarLinks(hasCompletedAssessment, adminHref), [adminHref, hasCompletedAssessment])
 
@@ -101,17 +98,42 @@ export function Sidebar() {
         })}
       </nav>
 
-      <SignedIn>
-        <div className="mt-6 rounded-2xl border border-border/80 bg-bg/60 p-3.5 text-sm text-textSecondary lg:mt-auto">
-          <div className="flex items-center gap-2">
-            <UserButton afterSignOutUrl="/" />
-            <p className="font-medium text-textPrimary">{userDisplayName}</p>
+      {authenticatedControlsEnabled ? (
+        <SignedIn>
+          <div className="mt-6 rounded-2xl border border-border/80 bg-bg/60 p-3.5 text-sm text-textSecondary lg:mt-auto">
+            <div className="flex items-center gap-2">
+              <UserButton afterSignOutUrl="/" />
+              <p className="font-medium text-textPrimary">{userDisplayName}</p>
+            </div>
+            <SignOutButton>
+              <button className="mt-2 inline-block text-accent transition-colors hover:text-[#86beff]">Log out</button>
+            </SignOutButton>
           </div>
-          <SignOutButton>
-            <button className="mt-2 inline-block text-accent transition-colors hover:text-[#86beff]">Log out</button>
-          </SignOutButton>
-        </div>
-      </SignedIn>
+        </SignedIn>
+      ) : null}
     </aside>
   )
+}
+
+function SidebarWithClerk() {
+  const { user } = useUser()
+  const userDisplayName = useMemo(
+    () =>
+      deriveUserDisplayName({
+        firstName: user?.firstName,
+        lastName: user?.lastName,
+        emailAddress: user?.primaryEmailAddress?.emailAddress,
+      }),
+    [user?.firstName, user?.lastName, user?.primaryEmailAddress?.emailAddress]
+  )
+
+  return <SidebarContent userDisplayName={userDisplayName} authenticatedControlsEnabled />
+}
+
+export function Sidebar() {
+  if (!clerkEnabled) {
+    return <SidebarContent userDisplayName={null} authenticatedControlsEnabled={false} />
+  }
+
+  return <SidebarWithClerk />
 }

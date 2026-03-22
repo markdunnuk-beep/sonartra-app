@@ -5,6 +5,8 @@ import { AdminShell } from '@/components/admin/AdminShell'
 import { resolveAdminAccess } from '@/lib/admin/access'
 import { getAdminNavigationItems } from '@/lib/admin/navigation'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const access = await resolveAdminAccess()
 
