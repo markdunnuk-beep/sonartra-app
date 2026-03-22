@@ -2,6 +2,25 @@ import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg'
 
 const globalForDb = globalThis as unknown as { pool?: Pool }
 
+const DEFAULT_LOCAL_DB_POOL_MAX = 10
+const DEFAULT_PRODUCTION_DB_POOL_MAX = 2
+
+type DatabaseErrorClassification =
+  | 'configuration'
+  | 'pool_exhaustion'
+  | 'connectivity'
+  | 'schema'
+  | 'data'
+  | 'unknown'
+
+interface DatabaseErrorDiagnostics {
+  classification: DatabaseErrorClassification
+  code?: string
+  message: string
+  causeCode?: string
+  causeMessage?: string
+}
+
 export class DatabaseConfigurationError extends Error {
   override readonly cause?: unknown
 
@@ -22,28 +41,14 @@ export class DatabaseUnavailableError extends Error {
   }
 }
 
-function createPool(): Pool {
-  const connectionString = process.env.DATABASE_URL
+export class DatabaseQueryError extends Error {
+  override readonly cause?: unknown
 
-  if (!connectionString) {
-    throw new DatabaseConfigurationError('Database connection is not configured.')
+  constructor(message: string, cause?: unknown) {
+    super(message)
+    this.name = 'DatabaseQueryError'
+    this.cause = cause
   }
-
-  return new Pool({
-    connectionString,
-    max: 10,
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 10_000,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
-  })
-}
-
-function getPool(): Pool {
-  if (!globalForDb.pool) {
-    globalForDb.pool = createPool()
-  }
-
-  return globalForDb.pool
 }
 
 function extractDatabaseErrorCode(error: unknown): string | undefined {
@@ -63,41 +68,182 @@ function extractDatabaseErrorMessage(error: unknown): string {
   return 'Unknown database error.'
 }
 
-function toDatabaseError(error: unknown, operation: string): DatabaseConfigurationError | DatabaseUnavailableError {
-  if (error instanceof DatabaseConfigurationError || error instanceof DatabaseUnavailableError) {
+function extractCause(error: unknown): unknown {
+  if (!error || typeof error !== 'object' || !('cause' in error)) {
+    return undefined
+  }
+
+  return (error as { cause?: unknown }).cause
+}
+
+function classifyDatabaseError(error: unknown): DatabaseErrorDiagnostics {
+  const code = extractDatabaseErrorCode(error)
+  const message = extractDatabaseErrorMessage(error)
+  const cause = extractCause(error)
+  const causeCode = extractDatabaseErrorCode(cause)
+  const causeMessage = cause ? extractDatabaseErrorMessage(cause) : undefined
+  const normalizedMessage = message.toLowerCase()
+  const normalizedCauseMessage = causeMessage?.toLowerCase() ?? ''
+  const combinedMessage = `${normalizedMessage} ${normalizedCauseMessage}`.trim()
+  const effectiveCode = causeCode ?? code
+
+  if (error instanceof DatabaseConfigurationError) {
+    return { classification: 'configuration', code, message, causeCode, causeMessage }
+  }
+
+  if (
+    effectiveCode === '53300' ||
+    /max clients reached/.test(combinedMessage) ||
+    /too many clients/.test(combinedMessage) ||
+    /remaining connection slots are reserved/.test(combinedMessage) ||
+    /connection pool exhausted/.test(combinedMessage)
+  ) {
+    return { classification: 'pool_exhaustion', code, message, causeCode, causeMessage }
+  }
+
+  if (
+    effectiveCode === 'ECONNREFUSED' ||
+    effectiveCode === 'ECONNRESET' ||
+    effectiveCode === 'ENOTFOUND' ||
+    effectiveCode === 'EHOSTUNREACH' ||
+    effectiveCode === 'ETIMEDOUT' ||
+    effectiveCode === '28P01' ||
+    effectiveCode === '3D000' ||
+    effectiveCode === '57P01' ||
+    effectiveCode === '57P03' ||
+    effectiveCode === '08001' ||
+    effectiveCode === '08006' ||
+    /tenant or user not found/.test(combinedMessage) ||
+    /password authentication failed/.test(combinedMessage) ||
+    /database .* does not exist/.test(combinedMessage) ||
+    /connection terminated unexpectedly/.test(combinedMessage) ||
+    /timeout expired/.test(combinedMessage) ||
+    /connect econnrefused/.test(combinedMessage) ||
+    /getaddrinfo enotfound/.test(combinedMessage)
+  ) {
+    return { classification: 'connectivity', code, message, causeCode, causeMessage }
+  }
+
+  if (
+    effectiveCode === '42P01' ||
+    effectiveCode === '42703' ||
+    effectiveCode === '42601' ||
+    /relation .* does not exist/.test(combinedMessage) ||
+    /column .* does not exist/.test(combinedMessage) ||
+    /syntax error/.test(combinedMessage)
+  ) {
+    return { classification: 'schema', code, message, causeCode, causeMessage }
+  }
+
+  if (
+    effectiveCode === '22P02' ||
+    effectiveCode === '23502' ||
+    effectiveCode === '23503' ||
+    effectiveCode === '23505' ||
+    /violates/.test(combinedMessage) ||
+    /invalid input syntax/.test(combinedMessage)
+  ) {
+    return { classification: 'data', code, message, causeCode, causeMessage }
+  }
+
+  return { classification: 'unknown', code, message, causeCode, causeMessage }
+}
+
+function buildDatabaseErrorMessage(operation: string, diagnostics: DatabaseErrorDiagnostics): string {
+  switch (diagnostics.classification) {
+    case 'configuration':
+      return `${operation} because the database connection is not configured correctly.`
+    case 'pool_exhaustion':
+      return `${operation} because the database connection pool is saturated.`
+    case 'connectivity':
+      return `${operation} because the database connection is unavailable.`
+    case 'schema':
+      return `${operation} due to a database schema or query error.`
+    case 'data':
+      return `${operation} due to invalid or conflicting database data.`
+    default:
+      return `${operation} due to a database error.`
+  }
+}
+
+function toDatabaseError(error: unknown, operation: string): DatabaseConfigurationError | DatabaseUnavailableError | DatabaseQueryError {
+  if (error instanceof DatabaseConfigurationError || error instanceof DatabaseUnavailableError || error instanceof DatabaseQueryError) {
     return error
   }
 
-  const code = extractDatabaseErrorCode(error)
-  const rawMessage = extractDatabaseErrorMessage(error)
-  const normalisedMessage = rawMessage.toLowerCase()
+  const diagnostics = classifyDatabaseError(error)
+  const message = buildDatabaseErrorMessage(operation, diagnostics)
 
-  const isConnectionFailure =
-    code === 'ECONNREFUSED' ||
-    code === 'ECONNRESET' ||
-    code === 'ENOTFOUND' ||
-    code === 'EHOSTUNREACH' ||
-    code === 'ETIMEDOUT' ||
-    code === '28P01' ||
-    code === '3D000' ||
-    code === '53300' ||
-    code === '57P01' ||
-    code === '57P03' ||
-    code === '08001' ||
-    code === '08006' ||
-    /tenant or user not found/.test(normalisedMessage) ||
-    /password authentication failed/.test(normalisedMessage) ||
-    /database .* does not exist/.test(normalisedMessage) ||
-    /connection terminated unexpectedly/.test(normalisedMessage) ||
-    /timeout expired/.test(normalisedMessage) ||
-    /connect econnrefused/.test(normalisedMessage) ||
-    /getaddrinfo enotfound/.test(normalisedMessage)
-
-  if (isConnectionFailure) {
-    return new DatabaseUnavailableError(`${operation} because the database connection is unavailable.`, error)
+  if (diagnostics.classification === 'configuration') {
+    return new DatabaseConfigurationError(message, error)
   }
 
-  return new DatabaseUnavailableError(`${operation} due to a database error.`, error)
+  if (diagnostics.classification === 'pool_exhaustion' || diagnostics.classification === 'connectivity') {
+    return new DatabaseUnavailableError(message, error)
+  }
+
+  return new DatabaseQueryError(message, error)
+}
+
+function parsePoolMaxValue(value: string | undefined): number | null {
+  if (!value) {
+    return null
+  }
+
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return null
+  }
+
+  return parsed
+}
+
+export function resolveDatabasePoolMax(env: NodeJS.ProcessEnv = process.env): number {
+  const configured = parsePoolMaxValue(env.DB_POOL_MAX)
+  if (configured !== null) {
+    return configured
+  }
+
+  return env.NODE_ENV === 'production' ? DEFAULT_PRODUCTION_DB_POOL_MAX : DEFAULT_LOCAL_DB_POOL_MAX
+}
+
+function createPool(): Pool {
+  const connectionString = process.env.DATABASE_URL
+
+  if (!connectionString) {
+    throw new DatabaseConfigurationError('Database connection is not configured.')
+  }
+
+  return new Pool({
+    connectionString,
+    max: resolveDatabasePoolMax(process.env),
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 10_000,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+  })
+}
+
+function getPool(): Pool {
+  if (!globalForDb.pool) {
+    globalForDb.pool = createPool()
+  }
+
+  return globalForDb.pool
+}
+
+export function getDatabaseErrorDiagnostics(error: unknown): DatabaseErrorDiagnostics {
+  return classifyDatabaseError(error)
+}
+
+export function logDatabaseError(context: string, error: unknown): void {
+  const diagnostics = getDatabaseErrorDiagnostics(error)
+  console.error(context, {
+    classification: diagnostics.classification,
+    code: diagnostics.code,
+    message: diagnostics.message,
+    causeCode: diagnostics.causeCode,
+    causeMessage: diagnostics.causeMessage,
+  })
 }
 
 export function describeDatabaseError(error: unknown): string {
@@ -128,7 +274,7 @@ export async function withTransaction<T>(work: (client: PoolClient) => Promise<T
     try {
       await client.query('ROLLBACK')
     } catch (rollbackError) {
-      console.error('Database transaction rollback failed:', describeDatabaseError(rollbackError))
+      logDatabaseError('Database transaction rollback failed.', rollbackError)
     }
 
     throw toDatabaseError(error, 'Database transaction failed')

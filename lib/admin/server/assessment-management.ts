@@ -34,7 +34,7 @@ import {
   parseAdminAssessmentSimulationPayload,
   type AdminAssessmentSimulationActionState,
 } from '@/lib/admin/domain/assessment-simulation'
-import { queryDb, withTransaction, describeDatabaseError } from '@/lib/db'
+import { queryDb, withTransaction, describeDatabaseError, logDatabaseError } from '@/lib/db'
 import { getScopedAdminAuditActivity, mapScopedAuditEventsToAssessmentActivity } from '@/lib/admin/server/audit-workspace'
 import {
   getAdminAssessmentVersionSchemaCapabilities,
@@ -1525,7 +1525,7 @@ export async function getAdminAssessmentRegistryData(
     return buildAdminAssessmentRegistryData({ ...filters, page }, entries, totalCount)
   } catch (error) {
     const notice = classifyAssessmentRegistryLoadFailure(error)
-    console.error('Admin assessment registry load failed:', notice.title, describeDatabaseError(error))
+    logDatabaseError(`[admin-assessment-management] Admin assessment registry load failed: ${notice.title}`, error)
     return buildAdminAssessmentRegistryData(filters, [], 0, notice)
   }
 }
@@ -1534,30 +1534,33 @@ export async function getAdminAssessmentDetailData(
   assessmentId: string,
   deps: AssessmentDetailQueryDependencies = defaultAssessmentDetailQueryDependencies,
 ): Promise<AdminAssessmentDetailData | null> {
-  const [summaryResult, versionsResult, savedScenariosResult, activity] = await Promise.all([
-    deps.queryDb<AssessmentSummaryRow>(
-      `select
-         ad.id,
-         ad.key,
-         ad.slug,
-         ad.name,
-         ad.category,
-         ad.description,
-         ad.lifecycle_status,
-         ad.current_published_version_id,
-         current_version.version_label as current_published_version_label,
-         ad.created_at,
-         ad.updated_at
-       from assessment_definitions ad
-       left join assessment_versions current_version on current_version.id = ad.current_published_version_id
-       where ad.id = $1
-      limit 1`,
-      [assessmentId],
-    ),
-    loadAssessmentVersionDetailRows(assessmentId, deps),
-    loadAssessmentSavedScenarioRows(assessmentId, deps.queryDb),
-    deps.getScopedAdminAuditActivity({ entityType: 'assessment', entityId: assessmentId, includeSecondaryEntityType: 'assessment_version', limit: 40 }),
-  ])
+  const summaryResult = await deps.queryDb<AssessmentSummaryRow>(
+    `select
+       ad.id,
+       ad.key,
+       ad.slug,
+       ad.name,
+       ad.category,
+       ad.description,
+       ad.lifecycle_status,
+       ad.current_published_version_id,
+       current_version.version_label as current_published_version_label,
+       ad.created_at,
+       ad.updated_at
+     from assessment_definitions ad
+     left join assessment_versions current_version on current_version.id = ad.current_published_version_id
+     where ad.id = $1
+    limit 1`,
+    [assessmentId],
+  )
+  const versionsResult = await loadAssessmentVersionDetailRows(assessmentId, deps)
+  const savedScenariosResult = await loadAssessmentSavedScenarioRows(assessmentId, deps.queryDb)
+  const activity = await deps.getScopedAdminAuditActivity({
+    entityType: 'assessment',
+    entityId: assessmentId,
+    includeSecondaryEntityType: 'assessment_version',
+    limit: 40,
+  })
 
   const assessment = mapAssessmentSummaryRow(summaryResult.rows[0])
 
@@ -1761,11 +1764,8 @@ async function persistVersionReleaseReadiness(
     return { version: null, summary: null }
   }
 
-  const [versionRows, scenariosByVersion] = await Promise.all([
-    loadAssessmentVersionsForScenarioWork(client, input.assessmentId, input.getAssessmentVersionSchemaCapabilities),
-    loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
-  ])
-  const version = mapAssessmentVersionRows(versionRows, scenariosByVersion).find((entry) => entry.id === input.versionId) ?? null
+  const versions = await loadAssessmentVersionsWithSavedScenarios(client, input.assessmentId, input.getAssessmentVersionSchemaCapabilities)
+  const version = versions.find((entry) => entry.id === input.versionId) ?? null
 
   if (!version) {
     return { version: null, summary: null }
@@ -1901,6 +1901,16 @@ async function loadAssessmentSavedScenariosForAssessment(client: PoolClient, ass
   return mapSavedScenarioRows(await loadAssessmentSavedScenarioRows(assessmentId, client.query.bind(client)))
 }
 
+async function loadAssessmentVersionsWithSavedScenarios(
+  client: PoolClient,
+  assessmentId: string,
+  getCapabilities: typeof getAdminAssessmentVersionSchemaCapabilities,
+): Promise<AdminAssessmentVersionRecord[]> {
+  const versionRows = await loadAssessmentVersionsForScenarioWork(client, assessmentId, getCapabilities)
+  const scenariosByVersion = await loadAssessmentSavedScenariosForAssessment(client, assessmentId)
+  return mapAssessmentVersionRows(versionRows, scenariosByVersion)
+}
+
 async function loadExistingScenarioNames(client: PoolClient, versionId: string): Promise<Set<string>> {
   const result = await client.query<{ name: string | null }>(
     `select name
@@ -1940,10 +1950,8 @@ export async function createAdminAssessment(
   const category = normaliseIdentifier(input.category)
   const description = normaliseNullableField(input.description)
 
-  const [keyConflict, slugConflict] = await Promise.all([
-    deps.queryDb<{ id: string }>('select id from assessment_definitions where key = $1 limit 1', [key]),
-    deps.queryDb<{ id: string }>('select id from assessment_definitions where slug = $1 limit 1', [slug]),
-  ])
+  const keyConflict = await deps.queryDb<{ id: string }>('select id from assessment_definitions where key = $1 limit 1', [key])
+  const slugConflict = await deps.queryDb<{ id: string }>('select id from assessment_definitions where slug = $1 limit 1', [slug])
 
   if (keyConflict.rows[0]) {
     return {
@@ -2006,7 +2014,7 @@ export async function createAdminAssessment(
       assessmentId: created,
     }
   } catch (error) {
-    console.error('[admin-assessment-management] Failed to create assessment.', error)
+    logDatabaseError('[admin-assessment-management] Failed to create assessment.', error)
     return {
       ok: false,
       code: 'unknown_error',
@@ -2124,7 +2132,7 @@ export async function createAdminAssessmentDraftVersion(
       }
     })
   } catch (error) {
-    console.error('[admin-assessment-management] Failed to create draft version.', error)
+    logDatabaseError('[admin-assessment-management] Failed to create draft version.', error)
     return {
       ok: false,
       code: 'unknown_error',
@@ -2353,7 +2361,7 @@ export async function importAdminAssessmentPackage(
     if (compatibilityFailure) {
       return compatibilityFailure
     }
-    console.error('[admin-assessment-management] Failed to import assessment package.', error)
+    logDatabaseError('[admin-assessment-management] Failed to import assessment package.', error)
     return {
       ok: false,
       code: 'unknown_error',
@@ -2520,7 +2528,7 @@ export async function simulateAdminAssessmentVersion(
       }
     })
   } catch (error) {
-    console.error('[admin-assessment-management] Failed to simulate version.', error)
+    logDatabaseError('[admin-assessment-management] Failed to simulate version.', error)
     return {
       ok: false,
       code: 'unknown_error',
@@ -2546,11 +2554,7 @@ export async function importAdminAssessmentSavedScenarios(
 
   try {
     return await deps.withTransaction(async (client) => {
-      const [versionRows, scenariosByVersion] = await Promise.all([
-        loadAssessmentVersionsForScenarioWork(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities),
-        loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
-      ])
-      const versions = mapAssessmentVersionRows(versionRows, scenariosByVersion)
+      const versions = await loadAssessmentVersionsWithSavedScenarios(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities)
       const targetVersion = versions.find((entry) => entry.id === input.targetVersionId)
 
       if (!targetVersion) {
@@ -2688,7 +2692,7 @@ export async function importAdminAssessmentSavedScenarios(
     if (compatibilityFailure) {
       return { ...compatibilityFailure, sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
     }
-    console.error('[admin-assessment-management] Failed to import saved scenarios.', error)
+    logDatabaseError('[admin-assessment-management] Failed to import saved scenarios.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error), sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
   }
 }
@@ -2706,11 +2710,7 @@ export async function cloneAdminAssessmentSavedScenario(
 
   try {
     return await deps.withTransaction(async (client) => {
-      const [versionRows, scenariosByVersion] = await Promise.all([
-        loadAssessmentVersionsForScenarioWork(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities),
-        loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
-      ])
-      const versions = mapAssessmentVersionRows(versionRows, scenariosByVersion)
+      const versions = await loadAssessmentVersionsWithSavedScenarios(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities)
       const targetVersion = versions.find((entry) => entry.id === input.targetVersionId)
 
       if (!targetVersion) {
@@ -2834,7 +2834,7 @@ export async function cloneAdminAssessmentSavedScenario(
       }
     })
   } catch (error) {
-    console.error('[admin-assessment-management] Failed to clone saved scenario.', error)
+    logDatabaseError('[admin-assessment-management] Failed to clone saved scenario.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error), sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
   }
 }
@@ -2858,11 +2858,7 @@ export async function runAdminAssessmentScenarioSuite(
       )
       writePolicy.assertSupported('regression_snapshot', 'persisting the regression suite snapshot')
 
-      const [versionRows, scenariosByVersion] = await Promise.all([
-        loadAssessmentVersionsForScenarioWork(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities),
-        loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
-      ])
-      const versions = mapAssessmentVersionRows(versionRows, scenariosByVersion)
+      const versions = await loadAssessmentVersionsWithSavedScenarios(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities)
       const version = versions.find((entry) => entry.id === input.versionId)
 
       if (!version) {
@@ -2968,7 +2964,7 @@ export async function runAdminAssessmentScenarioSuite(
     if (compatibilityFailure) {
       return compatibilityFailure
     }
-    console.error('[admin-assessment-management] Failed to run regression suite.', error)
+    logDatabaseError('[admin-assessment-management] Failed to run regression suite.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
   }
 }
@@ -3263,7 +3259,7 @@ export async function publishAdminAssessmentVersion(
     if (mappedDatabaseFailure) {
       return mappedDatabaseFailure
     }
-    console.error('[admin-assessment-management] Failed to publish version.', error)
+    logDatabaseError('[admin-assessment-management] Failed to publish version.', error)
     return {
       ok: false,
       code: 'unknown_error',
@@ -3331,7 +3327,7 @@ export async function refreshAdminAssessmentVersionReleaseReadiness(
     if (compatibilityFailure) {
       return compatibilityFailure
     }
-    console.error('[admin-assessment-management] Failed to refresh release readiness.', error)
+    logDatabaseError('[admin-assessment-management] Failed to refresh release readiness.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
   }
 }
@@ -3356,11 +3352,8 @@ export async function signOffAdminAssessmentVersion(
       writePolicy.assertSupported('release_readiness', 'recording release sign-off')
       writePolicy.assertSupported('release_sign_off', 'recording release sign-off')
 
-      const [versionRows, scenariosByVersion] = await Promise.all([
-        loadAssessmentVersionsForScenarioWork(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities),
-        loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
-      ])
-      const version = mapAssessmentVersionRows(versionRows, scenariosByVersion).find((entry) => entry.id === input.versionId) ?? null
+      const versions = await loadAssessmentVersionsWithSavedScenarios(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities)
+      const version = versions.find((entry) => entry.id === input.versionId) ?? null
       if (!version) {
         return { ok: false, code: 'not_found', message: 'Version not found.' }
       }
@@ -3419,7 +3412,7 @@ export async function signOffAdminAssessmentVersion(
     if (compatibilityFailure) {
       return compatibilityFailure
     }
-    console.error('[admin-assessment-management] Failed to sign off version.', error)
+    logDatabaseError('[admin-assessment-management] Failed to sign off version.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
   }
 }
@@ -3488,7 +3481,7 @@ export async function removeAdminAssessmentVersionSignOff(
     if (compatibilityFailure) {
       return compatibilityFailure
     }
-    console.error('[admin-assessment-management] Failed to remove sign-off.', error)
+    logDatabaseError('[admin-assessment-management] Failed to remove sign-off.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
   }
 }
@@ -3569,7 +3562,7 @@ export async function updateAdminAssessmentVersionReleaseNotes(
     if (compatibilityFailure) {
       return compatibilityFailure
     }
-    console.error('[admin-assessment-management] Failed to update release notes.', error)
+    logDatabaseError('[admin-assessment-management] Failed to update release notes.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
   }
 }
@@ -3687,7 +3680,7 @@ export async function archiveAdminAssessmentVersion(
       }
     })
   } catch (error) {
-    console.error('[admin-assessment-management] Failed to archive version.', error)
+    logDatabaseError('[admin-assessment-management] Failed to archive version.', error)
     return {
       ok: false,
       code: 'unknown_error',
