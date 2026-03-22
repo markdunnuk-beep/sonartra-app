@@ -2,33 +2,32 @@
 
 ## Established policy
 
-For `assessment_versions`, treat newer optional governance/regression fields as capability-driven rather than universally available.
+For `assessment_versions`, treat newer package-era, governance, and regression fields as capability-driven rather than universally available.
 
-- **Capability-driven reads:** read queries should inspect schema capabilities first and project safe fallbacks (`null`, `updated_at`, or default readiness state) when optional governance/regression columns are absent.
-- **Explicit write gating:** mutation paths that need optional governance/regression columns must declare the required columns up front and fail with a `schema_incompatible` result instead of relying on raw database errors.
-- **Migration-required vs safely degradable writes:**
+- **Capability-driven reads:** read queries should inspect schema capabilities first and project safe fallbacks (`null`, `updated_at`, or default readiness state) when optional `assessment_versions` columns are absent.
+- **Explicit write gating:** mutation paths that need optional `assessment_versions` columns must declare the required columns up front and fail with a `schema_incompatible` result instead of relying on raw database errors.
+- **Migration-required writes vs safely degradable writes:**
   - Safely degradable behavior is acceptable for **reads** and for write-side follow-up work that can be skipped without corrupting state, such as opportunistic readiness refreshes after package/scenario activity.
-  - Migration-required behavior is required for writes whose meaning depends on the optional columns being persisted correctly, such as release readiness persistence, sign-off state changes, release-note persistence, and regression snapshot persistence.
+  - Migration-required writes are required for changes whose meaning depends on optional columns being persisted correctly, such as package metadata persistence, release readiness persistence, sign-off state changes, release-note persistence, and regression snapshot persistence.
 
-## Post-refactor audit inventory
+## Current compatibility coverage
 
-### Already aligned with the new compatibility pattern
+### Covered by the compatibility pattern
 
-- `lib/admin/server/assessment-version-schema-capabilities.ts` centralizes optional governance/regression column discovery for `assessment_versions`.
-- `lib/admin/server/assessment-version-detail-sql.ts` uses capability-aware projections and joins so detail reads degrade safely when governance/regression columns are missing.
-- `lib/admin/server/assessment-management.ts` applies the pattern for governance/regression reads and for explicitly gated writes (`release_readiness`, `release_sign_off`, `release_notes`, `regression_snapshot`), including `schema_incompatible` responses instead of uncaught SQL errors.
+- `lib/admin/server/assessment-version-schema-capabilities.ts` centralizes optional package-era, governance, and regression column discovery for `assessment_versions`.
+- `lib/admin/server/assessment-version-detail-sql.ts` keeps detail reads capability-driven, including package-era projections/joins plus governance/regression fallbacks when optional columns are missing.
+- `lib/admin/server/assessment-management.ts` uses the same capability snapshot for admin detail reads and explicit write gating for package metadata, release readiness, sign-off, release notes, and regression snapshot writes. Migration-required writes now return `schema_incompatible` instead of surfacing raw SQL failures.
+- `lib/admin/server/assessment-regression.ts` loads version detail through the shared capability-driven SQL builder, so package-era compatibility reads follow the same policy there too.
 
-### Still needing read-path hardening
+### Remaining scope notes
 
-- `lib/admin/server/assessment-management.ts` still has package-oriented read paths that assume the 0008 package columns exist (`package_status`, `package_schema_version`, `package_source_type`, `package_imported_at`, `package_source_filename`, `package_imported_by_identity_id`, `package_validation_report_json`, and `definition_payload`). These reads are modern-schema-only today even though governance/regression reads were hardened.
-- `lib/admin/server/assessment-regression.ts` still loads version/package data through direct `assessment_versions` projections with no schema capability check, so older schemas missing package-era columns will still fail as raw database errors.
+- Compatibility coverage here is specifically for optional `assessment_versions` columns introduced across the package-era (`0008`) and governance/regression migrations (`0009`/`0010`). It does not imply broad compatibility for unrelated admin tables if those tables are missing entirely.
+- Keep new `assessment_versions` reads capability-driven by default, and classify new writes up front as either migration-required writes or safely degradable writes before adding SQL.
 
-### Still needing write-path hardening
+## Terminology guide for future changes
 
-- `lib/admin/server/assessment-management.ts` package import remains a modern-schema-only write path. It writes package-era optional columns directly and does not yet have the same explicit capability gate used for governance/regression writes. If legacy package-column support still matters, this is the next write path to harden.
-
-## Practical follow-up priority
-
-1. If older pre-0008 environments still need to boot admin assessment tooling, add a package-column capability helper parallel to the governance/regression helper and route package-dependent reads through it.
-2. Add an explicit migration-required gate for package import writes so unsupported schemas return a clear compatibility result instead of an opaque database failure.
-3. Leave the current governance/regression pattern in place; that portion of the refactor looks internally consistent.
+- **Capability-driven reads:** branch on discovered schema columns and project safe fallbacks.
+- **Explicit write gating:** check required columns before executing a mutation path.
+- **Migration-required writes:** fail fast with `schema_incompatible` when required optional columns are unavailable.
+- **Safely degradable writes:** skip optional follow-up persistence when doing so does not corrupt or misstate version state.
+- **Package-era compatibility:** the same policy applied to `assessment_versions` columns introduced for package import metadata, not just governance/regression fields.

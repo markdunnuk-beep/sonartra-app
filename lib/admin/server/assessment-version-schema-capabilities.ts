@@ -1,3 +1,4 @@
+// See docs/admin-assessment-version-compatibility.md for the assessment_versions compatibility policy used by package-era and governance/regression helpers.
 import { queryDb } from '@/lib/db'
 
 export const OPTIONAL_ASSESSMENT_VERSION_PACKAGE_COLUMNS = [
