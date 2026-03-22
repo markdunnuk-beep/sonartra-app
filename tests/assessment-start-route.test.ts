@@ -1,56 +1,50 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { startLiveSignalsAssessment } from '../app/api/assessments/start/route'
+import { startLiveSignalsAssessment } from '../lib/server/start-live-signals-assessment'
 
-type StartDeps = NonNullable<Parameters<typeof startLiveSignalsAssessment>[1]>
-
-function buildDeps(overrides: Partial<StartDeps> = {}): StartDeps {
-  return {
-    resolveAuthenticatedAppUser: async () => ({
-      clerkUserId: 'clerk-1',
-      dbUserId: 'user-1',
-      email: 'user@example.com',
-    }),
-    resolveLiveSignalsPublishedVersion: async () => ({
-      assessmentDefinitionId: 'definition-signals',
-      assessmentDefinitionKey: 'sonartra_signals',
-      assessmentDefinitionSlug: 'sonartra-signals',
-      currentPublishedVersionId: 'version-live',
-      assessmentVersionId: 'version-live',
-      assessmentVersionKey: 'signals-v2',
-      assessmentVersionName: 'Sonartra Signals v2',
-      totalQuestions: 80,
-      isActive: true,
-    }),
-    queryDb: async () => ({ rows: [] }),
-    withTransaction: async <T>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) =>
-      work({
-        query: async () => ({ rows: [{ id: 'assessment-new' }] }),
-      }),
-    ...overrides,
-  }
-}
-
-test('start route creates a new live Signals attempt from the published admin version', async () => {
+test('start helper creates a new live Signals attempt from the published admin version', async () => {
   const queryCalls: Array<{ sql: string; params?: unknown[] }> = []
   let insertedParams: unknown[] | undefined
 
   const response = await startLiveSignalsAssessment(
-    { source: 'workspace' },
-    buildDeps({
+    {
+      appUser: {
+        clerkUserId: 'clerk-1',
+        dbUserId: 'user-1',
+        email: 'user@example.com',
+      },
+      source: 'workspace',
+    },
+    {
       queryDb: async (sql: string, params?: unknown[]) => {
         queryCalls.push({ sql, params })
-        return { rows: [] }
+
+        if (queryCalls.length === 1) {
+          return {
+            rows: [
+              {
+                id: 'version-live',
+                key: 'signals-v2',
+                name: 'Sonartra Signals v2',
+                total_questions: 80,
+                is_active: true,
+                assessment_definition_id: 'definition-signals',
+              },
+            ],
+          } as never
+        }
+
+        return { rows: [] } as never
       },
-      withTransaction: async (work) =>
+      withTransaction: async <T>(work: (client: never) => Promise<T>) =>
         work({
           query: async (_sql: string, params?: unknown[]) => {
             insertedParams = params
             return { rows: [{ id: 'assessment-new' }] }
           },
-        }),
-    }),
+        } as never),
+    },
   )
 
   assert.equal(response.status, 201)
@@ -64,22 +58,26 @@ test('start route creates a new live Signals attempt from the published admin ve
       totalQuestions: 80,
     },
   })
-  assert.match(queryCalls[0]?.sql ?? '', /av\.assessment_definition_id = \$2/)
+  assert.match(queryCalls[1]?.sql ?? '', /av\.assessment_definition_id = \$2/)
   assert.deepEqual(insertedParams, ['user-1', 'version-live', 'workspace'])
 })
 
-test('start route blocks launches when no published live Signals version is available', async () => {
+test('start helper blocks launches when no published live Signals version is available', async () => {
   const response = await startLiveSignalsAssessment(
-    { source: 'direct' },
-    buildDeps({
-      resolveLiveSignalsPublishedVersion: async () => null,
-      queryDb: async () => {
-        throw new Error('queryDb should not be called when no published version exists')
+    {
+      appUser: {
+        clerkUserId: 'clerk-1',
+        dbUserId: 'user-1',
+        email: 'user@example.com',
       },
+      source: 'direct',
+    },
+    {
+      queryDb: async () => ({ rows: [] }) as never,
       withTransaction: async () => {
         throw new Error('withTransaction should not be called when no published version exists')
       },
-    }) as never,
+    },
   )
 
   assert.equal(response.status, 404)
@@ -88,28 +86,52 @@ test('start route blocks launches when no published live Signals version is avai
   })
 })
 
-test('start route resumes the latest unfinished Signals attempt even after the published version changes', async () => {
+test('start helper resumes the latest unfinished Signals attempt even after the published version changes', async () => {
   let transactionCalled = false
 
   const response = await startLiveSignalsAssessment(
-    { source: 'direct' },
-    buildDeps({
-      queryDb: async () => ({
-        rows: [
-          {
-            id: 'assessment-in-progress',
-            assessment_version_id: 'version-previous',
-            assessment_version_key: 'signals-v1',
-            assessment_version_name: 'Sonartra Signals v1',
-            total_questions: 80,
-          },
-        ],
-      }),
+    {
+      appUser: {
+        clerkUserId: 'clerk-1',
+        dbUserId: 'user-1',
+        email: 'user@example.com',
+      },
+      source: 'direct',
+    },
+    {
+      queryDb: async (sql: string) => {
+        if (/from assessment_definitions ad/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'version-live',
+                key: 'signals-v2',
+                name: 'Sonartra Signals v2',
+                total_questions: 80,
+                is_active: true,
+                assessment_definition_id: 'definition-signals',
+              },
+            ],
+          } as never
+        }
+
+        return {
+          rows: [
+            {
+              id: 'assessment-in-progress',
+              version_id: 'version-previous',
+              version_key: 'signals-v1',
+              version_name: 'Sonartra Signals v1',
+              total_questions: 80,
+            },
+          ],
+        } as never
+      },
       withTransaction: async () => {
         transactionCalled = true
         throw new Error('withTransaction should not be called when resuming an existing attempt')
       },
-    }) as never,
+    },
   )
 
   assert.equal(response.status, 200)

@@ -1,16 +1,19 @@
 import AssessmentPageClient from './AssessmentPageClient'
 
-import { resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness'
+import { loadLiveAssessmentRepositoryInventory } from '@/lib/server/assessment-repository-inventory'
+import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
 import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AssessmentPage() {
-  const resolved = await resolveIndividualLifecycleState()
+  const appUser = await resolveAuthenticatedAppUser()
 
-  if (resolved.authState === 'unauthenticated') {
+  if (!appUser) {
     redirect('/sign-in')
   }
 
-  return <AssessmentPageClient />
+  const inventory = await loadLiveAssessmentRepositoryInventory(appUser.dbUserId)
+
+  return <AssessmentPageClient inventory={inventory} />
 }

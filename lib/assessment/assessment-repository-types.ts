@@ -1,6 +1,8 @@
 export type AssessmentRepositoryCategory = 'individual' | 'team'
 
-export type AssessmentRepositoryStatus = 'not_started' | 'in_progress' | 'complete' | 'coming_soon'
+export type AssessmentRepositoryStatus = 'not_started' | 'in_progress' | 'processing' | 'complete' | 'error' | 'coming_soon'
+
+export type AssessmentRepositoryLifecycleState = 'not_started' | 'in_progress' | 'completed_processing' | 'ready' | 'error'
 
 export type AssessmentRepositoryScopeFilter = 'all' | 'individual' | 'team'
 
@@ -14,6 +16,15 @@ export interface AssessmentRepositoryFilterState {
 export interface AssessmentRepositoryDetailRow {
   label: string
   value: string
+}
+
+export interface AssessmentRepositoryAvailabilityMeta {
+  definitionId: string
+  definitionKey: string
+  definitionSlug: string
+  versionId: string
+  versionKey: string
+  versionName: string
 }
 
 export interface AssessmentRepositoryItem {
@@ -41,6 +52,12 @@ export interface AssessmentRepositoryItem {
   assessmentHref?: string
   resultsHref?: string
   productOrder: number
+  lifecycleState?: AssessmentRepositoryLifecycleState
+  inventorySource?: 'static' | 'server'
+  availability?: AssessmentRepositoryAvailabilityMeta
+  latestAttemptId?: string | null
+  latestResultId?: string | null
+  latestResultStatus?: 'pending' | 'complete' | 'failed' | null
 }
 
 export interface AssessmentRepositorySectionModel {
