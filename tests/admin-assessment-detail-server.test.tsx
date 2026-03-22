@@ -13,6 +13,12 @@ function buildMissingRelationError(relationName: string): DatabaseUnavailableErr
   return new DatabaseUnavailableError('Database query failed due to a database error.', cause)
 }
 
+function buildMissingColumnError(columnName: string): DatabaseUnavailableError {
+  const cause = new Error(`column ${columnName} does not exist`) as Error & { code?: string }
+  cause.code = '42703'
+  return new DatabaseUnavailableError('Database query failed due to a database error.', cause)
+}
+
 test('assessment detail loader falls back to an empty saved-scenarios collection when the optional relation is missing', async () => {
   const queries: string[] = []
 
@@ -257,6 +263,139 @@ test('assessment detail loader still throws unrelated saved-scenarios query fail
           const cause = new Error('permission denied for relation assessment_version_saved_scenarios') as Error & { code?: string }
           cause.code = '42501'
           throw new DatabaseUnavailableError('Database query failed due to a database error.', cause)
+        }
+
+        throw new Error(`Unexpected query: ${sql}`)
+      },
+      getScopedAdminAuditActivity: async () => [],
+    }),
+    /Database query failed due to a database error/,
+  )
+})
+
+test('assessment detail loader falls back to empty sign-off metadata when release-governance columns are not deployed', async () => {
+  const versionQueries: string[] = []
+
+  const detailData = await getAdminAssessmentDetailData('assessment-1', {
+    queryDb: async (sql) => {
+      if (/from assessment_definitions ad/i.test(sql)) {
+        return {
+          rows: [{
+            id: 'assessment-1',
+            key: 'wplp_80',
+            slug: 'wplp-80',
+            name: 'WPLP-80',
+            category: 'behavioural_intelligence',
+            description: 'Warehouse performance leadership profile.',
+            lifecycle_status: 'published',
+            current_published_version_id: 'version-1',
+            current_published_version_label: '1.0.0',
+            created_at: '2026-03-01T09:00:00Z',
+            updated_at: '2026-03-21T09:00:00Z',
+          }],
+        } as never
+      }
+
+      if (/from assessment_versions av/i.test(sql)) {
+        versionQueries.push(sql)
+
+        if (/sign_off_by_identity_id/i.test(sql)) {
+          throw buildMissingColumnError('av.sign_off_by_identity_id')
+        }
+
+        return {
+          rows: [{
+            id: 'version-1',
+            assessment_definition_id: 'assessment-1',
+            version_label: '1.0.0',
+            lifecycle_status: 'published',
+            source_type: 'manual',
+            notes: 'Current production release',
+            has_definition_payload: false,
+            definition_payload: null,
+            validation_status: null,
+            package_status: null,
+            package_schema_version: null,
+            package_source_type: null,
+            package_imported_at: null,
+            package_source_filename: null,
+            package_imported_by_name: null,
+            package_validation_report_json: null,
+            publish_readiness_status: 'not_ready',
+            readiness_check_summary_json: null,
+            last_readiness_evaluated_at: null,
+            sign_off_status: null,
+            sign_off_at: null,
+            sign_off_by_name: null,
+            sign_off_material_updated_at: null,
+            release_notes: null,
+            material_updated_at: '2026-03-21T09:00:00Z',
+            created_at: '2026-03-10T09:00:00Z',
+            updated_at: '2026-03-21T09:00:00Z',
+            published_at: '2026-03-15T09:00:00Z',
+            archived_at: null,
+            created_by_name: 'Rina Patel',
+            updated_by_name: 'Rina Patel',
+            published_by_name: 'Rina Patel',
+            latest_regression_suite_snapshot_json: null,
+          }],
+        } as never
+      }
+
+      if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+        return { rows: [] } as never
+      }
+
+      throw new Error(`Unexpected query: ${sql}`)
+    },
+    getScopedAdminAuditActivity: async () => [],
+  })
+
+  assert.ok(detailData)
+  assert.equal(detailData?.versions.length, 1)
+  assert.equal(versionQueries.length, 2)
+  assert.match(versionQueries[0] ?? '', /sign_off_by_identity_id/i)
+  assert.doesNotMatch(versionQueries[1] ?? '', /sign_off_by_identity_id/i)
+  assert.deepEqual(detailData?.versions[0]?.releaseGovernance.signOff, {
+    status: 'unsigned',
+    signedOffBy: null,
+    signedOffAt: null,
+    isStale: false,
+    staleReason: null,
+  })
+  assert.equal(detailData?.versions[0]?.releaseGovernance.releaseNotes, null)
+})
+
+test('assessment detail loader still throws unrelated version-query failures', async () => {
+  await assert.rejects(
+    () => getAdminAssessmentDetailData('assessment-1', {
+      queryDb: async (sql) => {
+        if (/from assessment_definitions ad/i.test(sql)) {
+          return {
+            rows: [{
+              id: 'assessment-1',
+              key: 'wplp_80',
+              slug: 'wplp-80',
+              name: 'WPLP-80',
+              category: 'behavioural_intelligence',
+              description: null,
+              lifecycle_status: 'draft',
+              current_published_version_id: null,
+              current_published_version_label: null,
+              created_at: '2026-03-01T09:00:00Z',
+              updated_at: '2026-03-21T09:00:00Z',
+            }],
+          } as never
+        }
+
+        if (/from assessment_versions av/i.test(sql)) {
+          const cause = new Error('column av.sign_off_by_identity_id does not exist') as Error & { code?: string }
+          cause.code = '42501'
+          throw new DatabaseUnavailableError('Database query failed due to a database error.', cause)
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] } as never
         }
 
         throw new Error(`Unexpected query: ${sql}`)
