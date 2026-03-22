@@ -10,6 +10,7 @@ import {
   publishAdminAssessmentVersion,
   runAdminAssessmentScenarioSuite,
 } from '../lib/admin/server/assessment-management'
+import type { AdminAssessmentVersionSchemaCapabilities } from '../lib/admin/server/assessment-version-schema-capabilities'
 
 function createBaseAccess(allowed = true) {
   return {
@@ -22,6 +23,28 @@ function createBaseAccess(allowed = true) {
     provisionalAccess: null,
   }
 }
+
+function buildAssessmentVersionSchemaCapabilities(columns: string[]): AdminAssessmentVersionSchemaCapabilities {
+  return {
+    hasAssessmentVersionsTable: true,
+    assessmentVersionColumns: new Set(columns),
+  }
+}
+
+const MODERN_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([
+  'publish_readiness_status',
+  'readiness_check_summary_json',
+  'last_readiness_evaluated_at',
+  'sign_off_status',
+  'sign_off_at',
+  'sign_off_by_identity_id',
+  'sign_off_material_updated_at',
+  'release_notes',
+  'material_updated_at',
+  'latest_regression_suite_snapshot_json',
+])
+
+const LEGACY_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([])
 
 const validPackage = JSON.stringify({
   meta: {
@@ -261,6 +284,7 @@ test('create draft version succeeds for an existing assessment', async () => {
   }, {
     resolveAdminAccess: async () => createBaseAccess(),
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/select id, name from assessment_definitions/i.test(sql)) {
@@ -314,6 +338,7 @@ test('valid package import succeeds and records replacement audit metadata', asy
   }, {
     resolveAdminAccess: async () => createBaseAccess(),
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av/i.test(sql)) {
@@ -359,6 +384,66 @@ test('valid package import succeeds and records replacement audit metadata', asy
   assert.ok(auditEvents.includes('assessment_release_readiness_evaluated'))
 })
 
+test('package import skips governance metadata writes when release governance columns are unavailable', async () => {
+  const versionUpdateSql: string[] = []
+  const auditEvents: string[] = []
+  const result = await importAdminAssessmentPackage({
+    assessmentId: 'assessment-1',
+    versionId: 'version-2',
+    expectedUpdatedAt: '2026-03-21T09:00:00.000Z',
+    packageText: validPackage,
+    sourceFilename: 'signals-v1.json',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => LEGACY_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        if (/from assessment_versions av/i.test(sql)) {
+          return { rows: [makeManagedVersionRow({ package_status: 'missing' })] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions\s+set definition_payload/i.test(sql)) {
+          versionUpdateSql.push(sql)
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions\s+set sign_off_status = 'unsigned'/i.test(sql) || /update assessment_versions\s+set publish_readiness_status/i.test(sql)) {
+          throw new Error(`Unexpected governance write: ${sql}`)
+        }
+
+        if (/update assessment_definitions/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/insert into access_audit_events/i.test(sql)) {
+          auditEvents.push(String(params[1]))
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-21T10:00:00.000Z'),
+    createId: (() => {
+      const ids = ['audit-1', 'audit-2']
+      return () => ids.shift() ?? 'audit-3'
+    })(),
+  } as never)
+
+  assert.equal(result.ok, true)
+  assert.equal(result.code, 'imported')
+  assert.equal(versionUpdateSql.length, 1)
+  assert.doesNotMatch(versionUpdateSql[0] ?? '', /material_updated_at/i)
+  assert.ok(auditEvents.includes('assessment_package_imported'))
+  assert.ok(!auditEvents.includes('assessment_release_readiness_evaluated'))
+  assert.ok(!auditEvents.includes('assessment_release_sign_off_invalidated'))
+})
+
 test('package import rejects malformed JSON before any database writes', async () => {
   const result = await importAdminAssessmentPackage({
     assessmentId: 'assessment-1',
@@ -397,6 +482,7 @@ test('package import persists validation failure for missing sections and broken
   }, {
     resolveAdminAccess: async () => createBaseAccess(),
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av/i.test(sql)) {
@@ -451,6 +537,7 @@ test('bulk scenario copy-forward imports valid scenarios, skips invalid ones, an
   }, {
     resolveAdminAccess: async () => createBaseAccess(),
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av/i.test(sql)) {
@@ -606,6 +693,7 @@ test('single scenario clone rejects incompatible payloads for the target version
     sourceScenarioId: 'scenario-incompatible',
   }, {
     resolveAdminAccess: async () => createBaseAccess(),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string) => {
         if (/from assessment_versions av/i.test(sql)) {
@@ -721,6 +809,7 @@ test('suite snapshot persists latest full-run summary without using single simul
   }, {
     resolveAdminAccess: async () => createBaseAccess(),
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av/i.test(sql)) {
@@ -841,6 +930,35 @@ test('suite snapshot persists latest full-run summary without using single simul
   assert.ok(auditEvents.includes('assessment_release_readiness_evaluated'))
 })
 
+test('suite snapshot fails fast when regression snapshot schema support is unavailable', async () => {
+  let writeCount = 0
+  const result = await runAdminAssessmentScenarioSuite({
+    assessmentId: 'assessment-1',
+    versionId: 'version-3',
+    baselineVersionId: 'version-2',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => LEGACY_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string) => {
+        if (/update assessment_versions/i.test(sql) || /update assessment_definitions/i.test(sql) || /insert into access_audit_events/i.test(sql)) {
+          writeCount += 1
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'schema_incompatible')
+  assert.match(result.message, /regression suite snapshot/i)
+  assert.match(result.message, /latest_regression_suite_snapshot_json/i)
+  assert.equal(writeCount, 0)
+})
+
 test('publish version succeeds when a valid package is attached and enforces a single published version', async () => {
   const updates: string[] = []
   const result = await publishAdminAssessmentVersion({
@@ -850,6 +968,7 @@ test('publish version succeeds when a valid package is attached and enforces a s
   }, {
     resolveAdminAccess: async () => createBaseAccess(),
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string) => {
         if (/from assessment_versions av/i.test(sql)) {
@@ -893,6 +1012,7 @@ test('publish version is blocked when no valid package exists', async () => {
   }, {
     resolveAdminAccess: async () => createBaseAccess(),
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av/i.test(sql)) {

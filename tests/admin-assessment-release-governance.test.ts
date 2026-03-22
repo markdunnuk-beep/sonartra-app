@@ -191,10 +191,9 @@ test('publish loader uses modern compatibility-safe assessment_versions queries 
   assert.match(assessmentQueries[0] ?? '', /av\.latest_regression_suite_snapshot_json/i)
 })
 
-test('publish loader omits modern-only assessment_versions columns in legacy capability mode', async () => {
+test('publish fails fast with a schema compatibility error in legacy capability mode', async () => {
   const byIdQueries: string[] = []
   const assessmentQueries: string[] = []
-  const baseRow = makeVersionRow()
 
   const result = await publishAdminAssessmentVersion({ assessmentId: 'assessment-1', versionId: 'version-1' }, {
     resolveAdminAccess: async () => createBaseAccess(),
@@ -204,16 +203,13 @@ test('publish loader omits modern-only assessment_versions columns in legacy cap
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av[\s\S]*where av.id = \$1 and av.assessment_definition_id = \$2[\s\S]*limit 1/i.test(sql)) {
           byIdQueries.push(sql)
-          return { rows: [baseRow] }
+          return { rows: [] }
         }
         if (/from assessment_versions av[\s\S]*where av.assessment_definition_id = \$1/i.test(sql)) {
           assessmentQueries.push(sql)
-          return { rows: [baseRow] }
-        }
-        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
           return { rows: [] }
         }
-        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql)) {
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
           return { rows: [] }
         }
         if (/insert into access_audit_events/i.test(sql)) {
@@ -227,14 +223,11 @@ test('publish loader omits modern-only assessment_versions columns in legacy cap
   } as never)
 
   assert.equal(result.ok, false)
-  assert.equal(byIdQueries.length, 1)
-  assert.equal(assessmentQueries.length, 1)
-  assert.doesNotMatch(byIdQueries[0] ?? '', /av\.publish_readiness_status/i)
-  assert.doesNotMatch(byIdQueries[0] ?? '', /av\.latest_regression_suite_snapshot_json/i)
-  assert.doesNotMatch(byIdQueries[0] ?? '', /av\.sign_off_by_identity_id/i)
-  assert.doesNotMatch(assessmentQueries[0] ?? '', /av\.publish_readiness_status/i)
-  assert.doesNotMatch(assessmentQueries[0] ?? '', /av\.latest_regression_suite_snapshot_json/i)
-  assert.doesNotMatch(assessmentQueries[0] ?? '', /av\.sign_off_by_identity_id/i)
+  assert.equal(result.code, 'schema_incompatible')
+  assert.match(result.message, /publishing assessment versions/i)
+  assert.match(result.message, /publish_readiness_status|sign_off_status/i)
+  assert.equal(byIdQueries.length, 0)
+  assert.equal(assessmentQueries.length, 0)
 })
 
 test('sign-off records signer identity and timestamp for draft versions', async () => {
@@ -272,6 +265,30 @@ test('sign-off records signer identity and timestamp for draft versions', async 
   assert.equal(result.message, 'Version signed off.')
   assert.equal(updates.length, 2)
   assert.ok(auditEvents.includes('assessment_release_sign_off_recorded'))
+})
+
+test('sign-off fails fast when release sign-off schema support is unavailable', async () => {
+  let writeCount = 0
+  const result = await signOffAdminAssessmentVersion({ assessmentId: 'assessment-1', versionId: 'version-1' }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => LEGACY_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string) => {
+        if (/update assessment_versions/i.test(sql) || /insert into access_audit_events/i.test(sql)) {
+          writeCount += 1
+          return { rows: [] }
+        }
+        throw new Error(`Unexpected query: ${sql}`)
+      },
+    } as never),
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'schema_incompatible')
+  assert.match(result.message, /recording release sign-off/i)
+  assert.match(result.message, /publish_readiness_status|sign_off_status/i)
+  assert.equal(writeCount, 0)
 })
 
 const validPackageText = JSON.stringify({
@@ -337,6 +354,7 @@ test('material package updates invalidate sign-off and release notes persist', a
   const notesResult = await updateAdminAssessmentVersionReleaseNotes({ assessmentId: 'assessment-1', versionId: 'version-1', releaseNotes: 'Ready for internal launch window.' }, {
     resolveAdminAccess: async () => createBaseAccess(),
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/select av.id, av.version_label, ad.name as assessment_name/i.test(sql)) {
@@ -361,4 +379,27 @@ test('material package updates invalidate sign-off and release notes persist', a
   assert.ok(auditEvents.includes('assessment_release_sign_off_invalidated'))
   assert.ok(auditEvents.includes('assessment_release_notes_updated'))
   assert.equal(notesUpdates.length, 2)
+})
+
+test('release notes fail fast when the schema does not support release notes writes', async () => {
+  let writeCount = 0
+  const result = await updateAdminAssessmentVersionReleaseNotes({ assessmentId: 'assessment-1', versionId: 'version-1', releaseNotes: 'Ready for internal launch window.' }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getAssessmentVersionSchemaCapabilities: async () => LEGACY_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string) => {
+        if (/update assessment_versions/i.test(sql) || /update assessment_definitions/i.test(sql) || /insert into access_audit_events/i.test(sql)) {
+          writeCount += 1
+          return { rows: [] }
+        }
+        throw new Error(`Unexpected query: ${sql}`)
+      },
+    } as never),
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'schema_incompatible')
+  assert.match(result.message, /saving release notes/i)
+  assert.match(result.message, /release_notes/i)
+  assert.equal(writeCount, 0)
 })
