@@ -4,6 +4,13 @@ import {
   type AssessmentVersionOptionalGovernanceOrRegressionColumn,
 } from '@/lib/admin/server/assessment-version-schema-capabilities'
 
+interface AssessmentVersionSelectQueryOptions {
+  includeAssessmentName?: boolean
+  whereClause: string
+  orderByClause?: string
+  limitClause?: string
+}
+
 function getOptionalAssessmentVersionExpression(
   capabilities: AdminAssessmentVersionSchemaCapabilities,
   columnName: AssessmentVersionOptionalGovernanceOrRegressionColumn,
@@ -18,6 +25,7 @@ function getOptionalAssessmentVersionExpression(
 
 function getAssessmentVersionDetailProjectionBlock(
   capabilities: AdminAssessmentVersionSchemaCapabilities,
+  options: Pick<AssessmentVersionSelectQueryOptions, 'includeAssessmentName'> = {},
 ): string {
   const publishReadinessStatusColumn = getOptionalAssessmentVersionExpression(capabilities, 'publish_readiness_status', `'not_ready'::text`)
   const readinessCheckSummaryColumn = getOptionalAssessmentVersionExpression(capabilities, 'readiness_check_summary_json', 'null::jsonb')
@@ -31,6 +39,9 @@ function getAssessmentVersionDetailProjectionBlock(
   const signOffByNameColumn = hasAssessmentVersionOptionalGovernanceAndRegressionColumn(capabilities, 'sign_off_by_identity_id')
     ? 'sign_off_by.full_name'
     : 'null::text'
+  const assessmentNameColumn = options.includeAssessmentName
+    ? ',\n         ad.name as assessment_name'
+    : ''
 
   return `av.id,
          av.assessment_definition_id,
@@ -64,33 +75,63 @@ function getAssessmentVersionDetailProjectionBlock(
          av.archived_at,
          created_by.full_name as created_by_name,
          updated_by.full_name as updated_by_name,
-         published_by.full_name as published_by_name`
+         published_by.full_name as published_by_name${assessmentNameColumn}`
 }
 
 function getAssessmentVersionDetailJoinBlock(
   capabilities: AdminAssessmentVersionSchemaCapabilities,
+  options: Pick<AssessmentVersionSelectQueryOptions, 'includeAssessmentName'> = {},
 ): string {
   const signOffJoin = hasAssessmentVersionOptionalGovernanceAndRegressionColumn(capabilities, 'sign_off_by_identity_id')
     ? `
        left join admin_identities sign_off_by on sign_off_by.id = av.sign_off_by_identity_id`
     : ''
+  const assessmentJoin = options.includeAssessmentName
+    ? `
+       inner join assessment_definitions ad on ad.id = av.assessment_definition_id`
+    : ''
 
-  return `from assessment_versions av
+  return `from assessment_versions av${assessmentJoin}
        left join admin_identities created_by on created_by.id = av.created_by_identity_id
        left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
        left join admin_identities published_by on published_by.id = av.published_by_identity_id${signOffJoin}
        left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id`
 }
 
+export function buildAssessmentVersionSelectQuery(
+  capabilities: AdminAssessmentVersionSchemaCapabilities,
+  options: AssessmentVersionSelectQueryOptions,
+): string {
+  const orderByClause = options.orderByClause ? `
+       order by ${options.orderByClause}` : ''
+  const limitClause = options.limitClause ? `
+       ${options.limitClause}` : ''
+
+  return `select
+         ${getAssessmentVersionDetailProjectionBlock(capabilities, options)}
+       ${getAssessmentVersionDetailJoinBlock(capabilities, options)}
+       where ${options.whereClause}${orderByClause}${limitClause}`
+}
+
 export function buildAssessmentVersionDetailQuery(
   capabilities: AdminAssessmentVersionSchemaCapabilities,
 ): string {
-  return `select
-         ${getAssessmentVersionDetailProjectionBlock(capabilities)}
-       ${getAssessmentVersionDetailJoinBlock(capabilities)}
-       where av.assessment_definition_id = $1
-       order by
+  return buildAssessmentVersionSelectQuery(capabilities, {
+    whereClause: 'av.assessment_definition_id = $1',
+    orderByClause: `
          case av.lifecycle_status when 'published' then 0 when 'draft' then 1 else 2 end,
          av.updated_at desc,
-         av.version_label desc`
+         av.version_label desc`.trim(),
+  })
+}
+
+export function buildAssessmentVersionByIdQuery(
+  capabilities: AdminAssessmentVersionSchemaCapabilities,
+  options: Pick<AssessmentVersionSelectQueryOptions, 'includeAssessmentName'> = {},
+): string {
+  return buildAssessmentVersionSelectQuery(capabilities, {
+    ...options,
+    whereClause: 'av.id = $1 and av.assessment_definition_id = $2',
+    limitClause: 'limit 1',
+  })
 }

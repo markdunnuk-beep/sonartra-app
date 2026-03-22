@@ -7,6 +7,29 @@ import {
   signOffAdminAssessmentVersion,
   updateAdminAssessmentVersionReleaseNotes,
 } from '../lib/admin/server/assessment-management'
+import type { AdminAssessmentVersionSchemaCapabilities } from '../lib/admin/server/assessment-version-schema-capabilities'
+
+function buildAssessmentVersionSchemaCapabilities(columns: string[]): AdminAssessmentVersionSchemaCapabilities {
+  return {
+    hasAssessmentVersionsTable: true,
+    assessmentVersionColumns: new Set(columns),
+  }
+}
+
+const MODERN_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([
+  'publish_readiness_status',
+  'readiness_check_summary_json',
+  'last_readiness_evaluated_at',
+  'sign_off_status',
+  'sign_off_at',
+  'sign_off_by_identity_id',
+  'sign_off_material_updated_at',
+  'release_notes',
+  'material_updated_at',
+  'latest_regression_suite_snapshot_json',
+])
+
+const LEGACY_ASSESSMENT_VERSION_CAPABILITIES = buildAssessmentVersionSchemaCapabilities([])
 
 function createBaseAccess() {
   return {
@@ -91,6 +114,7 @@ test('publish is warning-gated until sign-off is recorded', async () => {
   const result = await publishAdminAssessmentVersion({ assessmentId: 'assessment-1', versionId: 'version-1', expectedUpdatedAt: '2026-03-21T08:00:00.000Z' }, {
     resolveAdminAccess: async () => createBaseAccess(),
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av[\s\S]*where av.id = \$1[\s\S]*assessment_definition_id = \$2/i.test(sql)) {
@@ -122,6 +146,97 @@ test('publish is warning-gated until sign-off is recorded', async () => {
   assert.ok(auditEvents.includes('assessment_publish_blocked_release_governance'))
 })
 
+test('publish loader uses modern compatibility-safe assessment_versions queries when optional columns are available', async () => {
+  const byIdQueries: string[] = []
+  const assessmentQueries: string[] = []
+  const baseRow = makeVersionRow()
+
+  const result = await publishAdminAssessmentVersion({ assessmentId: 'assessment-1', versionId: 'version-1' }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        if (/from assessment_versions av[\s\S]*where av.id = \$1 and av.assessment_definition_id = \$2[\s\S]*limit 1/i.test(sql)) {
+          byIdQueries.push(sql)
+          return { rows: [baseRow] }
+        }
+        if (/from assessment_versions av[\s\S]*where av.assessment_definition_id = \$1/i.test(sql)) {
+          assessmentQueries.push(sql)
+          return { rows: [baseRow] }
+        }
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql)) {
+          return { rows: [] }
+        }
+        if (/insert into access_audit_events/i.test(sql)) {
+          return { rows: [] }
+        }
+        throw new Error(`Unexpected query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-21T10:00:00.000Z'),
+    createId: () => 'audit-modern',
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(byIdQueries.length, 1)
+  assert.equal(assessmentQueries.length, 1)
+  assert.match(byIdQueries[0] ?? '', /av\.publish_readiness_status/i)
+  assert.match(byIdQueries[0] ?? '', /av\.latest_regression_suite_snapshot_json/i)
+  assert.match(byIdQueries[0] ?? '', /sign_off_by\.id = av\.sign_off_by_identity_id/i)
+  assert.match(assessmentQueries[0] ?? '', /av\.publish_readiness_status/i)
+  assert.match(assessmentQueries[0] ?? '', /av\.latest_regression_suite_snapshot_json/i)
+})
+
+test('publish loader omits modern-only assessment_versions columns in legacy capability mode', async () => {
+  const byIdQueries: string[] = []
+  const assessmentQueries: string[] = []
+  const baseRow = makeVersionRow()
+
+  const result = await publishAdminAssessmentVersion({ assessmentId: 'assessment-1', versionId: 'version-1' }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => LEGACY_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        if (/from assessment_versions av[\s\S]*where av.id = \$1 and av.assessment_definition_id = \$2[\s\S]*limit 1/i.test(sql)) {
+          byIdQueries.push(sql)
+          return { rows: [baseRow] }
+        }
+        if (/from assessment_versions av[\s\S]*where av.assessment_definition_id = \$1/i.test(sql)) {
+          assessmentQueries.push(sql)
+          return { rows: [baseRow] }
+        }
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql)) {
+          return { rows: [] }
+        }
+        if (/insert into access_audit_events/i.test(sql)) {
+          return { rows: [] }
+        }
+        throw new Error(`Unexpected query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-21T10:00:00.000Z'),
+    createId: () => 'audit-legacy',
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(byIdQueries.length, 1)
+  assert.equal(assessmentQueries.length, 1)
+  assert.doesNotMatch(byIdQueries[0] ?? '', /av\.publish_readiness_status/i)
+  assert.doesNotMatch(byIdQueries[0] ?? '', /av\.latest_regression_suite_snapshot_json/i)
+  assert.doesNotMatch(byIdQueries[0] ?? '', /av\.sign_off_by_identity_id/i)
+  assert.doesNotMatch(assessmentQueries[0] ?? '', /av\.publish_readiness_status/i)
+  assert.doesNotMatch(assessmentQueries[0] ?? '', /av\.latest_regression_suite_snapshot_json/i)
+  assert.doesNotMatch(assessmentQueries[0] ?? '', /av\.sign_off_by_identity_id/i)
+})
+
 test('sign-off records signer identity and timestamp for draft versions', async () => {
   const updates: unknown[][] = []
   const auditEvents: string[] = []
@@ -129,6 +244,7 @@ test('sign-off records signer identity and timestamp for draft versions', async 
   const result = await signOffAdminAssessmentVersion({ assessmentId: 'assessment-1', versionId: 'version-1' }, {
     resolveAdminAccess: async () => createBaseAccess(),
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av[\s\S]*where av.assessment_definition_id = \$1/i.test(sql)) {
@@ -190,6 +306,7 @@ test('material package updates invalidate sign-off and release notes persist', a
   await importAdminAssessmentPackage({ assessmentId: 'assessment-1', versionId: 'version-1', packageText: validPackageText }, {
     resolveAdminAccess: async () => createBaseAccess(),
     getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
         if (/from assessment_versions av[\s\S]*where av.id = \$1[\s\S]*assessment_definition_id = \$2/i.test(sql)) {

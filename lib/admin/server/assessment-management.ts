@@ -39,7 +39,11 @@ import { getScopedAdminAuditActivity, mapScopedAuditEventsToAssessmentActivity }
 import {
   getAdminAssessmentVersionSchemaCapabilities,
 } from '@/lib/admin/server/assessment-version-schema-capabilities'
-import { buildAssessmentVersionDetailQuery } from '@/lib/admin/server/assessment-version-detail-sql'
+import {
+  buildAssessmentVersionByIdQuery,
+  buildAssessmentVersionDetailQuery,
+  buildAssessmentVersionSelectQuery,
+} from '@/lib/admin/server/assessment-version-detail-sql'
 
 interface AssessmentRegistryRow {
   id: string | null
@@ -283,6 +287,7 @@ interface AssessmentMutationDependencies {
   getActorIdentity: (client: PoolClient) => Promise<ActorRow | null>
   queryDb: typeof queryDb
   withTransaction: typeof withTransaction
+  getAssessmentVersionSchemaCapabilities: typeof getAdminAssessmentVersionSchemaCapabilities
   now: () => Date
   createId: () => string
 }
@@ -292,6 +297,7 @@ const defaultDependencies: AssessmentMutationDependencies = {
   getActorIdentity: ensureAdminAuditActor,
   queryDb,
   withTransaction,
+  getAssessmentVersionSchemaCapabilities: getAdminAssessmentVersionSchemaCapabilities,
   now: () => new Date(),
   createId: () => crypto.randomUUID(),
 }
@@ -938,6 +944,28 @@ function mapAssessmentVersionDetailRow(row: AssessmentVersionRow): AssessmentVer
     latest_regression_suite_snapshot_json: row.latest_regression_suite_snapshot_json ?? null,
   }
 }
+async function resolveAssessmentVersionSchemaCapabilities(
+  query: typeof queryDb,
+  getCapabilities: typeof getAdminAssessmentVersionSchemaCapabilities,
+) {
+  return getCapabilities({ queryDb: query })
+}
+
+async function loadAssessmentVersionRowById(
+  client: PoolClient,
+  assessmentId: string,
+  versionId: string,
+  getCapabilities: typeof getAdminAssessmentVersionSchemaCapabilities,
+): Promise<(AssessmentVersionRow & { assessment_name: string | null }) | null> {
+  const capabilities = await resolveAssessmentVersionSchemaCapabilities(client.query.bind(client), getCapabilities)
+  const result = await client.query<AssessmentVersionRow & { assessment_name: string | null }>(
+    buildAssessmentVersionByIdQuery(capabilities, { includeAssessmentName: true }),
+    [versionId, assessmentId],
+  )
+
+  const row = result.rows[0]
+  return row ? { ...mapAssessmentVersionDetailRow(row), assessment_name: row.assessment_name ?? null } : null
+}
 
 async function loadAssessmentVersionDetailRows(
   assessmentId: string,
@@ -1287,10 +1315,11 @@ async function persistVersionReleaseReadiness(
     createId: () => string
     reason: 'manual_refresh' | 'package_import' | 'scenario_change' | 'suite_snapshot' | 'publish_attempt'
     emitAudit?: boolean
+    getAssessmentVersionSchemaCapabilities: typeof getAdminAssessmentVersionSchemaCapabilities
   },
 ): Promise<{ version: AdminAssessmentVersionRecord | null; summary: NonNullable<AdminAssessmentReleaseGovernance['readinessSummary']> | null }> {
   const [versionRows, scenariosByVersion] = await Promise.all([
-    loadAssessmentVersionsForScenarioWork(client, input.assessmentId),
+    loadAssessmentVersionsForScenarioWork(client, input.assessmentId, input.getAssessmentVersionSchemaCapabilities),
     loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
   ])
   const version = mapAssessmentVersionRows(versionRows, scenariosByVersion).find((entry) => entry.id === input.versionId) ?? null
@@ -1396,50 +1425,25 @@ async function invalidateVersionSignOffIfStale(
 async function loadAssessmentVersionsForScenarioWork(
   client: PoolClient,
   assessmentId: string,
+  getCapabilities: typeof getAdminAssessmentVersionSchemaCapabilities,
 ): Promise<Array<AssessmentVersionRow & { assessment_name: string | null }>> {
+  const capabilities = await resolveAssessmentVersionSchemaCapabilities(client.query.bind(client), getCapabilities)
   const result = await client.query<AssessmentVersionRow & { assessment_name: string | null }>(
-    `select
-       av.id,
-       av.assessment_definition_id,
-       av.version_label,
-       av.lifecycle_status,
-       av.source_type,
-       av.notes,
-       (av.definition_payload is not null) as has_definition_payload,
-       av.definition_payload,
-       av.validation_status,
-       av.package_status,
-       av.package_schema_version,
-       av.package_source_type,
-       av.package_imported_at,
-       av.package_source_filename,
-       package_imported_by.full_name as package_imported_by_name,
-       av.package_validation_report_json,
-       av.created_at,
-       av.updated_at,
-       av.published_at,
-       av.archived_at,
-       created_by.full_name as created_by_name,
-       updated_by.full_name as updated_by_name,
-       published_by.full_name as published_by_name,
-       av.latest_regression_suite_snapshot_json,
-       ad.name as assessment_name
-     from assessment_versions av
-     inner join assessment_definitions ad on ad.id = av.assessment_definition_id
-     left join admin_identities created_by on created_by.id = av.created_by_identity_id
-     left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
-     left join admin_identities published_by on published_by.id = av.published_by_identity_id
-     left join admin_identities sign_off_by on sign_off_by.id = av.sign_off_by_identity_id
-     left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
-     where av.assessment_definition_id = $1
-     order by
-       case av.lifecycle_status when 'published' then 0 when 'draft' then 1 else 2 end,
-       av.updated_at desc,
-       av.version_label desc`,
+    buildAssessmentVersionSelectQuery(capabilities, {
+      includeAssessmentName: true,
+      whereClause: 'av.assessment_definition_id = $1',
+      orderByClause: `
+         case av.lifecycle_status when 'published' then 0 when 'draft' then 1 else 2 end,
+         av.updated_at desc,
+         av.version_label desc`.trim(),
+    }),
     [assessmentId],
   )
 
-  return result.rows ?? []
+  return (result.rows ?? []).map((row) => ({
+    ...mapAssessmentVersionDetailRow(row),
+    assessment_name: row.assessment_name ?? null,
+  }))
 }
 
 async function loadAssessmentSavedScenariosForAssessment(client: PoolClient, assessmentId: string): Promise<Map<string, AdminAssessmentSavedScenarioRecord[]>> {
@@ -1724,55 +1728,13 @@ export async function importAdminAssessmentPackage(
 
   try {
     return await deps.withTransaction(async (client) => {
-      const versionResult = await client.query<AssessmentVersionRow & { assessment_name: string }>(
-        `select
-           av.id,
-           av.assessment_definition_id,
-           av.version_label,
-           av.lifecycle_status,
-           av.source_type,
-           av.notes,
-           (av.definition_payload is not null) as has_definition_payload,
-           av.definition_payload,
-           av.validation_status,
-           av.package_status,
-           av.package_schema_version,
-           av.package_source_type,
-           av.package_imported_at,
-           av.package_source_filename,
-           package_imported_by.full_name as package_imported_by_name,
-           av.package_validation_report_json,
-           av.publish_readiness_status,
-           av.readiness_check_summary_json,
-           av.last_readiness_evaluated_at,
-           av.sign_off_status,
-           av.sign_off_at,
-           sign_off_by.full_name as sign_off_by_name,
-           av.sign_off_material_updated_at,
-           av.release_notes,
-           av.material_updated_at,
-           av.created_at,
-           av.updated_at,
-           av.published_at,
-           av.archived_at,
-           created_by.full_name as created_by_name,
-           updated_by.full_name as updated_by_name,
-           published_by.full_name as published_by_name,
-           av.latest_regression_suite_snapshot_json,
-           ad.name as assessment_name
-         from assessment_versions av
-         inner join assessment_definitions ad on ad.id = av.assessment_definition_id
-         left join admin_identities created_by on created_by.id = av.created_by_identity_id
-         left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
-         left join admin_identities published_by on published_by.id = av.published_by_identity_id
-         left join admin_identities sign_off_by on sign_off_by.id = av.sign_off_by_identity_id
-         left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
-         where av.id = $1
-           and av.assessment_definition_id = $2
-         limit 1`,
-        [input.versionId, input.assessmentId],
+      const version = await loadAssessmentVersionRowById(
+        client,
+        input.assessmentId,
+        input.versionId,
+        deps.getAssessmentVersionSchemaCapabilities,
       )
-      const version = versionResult.rows[0]
+      const assessmentName = normaliseNullableField(version?.assessment_name) ?? 'Assessment'
       const existingVersion = version ? mapAssessmentVersionRows([version])[0] ?? null : null
 
       if (!version) {
@@ -1843,7 +1805,7 @@ export async function importAdminAssessmentPackage(
       if (existingVersion) {
         await invalidateVersionSignOffIfStale(client, {
           version: existingVersion,
-          assessmentName: version.assessment_name,
+          assessmentName,
           assessmentId: input.assessmentId,
           actor,
           nowIso,
@@ -1859,6 +1821,7 @@ export async function importAdminAssessmentPackage(
         nowIso,
         createId: deps.createId,
         reason: 'package_import',
+        getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
       })
 
       if (!validation.ok) {
@@ -1867,9 +1830,9 @@ export async function importAdminAssessmentPackage(
           actor,
           nowIso,
           eventType: 'assessment_package_validation_failed',
-          summary: `Assessment package import failed validation for ${version.assessment_name} v${version.version_label} with ${validation.errors.length} blocking issue(s) and ${validation.warnings.length} warning(s).`,
+          summary: `Assessment package import failed validation for ${assessmentName} v${version.version_label} with ${validation.errors.length} blocking issue(s) and ${validation.warnings.length} warning(s).`,
           assessmentId: input.assessmentId,
-          assessmentName: version.assessment_name,
+          assessmentName,
           versionId: input.versionId,
           versionLabel: version.version_label,
           metadata: { packageStatus, errors: validation.errors.length, warnings: validation.warnings.length },
@@ -1890,9 +1853,9 @@ export async function importAdminAssessmentPackage(
         actor,
         nowIso,
         eventType: version.package_status && version.package_status !== 'missing' ? 'assessment_package_replaced' : 'assessment_package_imported',
-        summary: `${version.package_status && version.package_status !== 'missing' ? 'Assessment package replaced' : 'Assessment package imported'} for ${version.assessment_name} v${version.version_label} · ${validation.summary.questionsCount} questions · ${validation.summary.dimensionsCount} dimensions · ${validation.warnings.length} warning(s).`,
+        summary: `${version.package_status && version.package_status !== 'missing' ? 'Assessment package replaced' : 'Assessment package imported'} for ${assessmentName} v${version.version_label} · ${validation.summary.questionsCount} questions · ${validation.summary.dimensionsCount} dimensions · ${validation.warnings.length} warning(s).`,
         assessmentId: input.assessmentId,
-        assessmentName: version.assessment_name,
+        assessmentName,
         versionId: input.versionId,
         versionLabel: version.version_label,
         metadata: {
@@ -2140,7 +2103,7 @@ export async function importAdminAssessmentSavedScenarios(
   try {
     return await deps.withTransaction(async (client) => {
       const [versionRows, scenariosByVersion] = await Promise.all([
-        loadAssessmentVersionsForScenarioWork(client, input.assessmentId),
+        loadAssessmentVersionsForScenarioWork(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities),
         loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
       ])
       const versions = mapAssessmentVersionRows(versionRows, scenariosByVersion)
@@ -2241,6 +2204,7 @@ export async function importAdminAssessmentSavedScenarios(
         nowIso,
         createId: deps.createId,
         reason: 'scenario_change',
+        getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
       })
 
       await writeAssessmentAuditEvent(client, {
@@ -2294,7 +2258,7 @@ export async function cloneAdminAssessmentSavedScenario(
   try {
     return await deps.withTransaction(async (client) => {
       const [versionRows, scenariosByVersion] = await Promise.all([
-        loadAssessmentVersionsForScenarioWork(client, input.assessmentId),
+        loadAssessmentVersionsForScenarioWork(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities),
         loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
       ])
       const versions = mapAssessmentVersionRows(versionRows, scenariosByVersion)
@@ -2440,7 +2404,7 @@ export async function runAdminAssessmentScenarioSuite(
   try {
     return await deps.withTransaction(async (client) => {
       const [versionRows, scenariosByVersion] = await Promise.all([
-        loadAssessmentVersionsForScenarioWork(client, input.assessmentId),
+        loadAssessmentVersionsForScenarioWork(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities),
         loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
       ])
       const versions = mapAssessmentVersionRows(versionRows, scenariosByVersion)
@@ -2518,6 +2482,7 @@ export async function runAdminAssessmentScenarioSuite(
         nowIso,
         createId: deps.createId,
         reason: 'suite_snapshot',
+        getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
       })
 
       await writeAssessmentAuditEvent(client, {
@@ -2561,55 +2526,13 @@ export async function publishAdminAssessmentVersion(
 
   try {
     return await deps.withTransaction(async (client) => {
-      const versionResult = await client.query<AssessmentVersionRow & { assessment_name: string }>(
-        `select
-           av.id,
-           av.assessment_definition_id,
-           av.version_label,
-           av.lifecycle_status,
-           av.source_type,
-           av.notes,
-           (av.definition_payload is not null) as has_definition_payload,
-           av.definition_payload,
-           av.validation_status,
-           av.package_status,
-           av.package_schema_version,
-           av.package_source_type,
-           av.package_imported_at,
-           av.package_source_filename,
-           package_imported_by.full_name as package_imported_by_name,
-           av.package_validation_report_json,
-           av.publish_readiness_status,
-           av.readiness_check_summary_json,
-           av.last_readiness_evaluated_at,
-           av.sign_off_status,
-           av.sign_off_at,
-           sign_off_by.full_name as sign_off_by_name,
-           av.sign_off_material_updated_at,
-           av.release_notes,
-           av.material_updated_at,
-           av.created_at,
-           av.updated_at,
-           av.published_at,
-           av.archived_at,
-           created_by.full_name as created_by_name,
-           updated_by.full_name as updated_by_name,
-           published_by.full_name as published_by_name,
-           av.latest_regression_suite_snapshot_json,
-           ad.name as assessment_name
-         from assessment_versions av
-         inner join assessment_definitions ad on ad.id = av.assessment_definition_id
-         left join admin_identities created_by on created_by.id = av.created_by_identity_id
-         left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
-         left join admin_identities published_by on published_by.id = av.published_by_identity_id
-         left join admin_identities sign_off_by on sign_off_by.id = av.sign_off_by_identity_id
-         left join admin_identities package_imported_by on package_imported_by.id = av.package_imported_by_identity_id
-         where av.id = $1
-           and av.assessment_definition_id = $2
-         limit 1`,
-        [input.versionId, input.assessmentId],
+      const versionRow = await loadAssessmentVersionRowById(
+        client,
+        input.assessmentId,
+        input.versionId,
+        deps.getAssessmentVersionSchemaCapabilities,
       )
-      const versionRow = versionResult.rows[0]
+      const assessmentName = normaliseNullableField(versionRow?.assessment_name) ?? 'Assessment'
 
       if (!versionRow) {
         return { ok: false, code: 'not_found', message: 'Version not found.' }
@@ -2640,6 +2563,7 @@ export async function publishAdminAssessmentVersion(
         nowIso,
         createId: deps.createId,
         reason: 'publish_attempt',
+        getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
       })
       const evaluatedVersion = readinessState.version
       if (!evaluatedVersion) {
@@ -2656,9 +2580,9 @@ export async function publishAdminAssessmentVersion(
           actor,
           nowIso,
           eventType: 'assessment_publish_blocked_release_governance',
-          summary: `Publish blocked for ${versionRow.assessment_name} v${evaluatedVersion.versionLabel}: ${blockingSummary}`,
+          summary: `Publish blocked for ${assessmentName} v${evaluatedVersion.versionLabel}: ${blockingSummary}`,
           assessmentId: input.assessmentId,
-          assessmentName: versionRow.assessment_name,
+          assessmentName,
           versionId: input.versionId,
           versionLabel: evaluatedVersion.versionLabel,
           metadata: {
@@ -2681,9 +2605,9 @@ export async function publishAdminAssessmentVersion(
           actor,
           nowIso,
           eventType: 'assessment_publish_blocked_release_governance',
-          summary: `Publish blocked for ${versionRow.assessment_name} v${evaluatedVersion.versionLabel}: sign-off is required before publishing with warnings.`,
+          summary: `Publish blocked for ${assessmentName} v${evaluatedVersion.versionLabel}: sign-off is required before publishing with warnings.`,
           assessmentId: input.assessmentId,
-          assessmentName: versionRow.assessment_name,
+          assessmentName,
           versionId: input.versionId,
           versionLabel: evaluatedVersion.versionLabel,
           metadata: {
@@ -2749,9 +2673,9 @@ export async function publishAdminAssessmentVersion(
         actor,
         nowIso,
         eventType: 'assessment_version_published',
-        summary: `Version ${evaluatedVersion.versionLabel} published for ${versionRow.assessment_name}.`,
+        summary: `Version ${evaluatedVersion.versionLabel} published for ${assessmentName}.`,
         assessmentId: input.assessmentId,
-        assessmentName: versionRow.assessment_name,
+        assessmentName,
         versionId: input.versionId,
         versionLabel: evaluatedVersion.versionLabel,
         metadata: {
@@ -2816,6 +2740,7 @@ export async function refreshAdminAssessmentVersionReleaseReadiness(
         nowIso,
         createId: deps.createId,
         reason: 'manual_refresh',
+        getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
       })
 
       return {
@@ -2846,7 +2771,7 @@ export async function signOffAdminAssessmentVersion(
   try {
     return await deps.withTransaction(async (client) => {
       const [versionRows, scenariosByVersion] = await Promise.all([
-        loadAssessmentVersionsForScenarioWork(client, input.assessmentId),
+        loadAssessmentVersionsForScenarioWork(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities),
         loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
       ])
       const version = mapAssessmentVersionRows(versionRows, scenariosByVersion).find((entry) => entry.id === input.versionId) ?? null
@@ -2867,6 +2792,7 @@ export async function signOffAdminAssessmentVersion(
         createId: deps.createId,
         reason: 'manual_refresh',
         emitAudit: false,
+        getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
       })
       const evaluatedVersion = refreshed.version ?? version
       const readiness = getAdminAssessmentVersionReadiness(evaluatedVersion)
