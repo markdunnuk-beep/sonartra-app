@@ -235,7 +235,7 @@ export interface AdminAssessmentVersionMutationState {
 }
 
 export interface AdminAssessmentPackageImportState {
-  status: 'idle' | 'error'
+  status: 'idle' | 'error' | 'success'
   message?: string
   fieldErrors?: {
     packageText?: string
@@ -245,6 +245,64 @@ export interface AdminAssessmentPackageImportState {
     errors: Array<{ path: string; message: string }>
     warnings: Array<{ path: string; message: string }>
   }
+}
+
+function normaliseAssessmentIssueCollection(value: unknown): Array<{ path: string; message: string }> {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.flatMap((issue) => {
+    if (!issue || typeof issue !== 'object' || Array.isArray(issue)) {
+      return []
+    }
+
+    const path = normaliseSingleValue((issue as { path?: string | string[] }).path)
+    const message = normaliseSingleValue((issue as { message?: string | string[] }).message)
+    if (!path || !message) {
+      return []
+    }
+
+    return [{ path, message }]
+  })
+}
+
+export function normalizeAdminAssessmentPackageImportState(
+  state: Partial<AdminAssessmentPackageImportState> | null | undefined,
+): AdminAssessmentPackageImportState {
+  const normalizedStatus = state?.status === 'error' || state?.status === 'success' ? state.status : 'idle'
+  const packageTextError = normaliseSingleValue(state?.fieldErrors?.packageText)
+  const packageFileError = normaliseSingleValue(state?.fieldErrors?.packageFile)
+  const validationErrors = normaliseAssessmentIssueCollection(state?.validationResult?.errors)
+  const validationWarnings = normaliseAssessmentIssueCollection(state?.validationResult?.warnings)
+
+  return {
+    status: normalizedStatus,
+    message: normaliseSingleValue(state?.message) || undefined,
+    fieldErrors: packageTextError || packageFileError
+      ? {
+          ...(packageTextError ? { packageText: packageTextError } : {}),
+          ...(packageFileError ? { packageFile: packageFileError } : {}),
+        }
+      : undefined,
+    validationResult: validationErrors.length > 0 || validationWarnings.length > 0
+      ? { errors: validationErrors, warnings: validationWarnings }
+      : undefined,
+  }
+}
+
+export function buildAdminAssessmentPackageImportRedirectTarget(
+  assessmentId: string | null | undefined,
+  versionLabel: string | null | undefined,
+): string | null {
+  const normalizedAssessmentId = normaliseSingleValue(assessmentId ?? undefined)
+  const normalizedVersionLabel = normaliseSingleValue(versionLabel ?? undefined)
+
+  if (!normalizedAssessmentId || !normalizedVersionLabel) {
+    return null
+  }
+
+  return `/admin/assessments/${normalizedAssessmentId}/versions/${normalizedVersionLabel}/import?mutation=package-imported`
 }
 
 function normaliseSingleValue(value: string | string[] | undefined): string {

@@ -5,6 +5,7 @@ import type {
   SonartraAssessmentPackageQuestionOption,
   SonartraAssessmentPackageV1,
 } from '@/lib/admin/domain/assessment-package'
+import { parseStoredNormalizedAssessmentPackage } from '@/lib/admin/domain/assessment-package'
 import { resolveAssessmentPackageLocaleContext } from '@/lib/admin/domain/assessment-package-content'
 import type { AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
 
@@ -216,8 +217,10 @@ function selectScenarioOption(question: SonartraAssessmentPackageQuestion, scena
 }
 
 export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage'>): AdminAssessmentSimulationWorkspaceStatus {
-  const status = version.packageInfo.status
-  const pkg = version.normalizedPackage
+  const status = version.packageInfo?.status === 'valid' || version.packageInfo?.status === 'valid_with_warnings' || version.packageInfo?.status === 'invalid' || version.packageInfo?.status === 'missing'
+    ? version.packageInfo.status
+    : 'missing'
+  const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
 
   if (!pkg || status === 'missing') {
     return {

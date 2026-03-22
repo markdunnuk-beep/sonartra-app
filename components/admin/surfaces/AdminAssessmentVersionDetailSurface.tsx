@@ -49,6 +49,46 @@ function getMutationMessage(mutation?: string) {
   return null
 }
 
+function normalizeVersionForDisplay(version: AdminAssessmentVersionRecord): AdminAssessmentVersionRecord {
+  const packageInfo = version.packageInfo ?? {
+    status: 'missing' as const,
+    schemaVersion: null,
+    sourceType: null,
+    importedAt: null,
+    importedByName: null,
+    sourceFilename: null,
+    summary: null,
+    errors: [],
+    warnings: [],
+  }
+
+  return {
+    ...version,
+    packageInfo: {
+      status: packageInfo.status,
+      schemaVersion: packageInfo.schemaVersion ?? null,
+      sourceType: packageInfo.sourceType ?? null,
+      importedAt: packageInfo.importedAt ?? null,
+      importedByName: packageInfo.importedByName ?? null,
+      sourceFilename: packageInfo.sourceFilename ?? null,
+      summary: packageInfo.summary ?? null,
+      errors: Array.isArray(packageInfo.errors) ? packageInfo.errors : [],
+      warnings: Array.isArray(packageInfo.warnings) ? packageInfo.warnings : [],
+    },
+    savedScenarios: Array.isArray(version.savedScenarios) ? version.savedScenarios : [],
+    latestSuiteSnapshot: version.latestSuiteSnapshot ?? null,
+    releaseGovernance: version.releaseGovernance
+      ? {
+          readinessStatus: version.releaseGovernance.readinessStatus,
+          readinessSummary: version.releaseGovernance.readinessSummary ?? null,
+          lastReadinessEvaluatedAt: version.releaseGovernance.lastReadinessEvaluatedAt ?? null,
+          signOff: version.releaseGovernance.signOff ?? { status: 'unsigned', signedOffBy: null, signedOffAt: null, isStale: false, staleReason: null },
+          releaseNotes: version.releaseGovernance.releaseNotes ?? null,
+        }
+      : undefined,
+  }
+}
+
 function formatReadinessLabel(status: 'ready' | 'ready_with_warnings' | 'not_ready') {
   return status === 'ready_with_warnings' ? 'Ready with warnings' : status === 'ready' ? 'Ready' : 'Not ready'
 }
@@ -86,13 +126,14 @@ export function AdminAssessmentVersionDetailSurface({
   mode?: 'detail' | 'import'
   mutation?: string
 }) {
+  const safeVersion = normalizeVersionForDisplay(version)
   const flashMessage = getMutationMessage(mutation)
-  const activity = detailData.activity.filter((event) => event.entityId === version.id || event.entityId === detailData.assessment.id).slice(0, 8)
-  const packageInfo = version.packageInfo
+  const activity = (Array.isArray(detailData.activity) ? detailData.activity : []).filter((event) => event.entityId === safeVersion.id || event.entityId === detailData.assessment.id).slice(0, 8)
+  const packageInfo = safeVersion.packageInfo
   const packageSummary = packageInfo.summary
-  const preview = getAdminAssessmentPackagePreviewSummary(version)
-  const readiness = getAdminAssessmentVersionReadiness(version)
-  const releaseGovernance = version.releaseGovernance ?? {
+  const preview = getAdminAssessmentPackagePreviewSummary(safeVersion)
+  const readiness = getAdminAssessmentVersionReadiness(safeVersion)
+  const releaseGovernance = safeVersion.releaseGovernance ?? {
     readinessStatus: readiness.status,
     readinessSummary: null,
     lastReadinessEvaluatedAt: null,
@@ -107,27 +148,27 @@ export function AdminAssessmentVersionDetailSurface({
       : readiness.status === 'ready_with_warnings'
         ? 'Publish is allowed because a release sign-off is recorded for the current warning set.'
         : 'Publish is currently allowed.'
-  const diff = getAdminAssessmentVersionDiff(version, detailData.versions, detailData.assessment.currentPublishedVersionId)
-  const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(version)
-  const reportPreviewStatus = getAdminAssessmentReportPreviewWorkspaceStatus(version)
-  const latestSuiteSnapshot = version.latestSuiteSnapshot
+  const diff = getAdminAssessmentVersionDiff(safeVersion, detailData.versions.map(normalizeVersionForDisplay), detailData.assessment.currentPublishedVersionId)
+  const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(safeVersion)
+  const reportPreviewStatus = getAdminAssessmentReportPreviewWorkspaceStatus(safeVersion)
+  const latestSuiteSnapshot = safeVersion.latestSuiteSnapshot
 
   return (
     <div className="space-y-6 lg:space-y-8">
       <AdminPageHeader
         eyebrow="Assessment version"
-        title={`${detailData.assessment.name} · v${version.versionLabel}`}
+        title={`${detailData.assessment.name} · v${safeVersion.versionLabel}`}
         description={mode === 'import'
           ? 'Attach a structured Sonartra assessment package to this draft version, validate it, and persist the canonical payload used for later publish.'
           : 'Operational review workspace for package preview, comparison evidence, and publish-readiness before release.'}
         actions={(
           <div className="flex flex-wrap gap-2">
             <Button href={`/admin/assessments/${detailData.assessment.id}?tab=versions`} variant="ghost"><ArrowLeft className="mr-2 h-4 w-4" />Back to versions</Button>
-            {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/import`} variant="secondary"><FileJson2 className="mr-2 h-4 w-4" />Import package</Button> : null}
-            {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/simulate`} variant="ghost"><FlaskConical className="mr-2 h-4 w-4" />Simulate</Button> : null}
-            {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/report-preview`} variant="ghost">Report preview</Button> : null}
-            {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/scenarios`} variant="ghost">Scenario library</Button> : null}
-            <Button href={buildAdminAuditHref({ entityType: 'assessment_version', entityId: version.id })} variant="ghost"><Activity className="mr-2 h-4 w-4" />View audit</Button>
+            {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/import`} variant="secondary"><FileJson2 className="mr-2 h-4 w-4" />Import package</Button> : null}
+            {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/simulate`} variant="ghost"><FlaskConical className="mr-2 h-4 w-4" />Simulate</Button> : null}
+            {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/report-preview`} variant="ghost">Report preview</Button> : null}
+            {mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/scenarios`} variant="ghost">Scenario library</Button> : null}
+            <Button href={buildAdminAuditHref({ entityType: 'assessment_version', entityId: safeVersion.id })} variant="ghost"><Activity className="mr-2 h-4 w-4" />View audit</Button>
           </div>
         )}
       />
@@ -178,7 +219,7 @@ export function AdminAssessmentVersionDetailSurface({
                 { label: 'Sign-off', value: releaseGovernance.signOff.status === 'signed_off' ? 'Signed off' : 'Unsigned' },
                 { label: 'Signed off by', value: releaseGovernance.signOff.signedOffBy ?? '—' },
                 { label: 'Signed off at', value: formatAdminTimestamp(releaseGovernance.signOff.signedOffAt) },
-                { label: 'Material package updated', value: formatAdminTimestamp(version.materialUpdatedAt ?? version.updatedAt) },
+                { label: 'Material package updated', value: formatAdminTimestamp(safeVersion.materialUpdatedAt ?? safeVersion.updatedAt) },
               ]}
             />
 
@@ -195,7 +236,7 @@ export function AdminAssessmentVersionDetailSurface({
             </div>
           </div>
 
-          <AdminAssessmentVersionReleaseControls assessmentId={detailData.assessment.id} version={version} />
+          <AdminAssessmentVersionReleaseControls assessmentId={detailData.assessment.id} version={safeVersion} />
         </div>
       </SurfaceSection>
 
@@ -203,7 +244,7 @@ export function AdminAssessmentVersionDetailSurface({
         title="Latest regression suite snapshot"
         eyebrow="Release-control visibility"
         description="A compact version-level summary of the most recent full saved-scenario suite run. This is not historical run storage; it is the latest truthful release signal only."
-        actions={<Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/simulate`} variant="secondary">Open scenario library / suite</Button>}
+        actions={<Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/simulate`} variant="secondary">Open scenario library / suite</Button>}
       >
         {latestSuiteSnapshot ? (
           <div className="space-y-4">
@@ -232,12 +273,12 @@ export function AdminAssessmentVersionDetailSurface({
         title="Overview"
         eyebrow="Version control"
         description="Governance-focused summary of package provenance, validation posture, and what this version is carrying right now."
-        actions={mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/import`} variant="secondary">Re-import package</Button> : null}
+        actions={mode === 'detail' ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/import`} variant="secondary">Re-import package</Button> : null}
       >
         <MetaGrid
           columns={4}
           items={[
-            { label: 'Lifecycle', value: version.lifecycleStatus },
+            { label: 'Lifecycle', value: safeVersion.lifecycleStatus },
             { label: 'Readiness verdict', value: formatReadinessLabel(readiness.status) },
             { label: 'Package state', value: getAssessmentPackageStatusLabel(packageInfo.status) },
             { label: 'Schema version', value: preview.schemaVersion ?? 'None' },
@@ -259,8 +300,8 @@ export function AdminAssessmentVersionDetailSurface({
           eyebrow="Draft-only workflow"
           description="Paste or upload a package spec v1 JSON payload. Validation runs before the normalized payload is attached to the draft version."
         >
-          {version.lifecycleStatus === 'draft'
-            ? <AdminAssessmentVersionPackageImportForm assessmentId={detailData.assessment.id} version={version} />
+          {safeVersion.lifecycleStatus === 'draft'
+            ? <AdminAssessmentVersionPackageImportForm assessmentId={detailData.assessment.id} version={safeVersion} />
             : <EmptyState title="Import unavailable" detail="Published and archived versions are immutable. Create or reopen a draft version before importing a package." />}
         </SurfaceSection>
       ) : null}
@@ -360,9 +401,9 @@ export function AdminAssessmentVersionDetailSurface({
                 <p className="text-sm text-textSecondary">{reportPreviewStatus.summary}</p>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/simulate`} variant="secondary">Open simulation workspace</Button>
-                <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/report-preview`} variant="ghost">Open report preview</Button>
-                <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/scenarios`} variant="ghost">Open scenario library</Button>
+                <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/simulate`} variant="secondary">Open simulation workspace</Button>
+                <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/report-preview`} variant="ghost">Open report preview</Button>
+                <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/scenarios`} variant="ghost">Open scenario library</Button>
               </div>
             </div>
           </div>

@@ -1,8 +1,9 @@
-import type {
-  AdminAssessmentVersionPackageInfo,
-  SonartraAssessmentPackageDimension,
-  SonartraAssessmentPackageQuestion,
-  SonartraAssessmentPackageV1,
+import {
+  parseStoredNormalizedAssessmentPackage,
+  type AdminAssessmentVersionPackageInfo,
+  type SonartraAssessmentPackageDimension,
+  type SonartraAssessmentPackageQuestion,
+  type SonartraAssessmentPackageV1,
 } from '@/lib/admin/domain/assessment-package'
 import type {
   AdminAssessmentReleaseCheck,
@@ -116,6 +117,22 @@ function truncate(value: string, maxLength = 96): string {
   return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`
 }
 
+function normalizePackageInfoRuntime(packageInfo: AdminAssessmentVersionPackageInfo | null | undefined): AdminAssessmentVersionPackageInfo {
+  return {
+    status: packageInfo?.status === 'valid' || packageInfo?.status === 'valid_with_warnings' || packageInfo?.status === 'invalid' || packageInfo?.status === 'missing'
+      ? packageInfo.status
+      : 'missing',
+    schemaVersion: typeof packageInfo?.schemaVersion === 'string' && packageInfo.schemaVersion.trim() ? packageInfo.schemaVersion.trim() : null,
+    sourceType: packageInfo?.sourceType === 'manual_import' ? 'manual_import' : null,
+    importedAt: typeof packageInfo?.importedAt === 'string' && packageInfo.importedAt.trim() ? packageInfo.importedAt.trim() : null,
+    importedByName: typeof packageInfo?.importedByName === 'string' && packageInfo.importedByName.trim() ? packageInfo.importedByName.trim() : null,
+    sourceFilename: typeof packageInfo?.sourceFilename === 'string' && packageInfo.sourceFilename.trim() ? packageInfo.sourceFilename.trim() : null,
+    summary: packageInfo?.summary ?? null,
+    errors: Array.isArray(packageInfo?.errors) ? packageInfo.errors.filter((issue) => issue && typeof issue.path === 'string' && typeof issue.message === 'string') : [],
+    warnings: Array.isArray(packageInfo?.warnings) ? packageInfo.warnings.filter((issue) => issue && typeof issue.path === 'string' && typeof issue.message === 'string') : [],
+  }
+}
+
 function getPackageWarningMessages(packageInfo: AdminAssessmentVersionPackageInfo): string[] {
   return packageInfo.warnings.map((issue) => `${issue.path}: ${issue.message}`)
 }
@@ -226,8 +243,8 @@ function getQuestionDisplay(question: SonartraAssessmentPackageQuestion): AdminA
 }
 
 export function getAdminAssessmentPackagePreviewSummary(version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage'>): AdminAssessmentPackagePreviewSummary {
-  const packageInfo = version.packageInfo
-  const pkg = version.normalizedPackage
+  const packageInfo = normalizePackageInfoRuntime(version.packageInfo)
+  const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
   const normalizationCoverage = getNormalizationCoverage(pkg)
   const questionCoverage = getQuestionScoringCoverage(pkg)
   const explicitScoringCoverage = getExplicitScoringCoverage(pkg)
@@ -310,8 +327,8 @@ export function getAdminAssessmentPackagePreviewSummary(version: Pick<AdminAsses
 export function getAdminAssessmentVersionReadiness(
   version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage' | 'lifecycleStatus'> & Partial<Pick<AdminAssessmentVersionRecord, 'savedScenarios' | 'latestSuiteSnapshot'>>,
 ): AdminAssessmentVersionReadiness {
-  const packageInfo = version.packageInfo
-  const pkg = version.normalizedPackage
+  const packageInfo = normalizePackageInfoRuntime(version.packageInfo)
+  const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
   const checks: AdminAssessmentReadinessChecklistItem[] = []
   const blockingIssues: string[] = []
   const warnings = [...getPackageWarningMessages(packageInfo)]

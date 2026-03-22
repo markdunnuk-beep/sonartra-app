@@ -9,8 +9,10 @@ import type {
   AdminAssessmentVersionMutationState,
 } from '@/lib/admin/domain/assessment-management'
 import {
+  buildAdminAssessmentPackageImportRedirectTarget,
   buildAdminAssessmentScenarioImportState,
   buildAdminAssessmentVersionMutationState,
+  normalizeAdminAssessmentPackageImportState,
 } from '@/lib/admin/domain/assessment-management'
 import type { AdminAssessmentSimulationActionState } from '@/lib/admin/domain/assessment-simulation'
 import {
@@ -343,14 +345,32 @@ export async function submitAdminAssessmentImportPackageAction(
   }
 
   if (!result.ok) {
-    return {
+    return normalizeAdminAssessmentPackageImportState({
       status: 'error',
       message: result.message,
       fieldErrors: result.fieldErrors,
       validationResult: result.validationResult,
-    }
+    })
   }
 
   revalidateAssessmentPaths(assessmentId, versionLabel)
-  redirect(`/admin/assessments/${assessmentId}/versions/${versionLabel}/import?mutation=package-imported`)
+
+  const redirectTarget = buildAdminAssessmentPackageImportRedirectTarget(assessmentId, versionLabel)
+  if (redirectTarget) {
+    redirect(redirectTarget)
+  }
+
+  console.error('[admin-assessment-import] Package import succeeded but redirect identifiers were missing.', {
+    assessmentId,
+    versionId,
+    versionLabel,
+    resultAssessmentId: result.assessmentId ?? null,
+    resultVersionId: result.versionId ?? null,
+  })
+
+  return normalizeAdminAssessmentPackageImportState({
+    status: 'success',
+    message: 'Package imported successfully, but the page could not redirect because the assessment or version identifier was missing. Review the results below and refresh the page before continuing.',
+    validationResult: result.validationResult,
+  })
 }
