@@ -38,6 +38,7 @@ import { queryDb, withTransaction, describeDatabaseError } from '@/lib/db'
 import { getScopedAdminAuditActivity, mapScopedAuditEventsToAssessmentActivity } from '@/lib/admin/server/audit-workspace'
 import {
   getAdminAssessmentVersionSchemaCapabilities,
+  hasAssessmentVersionOptionalGovernanceAndRegressionColumn,
 } from '@/lib/admin/server/assessment-version-schema-capabilities'
 import {
   buildAssessmentVersionByIdQuery,
@@ -182,6 +183,7 @@ export interface AdminAssessmentVersionMutationResult {
     | 'created'
     | 'published'
     | 'archived'
+    | 'schema_incompatible'
     | 'validation_error'
     | 'permission_denied'
     | 'not_found'
@@ -207,6 +209,7 @@ export interface AdminAssessmentPackageImportResult {
   ok: boolean
   code:
     | 'imported'
+    | 'schema_incompatible'
     | 'validation_error'
     | 'permission_denied'
     | 'not_found'
@@ -253,7 +256,7 @@ export interface AdminAssessmentScenarioCloneInput {
 
 export interface AdminAssessmentScenarioImportResult {
   ok: boolean
-  code: 'imported' | 'validation_error' | 'permission_denied' | 'not_found' | 'invalid_transition' | 'unknown_error'
+  code: 'imported' | 'schema_incompatible' | 'validation_error' | 'permission_denied' | 'not_found' | 'invalid_transition' | 'unknown_error'
   message: string
   sourceVersionLabel: string | null
   importedCount: number
@@ -270,7 +273,7 @@ export interface AdminAssessmentScenarioSuiteRunInput {
 
 export interface AdminAssessmentScenarioSuiteRunResult {
   ok: boolean
-  code: 'completed' | 'validation_error' | 'permission_denied' | 'not_found' | 'invalid_transition' | 'unknown_error'
+  code: 'completed' | 'schema_incompatible' | 'validation_error' | 'permission_denied' | 'not_found' | 'invalid_transition' | 'unknown_error'
   message: string
   snapshot?: AdminAssessmentLatestSuiteSnapshot | null
 }
@@ -951,6 +954,128 @@ async function resolveAssessmentVersionSchemaCapabilities(
   return getCapabilities({ queryDb: query })
 }
 
+type AssessmentVersionGovernanceWriteFeature =
+  | 'release_readiness'
+  | 'release_sign_off'
+  | 'release_notes'
+  | 'regression_snapshot'
+
+type AssessmentVersionGovernanceWriteMode = 'supported' | 'unsupported' | 'partial'
+
+interface AssessmentVersionGovernanceWriteSupport {
+  mode: AssessmentVersionGovernanceWriteMode
+  columns: string[]
+  missingColumns: string[]
+}
+
+interface AssessmentVersionGovernanceWritePolicy {
+  releaseReadiness: AssessmentVersionGovernanceWriteSupport
+  releaseSignOff: AssessmentVersionGovernanceWriteSupport
+  releaseNotes: AssessmentVersionGovernanceWriteSupport
+  regressionSnapshot: AssessmentVersionGovernanceWriteSupport
+  assertSupported: (feature: AssessmentVersionGovernanceWriteFeature, action: string) => void
+}
+
+class AssessmentVersionSchemaCompatibilityError extends Error {
+  constructor(action: string, feature: AssessmentVersionGovernanceWriteFeature, missingColumns: string[]) {
+    const featureLabel = feature.replaceAll('_', ' ')
+    super(
+      missingColumns.length > 0
+        ? `Assessment version schema is incompatible with ${action}: missing ${featureLabel} column${missingColumns.length === 1 ? '' : 's'} (${missingColumns.join(', ')}). Apply the latest assessment admin migrations and retry.`
+        : `Assessment version schema is incompatible with ${action}. Apply the latest assessment admin migrations and retry.`,
+    )
+    this.name = 'AssessmentVersionSchemaCompatibilityError'
+  }
+}
+
+function resolveAssessmentVersionGovernanceWriteSupport(
+  capabilities: Awaited<ReturnType<typeof getAdminAssessmentVersionSchemaCapabilities>>,
+  columns: readonly string[],
+): AssessmentVersionGovernanceWriteSupport {
+  const missingColumns = columns.filter((columnName) => !hasAssessmentVersionOptionalGovernanceAndRegressionColumn(
+    capabilities,
+    columnName as Parameters<typeof hasAssessmentVersionOptionalGovernanceAndRegressionColumn>[1],
+  ))
+
+  if (missingColumns.length === 0) {
+    return { mode: 'supported', columns: [...columns], missingColumns }
+  }
+
+  if (missingColumns.length === columns.length) {
+    return { mode: 'unsupported', columns: [...columns], missingColumns }
+  }
+
+  return { mode: 'partial', columns: [...columns], missingColumns }
+}
+
+function createAssessmentVersionGovernanceWritePolicy(
+  capabilities: Awaited<ReturnType<typeof getAdminAssessmentVersionSchemaCapabilities>>,
+): AssessmentVersionGovernanceWritePolicy {
+  const releaseReadiness = resolveAssessmentVersionGovernanceWriteSupport(capabilities, [
+    'publish_readiness_status',
+    'readiness_check_summary_json',
+    'last_readiness_evaluated_at',
+  ])
+  const releaseSignOff = resolveAssessmentVersionGovernanceWriteSupport(capabilities, [
+    'sign_off_status',
+    'sign_off_at',
+    'sign_off_by_identity_id',
+    'sign_off_material_updated_at',
+    'material_updated_at',
+  ])
+  const releaseNotes = resolveAssessmentVersionGovernanceWriteSupport(capabilities, [
+    'release_notes',
+  ])
+  const regressionSnapshot = resolveAssessmentVersionGovernanceWriteSupport(capabilities, [
+    'latest_regression_suite_snapshot_json',
+  ])
+
+  const supportByFeature: Record<AssessmentVersionGovernanceWriteFeature, AssessmentVersionGovernanceWriteSupport> = {
+    release_readiness: releaseReadiness,
+    release_sign_off: releaseSignOff,
+    release_notes: releaseNotes,
+    regression_snapshot: regressionSnapshot,
+  }
+
+  return {
+    releaseReadiness,
+    releaseSignOff,
+    releaseNotes,
+    regressionSnapshot,
+    assertSupported(feature, action) {
+      const support = supportByFeature[feature]
+      if (support.mode === 'supported') {
+        return
+      }
+
+      throw new AssessmentVersionSchemaCompatibilityError(action, feature, support.missingColumns)
+    },
+  }
+}
+
+async function resolveAssessmentVersionGovernanceWritePolicy(
+  query: typeof queryDb,
+  getCapabilities: typeof getAdminAssessmentVersionSchemaCapabilities,
+): Promise<AssessmentVersionGovernanceWritePolicy> {
+  return createAssessmentVersionGovernanceWritePolicy(
+    await resolveAssessmentVersionSchemaCapabilities(query, getCapabilities),
+  )
+}
+
+function buildAssessmentVersionSchemaCompatibilityResult<T extends { ok: boolean; code: string; message: string }>(
+  error: unknown,
+): T | null {
+  if (error instanceof AssessmentVersionSchemaCompatibilityError) {
+    return {
+      ok: false,
+      code: 'schema_incompatible',
+      message: error.message,
+    } as T
+  }
+
+  return null
+}
+
 async function loadAssessmentVersionRowById(
   client: PoolClient,
   assessmentId: string,
@@ -1316,8 +1441,21 @@ async function persistVersionReleaseReadiness(
     reason: 'manual_refresh' | 'package_import' | 'scenario_change' | 'suite_snapshot' | 'publish_attempt'
     emitAudit?: boolean
     getAssessmentVersionSchemaCapabilities: typeof getAdminAssessmentVersionSchemaCapabilities
+    onUnsupported?: 'skip' | 'error'
   },
 ): Promise<{ version: AdminAssessmentVersionRecord | null; summary: NonNullable<AdminAssessmentReleaseGovernance['readinessSummary']> | null }> {
+  const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
+    client.query.bind(client),
+    input.getAssessmentVersionSchemaCapabilities,
+  )
+  if (writePolicy.releaseReadiness.mode !== 'supported') {
+    if (writePolicy.releaseReadiness.mode === 'partial' || input.onUnsupported !== 'skip') {
+      writePolicy.assertSupported('release_readiness', 'persisting release readiness')
+    }
+
+    return { version: null, summary: null }
+  }
+
   const [versionRows, scenariosByVersion] = await Promise.all([
     loadAssessmentVersionsForScenarioWork(client, input.assessmentId, input.getAssessmentVersionSchemaCapabilities),
     loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
@@ -1391,8 +1529,16 @@ async function invalidateVersionSignOffIfStale(
     nowIso: string
     createId: () => string
     reason: 'material_update'
+    writePolicy: AssessmentVersionGovernanceWritePolicy
   },
 ): Promise<void> {
+  if (input.writePolicy.releaseSignOff.mode !== 'supported') {
+    if (input.writePolicy.releaseSignOff.mode === 'partial') {
+      input.writePolicy.assertSupported('release_sign_off', 'invalidating release sign-off')
+    }
+    return
+  }
+
   if ((input.version.releaseGovernance?.signOff.status ?? 'unsigned') !== 'signed_off') {
     return
   }
@@ -1728,6 +1874,10 @@ export async function importAdminAssessmentPackage(
 
   try {
     return await deps.withTransaction(async (client) => {
+      const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
+        client.query.bind(client),
+        deps.getAssessmentVersionSchemaCapabilities,
+      )
       const version = await loadAssessmentVersionRowById(
         client,
         input.assessmentId,
@@ -1760,6 +1910,11 @@ export async function importAdminAssessmentPackage(
       const actor = await deps.getActorIdentity(client)
       const nowIso = deps.now().toISOString()
       const packageStatus = validation.status
+      const includeMaterialUpdatedAt = writePolicy.releaseSignOff.mode === 'supported'
+
+      if (writePolicy.releaseSignOff.mode === 'partial') {
+        writePolicy.assertSupported('release_sign_off', 'tracking package material updates')
+      }
 
       await client.query(
         `update assessment_versions
@@ -1774,7 +1929,7 @@ export async function importAdminAssessmentPackage(
              package_validation_report_json = $10::jsonb,
              source_type = 'import',
              validation_status = $11,
-             material_updated_at = $8::timestamptz,
+             ${includeMaterialUpdatedAt ? 'material_updated_at = $8::timestamptz,' : ''}
              updated_at = $8::timestamptz,
              updated_by_identity_id = $9
          where id = $1
@@ -1811,6 +1966,7 @@ export async function importAdminAssessmentPackage(
           nowIso,
           createId: deps.createId,
           reason: 'material_update',
+          writePolicy,
         })
       }
 
@@ -1822,6 +1978,7 @@ export async function importAdminAssessmentPackage(
         createId: deps.createId,
         reason: 'package_import',
         getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
+        onUnsupported: 'skip',
       })
 
       if (!validation.ok) {
@@ -1878,6 +2035,10 @@ export async function importAdminAssessmentPackage(
       }
     })
   } catch (error) {
+    const compatibilityFailure = buildAssessmentVersionSchemaCompatibilityResult<AdminAssessmentPackageImportResult>(error)
+    if (compatibilityFailure) {
+      return compatibilityFailure
+    }
     console.error('[admin-assessment-management] Failed to import assessment package.', error)
     return {
       ok: false,
@@ -2205,6 +2366,7 @@ export async function importAdminAssessmentSavedScenarios(
         createId: deps.createId,
         reason: 'scenario_change',
         getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
+        onUnsupported: 'skip',
       })
 
       await writeAssessmentAuditEvent(client, {
@@ -2239,6 +2401,10 @@ export async function importAdminAssessmentSavedScenarios(
       }
     })
   } catch (error) {
+    const compatibilityFailure = buildAssessmentVersionSchemaCompatibilityResult<AdminAssessmentScenarioImportResult>(error)
+    if (compatibilityFailure) {
+      return { ...compatibilityFailure, sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
+    }
     console.error('[admin-assessment-management] Failed to import saved scenarios.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error), sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
   }
@@ -2403,6 +2569,12 @@ export async function runAdminAssessmentScenarioSuite(
 
   try {
     return await deps.withTransaction(async (client) => {
+      const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
+        client.query.bind(client),
+        deps.getAssessmentVersionSchemaCapabilities,
+      )
+      writePolicy.assertSupported('regression_snapshot', 'persisting the regression suite snapshot')
+
       const [versionRows, scenariosByVersion] = await Promise.all([
         loadAssessmentVersionsForScenarioWork(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities),
         loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
@@ -2483,6 +2655,7 @@ export async function runAdminAssessmentScenarioSuite(
         createId: deps.createId,
         reason: 'suite_snapshot',
         getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
+        onUnsupported: 'skip',
       })
 
       await writeAssessmentAuditEvent(client, {
@@ -2508,6 +2681,10 @@ export async function runAdminAssessmentScenarioSuite(
       }
     })
   } catch (error) {
+    const compatibilityFailure = buildAssessmentVersionSchemaCompatibilityResult<AdminAssessmentScenarioSuiteRunResult>(error)
+    if (compatibilityFailure) {
+      return compatibilityFailure
+    }
     console.error('[admin-assessment-management] Failed to run regression suite.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
   }
@@ -2526,6 +2703,13 @@ export async function publishAdminAssessmentVersion(
 
   try {
     return await deps.withTransaction(async (client) => {
+      const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
+        client.query.bind(client),
+        deps.getAssessmentVersionSchemaCapabilities,
+      )
+      writePolicy.assertSupported('release_readiness', 'publishing assessment versions')
+      writePolicy.assertSupported('release_sign_off', 'publishing assessment versions')
+
       const versionRow = await loadAssessmentVersionRowById(
         client,
         input.assessmentId,
@@ -2564,6 +2748,7 @@ export async function publishAdminAssessmentVersion(
         createId: deps.createId,
         reason: 'publish_attempt',
         getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
+        onUnsupported: 'error',
       })
       const evaluatedVersion = readinessState.version
       if (!evaluatedVersion) {
@@ -2695,6 +2880,10 @@ export async function publishAdminAssessmentVersion(
       }
     })
   } catch (error) {
+    const compatibilityFailure = buildAssessmentVersionSchemaCompatibilityResult<AdminAssessmentVersionMutationResult>(error)
+    if (compatibilityFailure) {
+      return compatibilityFailure
+    }
     console.error('[admin-assessment-management] Failed to publish version.', error)
     return {
       ok: false,
@@ -2718,6 +2907,12 @@ export async function refreshAdminAssessmentVersionReleaseReadiness(
 
   try {
     return await deps.withTransaction(async (client) => {
+      const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
+        client.query.bind(client),
+        deps.getAssessmentVersionSchemaCapabilities,
+      )
+      writePolicy.assertSupported('release_readiness', 'refreshing release readiness')
+
       const versionLookup = await client.query<{ id: string; version_label: string; assessment_name: string }>(
         `select av.id, av.version_label, ad.name as assessment_name
          from assessment_versions av
@@ -2741,6 +2936,7 @@ export async function refreshAdminAssessmentVersionReleaseReadiness(
         createId: deps.createId,
         reason: 'manual_refresh',
         getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
+        onUnsupported: 'error',
       })
 
       return {
@@ -2752,6 +2948,10 @@ export async function refreshAdminAssessmentVersionReleaseReadiness(
       }
     })
   } catch (error) {
+    const compatibilityFailure = buildAssessmentVersionSchemaCompatibilityResult<AdminAssessmentVersionMutationResult>(error)
+    if (compatibilityFailure) {
+      return compatibilityFailure
+    }
     console.error('[admin-assessment-management] Failed to refresh release readiness.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
   }
@@ -2770,6 +2970,13 @@ export async function signOffAdminAssessmentVersion(
 
   try {
     return await deps.withTransaction(async (client) => {
+      const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
+        client.query.bind(client),
+        deps.getAssessmentVersionSchemaCapabilities,
+      )
+      writePolicy.assertSupported('release_readiness', 'recording release sign-off')
+      writePolicy.assertSupported('release_sign_off', 'recording release sign-off')
+
       const [versionRows, scenariosByVersion] = await Promise.all([
         loadAssessmentVersionsForScenarioWork(client, input.assessmentId, deps.getAssessmentVersionSchemaCapabilities),
         loadAssessmentSavedScenariosForAssessment(client, input.assessmentId),
@@ -2793,6 +3000,7 @@ export async function signOffAdminAssessmentVersion(
         reason: 'manual_refresh',
         emitAudit: false,
         getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
+        onUnsupported: 'error',
       })
       const evaluatedVersion = refreshed.version ?? version
       const readiness = getAdminAssessmentVersionReadiness(evaluatedVersion)
@@ -2828,6 +3036,10 @@ export async function signOffAdminAssessmentVersion(
       return { ok: true, code: 'created', message: 'Version signed off.', assessmentId: input.assessmentId, versionId: input.versionId }
     })
   } catch (error) {
+    const compatibilityFailure = buildAssessmentVersionSchemaCompatibilityResult<AdminAssessmentVersionMutationResult>(error)
+    if (compatibilityFailure) {
+      return compatibilityFailure
+    }
     console.error('[admin-assessment-management] Failed to sign off version.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
   }
@@ -2846,6 +3058,12 @@ export async function removeAdminAssessmentVersionSignOff(
 
   try {
     return await deps.withTransaction(async (client) => {
+      const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
+        client.query.bind(client),
+        deps.getAssessmentVersionSchemaCapabilities,
+      )
+      writePolicy.assertSupported('release_sign_off', 'removing release sign-off')
+
       const versionLookup = await client.query<{ id: string; version_label: string; assessment_name: string }>(
         `select av.id, av.version_label, ad.name as assessment_name
          from assessment_versions av
@@ -2887,6 +3105,10 @@ export async function removeAdminAssessmentVersionSignOff(
       return { ok: true, code: 'created', message: 'Release sign-off removed.', assessmentId: input.assessmentId, versionId: input.versionId }
     })
   } catch (error) {
+    const compatibilityFailure = buildAssessmentVersionSchemaCompatibilityResult<AdminAssessmentVersionMutationResult>(error)
+    if (compatibilityFailure) {
+      return compatibilityFailure
+    }
     console.error('[admin-assessment-management] Failed to remove sign-off.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
   }
@@ -2910,6 +3132,12 @@ export async function updateAdminAssessmentVersionReleaseNotes(
 
   try {
     return await deps.withTransaction(async (client) => {
+      const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
+        client.query.bind(client),
+        deps.getAssessmentVersionSchemaCapabilities,
+      )
+      writePolicy.assertSupported('release_notes', 'saving release notes')
+
       const versionLookup = await client.query<{ id: string; version_label: string; assessment_name: string }>(
         `select av.id, av.version_label, ad.name as assessment_name
          from assessment_versions av
@@ -2958,6 +3186,10 @@ export async function updateAdminAssessmentVersionReleaseNotes(
       return { ok: true, code: 'created', message: 'Release notes saved.', assessmentId: input.assessmentId, versionId: input.versionId }
     })
   } catch (error) {
+    const compatibilityFailure = buildAssessmentVersionSchemaCompatibilityResult<AdminAssessmentVersionMutationResult>(error)
+    if (compatibilityFailure) {
+      return compatibilityFailure
+    }
     console.error('[admin-assessment-management] Failed to update release notes.', error)
     return { ok: false, code: 'unknown_error', message: describeDatabaseError(error) }
   }
