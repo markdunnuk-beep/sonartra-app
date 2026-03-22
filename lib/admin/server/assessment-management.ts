@@ -909,13 +909,35 @@ function isMissingRelationError(error: unknown, relationName: string): boolean {
   return code === '42P01' && message.toLowerCase().includes(`relation "${relationName.toLowerCase()}" does not exist`)
 }
 
-function isMissingColumnError(error: unknown, columnName: string): boolean {
+const OPTIONAL_ASSESSMENT_VERSION_COLUMNS = [
+  'av.publish_readiness_status',
+  'av.readiness_check_summary_json',
+  'av.last_readiness_evaluated_at',
+  'av.sign_off_status',
+  'av.sign_off_at',
+  'av.sign_off_by_identity_id',
+  'av.sign_off_material_updated_at',
+  'av.release_notes',
+  'av.material_updated_at',
+  'av.latest_regression_suite_snapshot_json',
+] as const
+
+function hasMissingOptionalVersionColumn(
+  error: unknown,
+  allowedColumns: readonly string[] = OPTIONAL_ASSESSMENT_VERSION_COLUMNS,
+): boolean {
   const { code, message } = extractDatabaseFailureDetails(error)
-  return code === '42703' && message.toLowerCase().includes(`column ${columnName.toLowerCase()} does not exist`)
+
+  if (code !== '42703') {
+    return false
+  }
+
+  const normalizedMessage = message.toLowerCase()
+  return allowedColumns.some((columnName) => normalizedMessage.includes(`column ${columnName.toLowerCase()} does not exist`))
 }
 
-function buildAssessmentVersionsDetailQuery(includeReleaseGovernance: boolean): string {
-  const releaseGovernanceSelect = includeReleaseGovernance
+function buildAssessmentVersionsDetailQuery(includeOptionalGovernanceAndRegression: boolean): string {
+  const optionalSelect = includeOptionalGovernanceAndRegression
     ? `
          av.publish_readiness_status,
          av.readiness_check_summary_json,
@@ -925,7 +947,8 @@ function buildAssessmentVersionsDetailQuery(includeReleaseGovernance: boolean): 
          sign_off_by.full_name as sign_off_by_name,
          av.sign_off_material_updated_at,
          av.release_notes,
-         av.material_updated_at,`
+         av.material_updated_at,
+         av.latest_regression_suite_snapshot_json`
     : `
          'not_ready'::text as publish_readiness_status,
          null::jsonb as readiness_check_summary_json,
@@ -935,8 +958,9 @@ function buildAssessmentVersionsDetailQuery(includeReleaseGovernance: boolean): 
          null::text as sign_off_by_name,
          null::timestamptz as sign_off_material_updated_at,
          null::text as release_notes,
-         av.updated_at as material_updated_at,`
-  const signOffJoin = includeReleaseGovernance
+         av.updated_at as material_updated_at,
+         null::jsonb as latest_regression_suite_snapshot_json`
+  const signOffJoin = includeOptionalGovernanceAndRegression
     ? `
        left join admin_identities sign_off_by on sign_off_by.id = av.sign_off_by_identity_id`
     : ''
@@ -957,15 +981,15 @@ function buildAssessmentVersionsDetailQuery(includeReleaseGovernance: boolean): 
          av.package_imported_at,
          av.package_source_filename,
          package_imported_by.full_name as package_imported_by_name,
-         av.package_validation_report_json,${releaseGovernanceSelect}
+         av.package_validation_report_json,
+         ${optionalSelect},
          av.created_at,
          av.updated_at,
          av.published_at,
          av.archived_at,
          created_by.full_name as created_by_name,
          updated_by.full_name as updated_by_name,
-         published_by.full_name as published_by_name,
-         av.latest_regression_suite_snapshot_json
+         published_by.full_name as published_by_name
        from assessment_versions av
        left join admin_identities created_by on created_by.id = av.created_by_identity_id
        left join admin_identities updated_by on updated_by.id = av.updated_by_identity_id
@@ -986,7 +1010,7 @@ async function loadAssessmentVersionDetailRows(
     const result = await query<AssessmentVersionRow>(buildAssessmentVersionsDetailQuery(true), [assessmentId])
     return result.rows ?? []
   } catch (error) {
-    if (isMissingColumnError(error, 'av.sign_off_by_identity_id')) {
+    if (hasMissingOptionalVersionColumn(error)) {
       const fallbackResult = await query<AssessmentVersionRow>(buildAssessmentVersionsDetailQuery(false), [assessmentId])
       return fallbackResult.rows ?? []
     }
