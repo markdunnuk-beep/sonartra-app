@@ -242,3 +242,62 @@ test('returns error lifecycle when the latest completed attempt failed result ge
   assert.equal(inventory[0]?.assessmentHref, undefined)
   assert.equal(inventory[0]?.latestResultStatus, 'failed')
 })
+
+
+test('returns ready lifecycle for completed v2 results even when signal rows are not persisted', async () => {
+  const v2Result: AssessmentResultRow = {
+    ...baseResult,
+    status: 'complete',
+    result_payload: {
+      contractVersion: 'package_contract_v2',
+      packageMetadata: { assessmentName: 'Adaptive Balance' },
+      materializedOutputs: {
+        webSummaryOutputs: [
+          {
+            id: 'summary:1',
+            key: 'adaptive-balance',
+            title: 'Adaptive Balance',
+            label: 'Adaptive Balance',
+            status: 'available',
+            severity: null,
+            band: 'Balanced',
+            value: { score: 74, rawScore: 12, percentile: 81, descriptor: 'Strongly balanced' },
+            explanation: { text: 'Consistent balance across adaptive dimensions.' },
+            visibleInProduct: true,
+          },
+        ],
+        integrityNotices: [],
+      },
+    },
+  }
+
+  const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
+    resolveLiveSignalsPublishedVersionState: async () => ({
+      version: publishedVersion,
+      diagnostic: { code: 'no_published_version', message: 'No active published Sonartra Signals version is available.' },
+    }),
+    queryDb: makeQueryDb({
+      latestAssessment: {
+        ...baseAssessment,
+        status: 'completed',
+        progress_count: 80,
+        progress_percent: '100',
+        completed_at: '2026-03-20T09:15:00.000Z',
+        version_key: 'signals-v2',
+        version_name: 'Sonartra Signals v2',
+        total_questions: 80,
+      },
+      latestResult: v2Result,
+      latestReadyResult: {
+        ...v2Result,
+        assessment_started_at: '2026-03-20T09:00:00.000Z',
+        assessment_completed_at: '2026-03-20T09:15:00.000Z',
+      },
+      signalCount: 0,
+    }),
+  })
+
+  assert.equal(inventory[0]?.status, 'complete')
+  assert.equal(inventory[0]?.lifecycleState, 'ready')
+  assert.equal(inventory[0]?.resultsAvailable, true)
+})

@@ -183,8 +183,8 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
     return {
       status: 'ready',
       authStatus: 'authenticated',
-      hasCompletedResult: canShowResult,
-      assessment: mapAssessmentState(assessment, canShowResult ? 'ready' : lifecycleStatus),
+      hasCompletedResult: true,
+      assessment: mapAssessmentState(assessment, 'ready'),
       result: canShowResult ? result : null,
     }
   } catch (error) {
@@ -193,8 +193,8 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
     return {
       status: 'ready',
       authStatus: 'authenticated',
-      hasCompletedResult: false,
-      assessment: mapAssessmentState(assessment, lifecycleStatus),
+      hasCompletedResult: true,
+      assessment: mapAssessmentState(assessment, 'ready'),
       result: null,
     }
   }

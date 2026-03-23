@@ -1,4 +1,5 @@
 import { AssessmentResultRow, AssessmentRow } from '@/lib/assessment-types';
+import { hasUserFacingV2Summary, isPackageContractV2Result } from '@/lib/server/live-assessment-user-result';
 import { queryDb } from '@/lib/db';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 
@@ -112,8 +113,11 @@ const defaultDependencies: LifecycleDependencies = {
        WHERE a.user_id = $1
          AND a.organisation_id IS NULL
          AND ar.status = 'complete'
-         AND EXISTS (
-           SELECT 1 FROM assessment_result_signals ars WHERE ars.assessment_result_id = ar.id
+         AND (
+           EXISTS (
+             SELECT 1 FROM assessment_result_signals ars WHERE ars.assessment_result_id = ar.id
+           )
+           OR COALESCE(ar.result_payload->>'contractVersion', '') = 'package_contract_v2'
          )
        ORDER BY a.completed_at DESC NULLS LAST, ar.created_at DESC
        LIMIT 1`,
@@ -255,7 +259,7 @@ export async function resolveIndividualLifecycleState(
     };
   }
 
-  if (latestAssessmentResult.status === 'complete' && signalCount > 0) {
+  if (latestAssessmentResult.status === 'complete' && (signalCount > 0 || (isPackageContractV2Result(latestAssessmentResult) && hasUserFacingV2Summary(latestAssessmentResult)))) {
     return {
       authState: 'authenticated',
       userId,

@@ -13,6 +13,7 @@ import type {
 } from '@/lib/assessment/assessment-repository-types'
 import type { AssessmentResultRow, AssessmentRow } from '@/lib/assessment-types'
 import { queryDb } from '@/lib/db'
+import { hasUserFacingV2Summary, isPackageContractV2Result } from '@/lib/server/live-assessment-user-result'
 import { getCurrentAssessmentRepositoryContext } from '@/lib/assessment/assessment-repository-context'
 import {
   resolveLiveSignalsPublishedVersionState,
@@ -108,7 +109,7 @@ function resolveLifecycleState(args: {
     return 'error'
   }
 
-  if (latestAssessmentResult.status === 'complete' && latestAssessmentSignalCount > 0) {
+  if (latestAssessmentResult.status === 'complete' && (latestAssessmentSignalCount > 0 || (isPackageContractV2Result(latestAssessmentResult) && hasUserFacingV2Summary(latestAssessmentResult)))) {
     return 'ready'
   }
 
@@ -191,8 +192,11 @@ async function getLatestReadyResultForUser(
        AND a.organisation_id IS NULL
        AND av.assessment_definition_id = $2
        AND ar.status = 'complete'
-       AND EXISTS (
-         SELECT 1 FROM assessment_result_signals ars WHERE ars.assessment_result_id = ar.id
+       AND (
+         EXISTS (
+           SELECT 1 FROM assessment_result_signals ars WHERE ars.assessment_result_id = ar.id
+         )
+         OR COALESCE(ar.result_payload->>'contractVersion', '') = 'package_contract_v2'
        )
      ORDER BY a.completed_at DESC NULLS LAST, ar.created_at DESC
      LIMIT 1`,

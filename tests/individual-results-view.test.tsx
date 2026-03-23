@@ -334,3 +334,80 @@ test('unexpected state renders fallback instead of blank output', () => {
   assert.match(html, /Results are temporarily unavailable/)
   assert.match(html, /could not interpret the latest results state/i)
 })
+
+
+test('ready_v2 state renders product-safe summary cards and notices', () => {
+  const html = renderToStaticMarkup(
+    <IndividualIntelligenceResultView
+      model={{
+        ok: true,
+        state: 'ready_v2',
+        data: {
+          contractVersion: 'live_assessment_user_result/v1',
+          status: 'completed',
+          assessmentId: 'assessment-v2',
+          assessmentStatus: 'completed',
+          scoringStatus: 'scored',
+          assessmentMeta: {
+            versionKey: 'signals-v2',
+            title: 'Adaptive Balance',
+            packageSemver: '2.1.0',
+          },
+          resultMeta: {
+            resultId: 'result-v2',
+            completedAt: '2026-03-20T09:15:00.000Z',
+            scoredAt: '2026-03-20T09:15:10.000Z',
+            availableAt: '2026-03-20T09:15:11.000Z',
+          },
+          summaryCards: [
+            {
+              id: 'summary:1',
+              key: 'adaptive-balance',
+              title: 'Adaptive Balance',
+              label: 'Adaptive Balance',
+              status: 'available',
+              severity: null,
+              band: 'Balanced',
+              score: 74,
+              rawScore: 12,
+              percentile: 81,
+              descriptor: 'Strongly balanced',
+              explanation: 'Consistent balance across adaptive dimensions.',
+            },
+          ],
+          notices: [
+            {
+              id: 'notice:1',
+              severity: 'warning',
+              title: 'Response consistency',
+              message: 'A small number of answers were inconsistent.',
+            },
+          ],
+          statusMessage: 'Assessment results are available.',
+          resultsAvailable: true,
+        },
+      }}
+    />,
+  )
+
+  assert.match(html, /Adaptive Balance/)
+  assert.match(html, /Results ready/)
+  assert.match(html, /Strongly balanced/)
+  assert.match(html, /Response consistency/)
+  assert.doesNotMatch(html, /technicalDiagnostics/)
+})
+
+test('results_unavailable state renders a controlled completed-but-unavailable message', () => {
+  const html = renderToStaticMarkup(
+    <IndividualIntelligenceResultView
+      model={{
+        ok: true,
+        state: 'results_unavailable',
+        message: 'Assessment completed, but no user-facing summary is available for this result yet.',
+      }}
+    />,
+  )
+
+  assert.match(html, /completed assessment is not yet available to view/i)
+  assert.match(html, /no user-facing summary is available/i)
+})
