@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { resolveAssessmentReportRoute } from '../app/api/assessment-results/[resultId]/report/route'
+import { resolveAssessmentReportRoute } from '../app/api/assessment-results/[resultId]/report/route-handler'
 
 async function callRoute(
   url = 'http://localhost/api/assessment-results/result-1/report',
