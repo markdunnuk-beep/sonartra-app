@@ -164,7 +164,7 @@ async function getLatestResultForAssessment(
 ): Promise<AssessmentResultRow | null> {
   const result = await query<AssessmentResultRow>(
     `SELECT id, assessment_id, assessment_version_id, version_key, scoring_model_key, snapshot_version, status,
-            result_payload, response_quality_payload, completed_at, scored_at, created_at, updated_at
+            result_payload, response_quality_payload, report_artifact_json, completed_at, scored_at, created_at, updated_at
      FROM assessment_results
      WHERE assessment_id = $1
      ORDER BY created_at DESC
@@ -182,7 +182,7 @@ async function getLatestReadyResultForUser(
 ): Promise<AssessmentInventoryReadyResultRow | null> {
   const result = await query<AssessmentInventoryReadyResultRow>(
     `SELECT ar.id, ar.assessment_id, ar.assessment_version_id, ar.version_key, ar.scoring_model_key, ar.snapshot_version,
-            ar.status, ar.result_payload, ar.response_quality_payload, ar.completed_at, ar.scored_at, ar.created_at, ar.updated_at,
+            ar.status, ar.result_payload, ar.response_quality_payload, ar.report_artifact_json, ar.completed_at, ar.scored_at, ar.created_at, ar.updated_at,
             a.started_at AS assessment_started_at,
             a.completed_at AS assessment_completed_at
      FROM assessment_results ar

@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/Card'
 import { ResultsWorkspaceShell } from '@/components/results/ResultsPrimitives'
 import { buildUserFacingAssessmentResultViewModel } from '@/lib/results/live-assessment-user-result-presentation'
 import type { LiveAssessmentUserResultContract } from '@/lib/server/live-assessment-user-result'
+import Link from 'next/link'
 
 function NoticeCard({ title, message, tone }: { title: string; message: string; tone: 'info' | 'warning' | 'error' }) {
   const toneClass =
@@ -74,6 +75,38 @@ export function UserFacingAssessmentResultView({ result }: { result: LiveAssessm
         <div className="flex flex-wrap gap-3 text-sm text-textSecondary">
           {viewModel.versionLabel ? <span>{viewModel.versionLabel}</span> : null}
           {viewModel.completedLabel ? <span>Completed {viewModel.completedLabel}</span> : null}
+        </div>
+      </Card>
+
+      <Card className="space-y-4 border-border/80 bg-panel/75">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-textSecondary">Report delivery</p>
+          <h2 className="text-xl font-semibold tracking-tight text-textPrimary">{viewModel.report.label}</h2>
+          <p className="text-sm leading-6 text-textSecondary">{viewModel.report.message}</p>
+        </div>
+        <div className="flex flex-wrap gap-3 text-sm text-textSecondary">
+          <span>Summary results: {result.resultsAvailable ? 'Ready' : 'Unavailable'}</span>
+          <span>Report: {viewModel.report.state.replace(/_/g, ' ')}</span>
+          {viewModel.report.generatedLabel ? <span>Generated {viewModel.report.generatedLabel}</span> : null}
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {viewModel.report.viewHref ? (
+            <Link
+              className="inline-flex items-center rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium text-textPrimary transition hover:bg-white/10"
+              href={viewModel.report.viewHref}
+              target="_blank"
+            >
+              {viewModel.report.state === 'available' ? 'Open report' : 'Generate report'}
+            </Link>
+          ) : null}
+          {viewModel.report.downloadHref ? (
+            <Link
+              className="inline-flex items-center rounded-full border border-border bg-panel px-4 py-2 text-sm font-medium text-textPrimary transition hover:bg-white/10"
+              href={viewModel.report.downloadHref}
+            >
+              {viewModel.report.state === 'available' ? 'Download report' : 'Generate download'}
+            </Link>
+          ) : null}
         </div>
       </Card>
 

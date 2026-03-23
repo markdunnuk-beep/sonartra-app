@@ -1,5 +1,6 @@
 import { AssessmentRow, AssessmentResultRow, AssessmentResultSignalRow } from '@/lib/assessment-types';
 import { queryDb } from '@/lib/db';
+import { getUserFacingAssessmentReportViewModel } from '@/lib/server/assessment-report-artifacts';
 import {
   AssessmentResultReadResponse,
   AssessmentResultSnapshotPayload,
@@ -214,6 +215,7 @@ export async function getAssessmentResultReadModel(
           responseQuality: null,
           signals: [],
           contractVersion: 'package_contract_v2',
+          report: getUserFacingAssessmentReportViewModel(result),
           liveRuntime: v2LiveResult,
         },
       },

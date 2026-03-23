@@ -359,6 +359,15 @@ test('ready_v2 state renders product-safe summary cards and notices', () => {
             scoredAt: '2026-03-20T09:15:10.000Z',
             availableAt: '2026-03-20T09:15:11.000Z',
           },
+          report: {
+            state: 'pending',
+            format: null,
+            generatedAt: null,
+            label: 'Report pending generation',
+            message: 'Your downloadable assessment report will be generated when you open or download it.',
+            downloadHref: '/api/assessment-results/result-v2/report?download=1',
+            viewHref: '/api/assessment-results/result-v2/report',
+          },
           summaryCards: [
             {
               id: 'summary:1',
@@ -394,6 +403,9 @@ test('ready_v2 state renders product-safe summary cards and notices', () => {
   assert.match(html, /Results ready/)
   assert.match(html, /Strongly balanced/)
   assert.match(html, /Response consistency/)
+  assert.match(html, /Report pending generation/)
+  assert.match(html, /Generate report/)
+  assert.match(html, /Generate download/)
   assert.doesNotMatch(html, /technicalDiagnostics/)
 })
 
