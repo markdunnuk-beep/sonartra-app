@@ -67,9 +67,9 @@ export function AdminAssessmentReportOutputPreviewPanel({
                     { label: 'Web summary outputs', value: String(materialized.webSummaryOutputs.length) },
                     { label: 'Report sections', value: String(materialized.reportDocument.sections.length) },
                     { label: 'Integrity notices', value: String(materialized.integrityNotices.length) },
-                    { label: 'Diagnostics', value: String(materialized.diagnostics.length) },
-                    { label: 'Triggered outputs', value: String(materialized.adminDebug.triggeredOutputKeys.length) },
-                    { label: 'Non-triggered outputs', value: String(materialized.adminDebug.nonTriggeredOutputKeys.length) },
+                    { label: 'Technical diagnostics', value: String(materialized.technicalDiagnostics.length) },
+                    { label: 'Triggered outputs', value: String(simulationResult.viewModel?.materializationDebug.triggeredOutputKeys.length ?? 0) },
+                    { label: 'Non-triggered outputs', value: String(simulationResult.viewModel?.materializationDebug.nonTriggeredOutputKeys.length ?? 0) },
                   ]}
                 />
               </div>
@@ -117,9 +117,9 @@ export function AdminAssessmentReportOutputPreviewPanel({
           </SurfaceSection>
 
           <SurfaceSection
-            title="Integrity notices + diagnostics"
-            eyebrow="Admin debug"
-            description="Missing bindings, limitations, and triggered integrity signals remain explicit in admin preview so downstream renderers do not fail late."
+            title="Integrity notices"
+            eyebrow="Product-facing output"
+            description="Triggered integrity and contradiction findings stay in the materialized output contract as product-visible notices."
           >
             <div className="space-y-3">
               {materialized.integrityNotices.map((warning) => (
@@ -131,13 +131,27 @@ export function AdminAssessmentReportOutputPreviewPanel({
                   <p className="mt-3 text-sm leading-6 text-textPrimary">{warning.message}</p>
                 </div>
               ))}
-              {materialized.diagnostics.map((diagnostic) => (
-                <div key={`${diagnostic.code}-${diagnostic.path}`} className={`rounded-2xl border px-4 py-3 ${diagnostic.severity === 'error' ? 'border-rose-400/20 bg-rose-400/[0.06]' : 'border-amber-400/20 bg-amber-400/[0.06]'}`}>
-                  <Badge label={diagnostic.severity} tone={diagnostic.severity === 'error' ? 'rose' : 'amber'} />
+              {materialized.integrityNotices.length === 0 ? <p className="text-sm text-textSecondary">No product-facing integrity notices were triggered for this simulation.</p> : null}
+            </div>
+          </SurfaceSection>
+
+          <SurfaceSection
+            title="Technical diagnostics"
+            eyebrow="Admin debug"
+            description="Evaluation and materialization diagnostics stay separate from product-facing report notices so preview tooling can inspect both without mixing their contracts."
+          >
+            <div className="space-y-3">
+              {materialized.technicalDiagnostics.map((diagnostic) => (
+                <div key={`${diagnostic.stage}-${diagnostic.code}-${diagnostic.path}`} className={`rounded-2xl border px-4 py-3 ${diagnostic.severity === 'error' ? 'border-rose-400/20 bg-rose-400/[0.06]' : 'border-amber-400/20 bg-amber-400/[0.06]'}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge label={diagnostic.severity} tone={diagnostic.severity === 'error' ? 'rose' : 'amber'} />
+                    <Badge label={diagnostic.stage} tone="slate" />
+                  </div>
                   <p className="mt-3 text-sm leading-6 text-textPrimary">{diagnostic.message}</p>
                   <p className="mt-2 text-xs text-textSecondary">{diagnostic.path}</p>
                 </div>
               ))}
+              {materialized.technicalDiagnostics.length === 0 ? <p className="text-sm text-textSecondary">No technical diagnostics were emitted during evaluation or materialization.</p> : null}
             </div>
           </SurfaceSection>
         </div>

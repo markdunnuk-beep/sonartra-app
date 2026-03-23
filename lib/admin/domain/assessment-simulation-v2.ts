@@ -2,7 +2,11 @@ import type { AdminAssessmentPackageReadinessFlags } from '@/lib/admin/server/as
 import type { AdminAssessmentSimulationInputMode, AdminAssessmentSimulationIssue, AdminAssessmentSimulationScenarioKey } from '@/lib/admin/domain/assessment-simulation'
 import { compileAssessmentPackageV2, type ExecutableAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import { evaluateAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
-import { materializeAssessmentOutputsV2, type MaterializedAssessmentOutputsV2 } from '@/lib/admin/domain/assessment-package-v2-materialization'
+import {
+  materializeAssessmentOutputsV2,
+  type MaterializationTechnicalDiagnosticV2,
+  type MaterializedAssessmentOutputsV2,
+} from '@/lib/admin/domain/assessment-package-v2-materialization'
 import { parseStoredValidatedAssessmentPackageV2, type SonartraAssessmentPackageV2ValidatedImport } from '@/lib/admin/domain/assessment-package-v2'
 
 export type SimulationReadinessStatus = 'not_ready' | 'simulatable' | 'simulatable_with_warnings'
@@ -75,7 +79,11 @@ export interface AdminSimulationViewModelV2 {
   }>
   materializedWebSummaryOutputs: MaterializedAssessmentOutputsV2['webSummaryOutputs']
   materializedReportSections: MaterializedAssessmentOutputsV2['reportDocument']['sections']
-  diagnostics: MaterializedAssessmentOutputsV2['diagnostics']
+  technicalDiagnostics: MaterializedAssessmentOutputsV2['technicalDiagnostics']
+  materializationDebug: {
+    triggeredOutputKeys: string[]
+    nonTriggeredOutputKeys: string[]
+  }
 }
 
 export interface AssessmentSimulationResultV2 {
@@ -171,67 +179,81 @@ export function buildAdminAssessmentSimulationScenarioV2(
   }
 }
 
+function normalizeAdminAssessmentSimulationRequestV2(
+  input: unknown,
+  fallbackSource: AdminAssessmentSimulationRequestV2['source'],
+): { errors: AdminAssessmentSimulationIssue[]; warnings: AdminAssessmentSimulationIssue[]; normalizedRequest: AdminAssessmentSimulationRequestV2 | null } {
+  const errors: AdminAssessmentSimulationIssue[] = []
+  const warnings: AdminAssessmentSimulationIssue[] = []
+
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    errors.push(toIssue('responsePayload.responses', 'Simulation payload must include a responses object or a question-value map.'))
+    return { errors, warnings, normalizedRequest: null }
+  }
+
+  const candidate = input as Record<string, unknown>
+  let responses: Record<string, unknown> | null = null
+
+  if ('responses' in candidate) {
+    if (candidate.responses && typeof candidate.responses === 'object' && !Array.isArray(candidate.responses)) {
+      responses = { ...(candidate.responses as Record<string, unknown>) }
+    } else {
+      errors.push(toIssue('responsePayload.responses', 'Simulation payload must include a responses object or a question-value map.'))
+    }
+  } else {
+    responses = Object.fromEntries(Object.entries(candidate).filter(([key]) => !['locale', 'source', 'scenarioKey'].includes(key)))
+  }
+
+  if (!responses || Object.keys(responses).length === 0) {
+    errors.push(toIssue('responsePayload.responses', 'Simulation payload must include a responses object or a question-value map.'))
+    return { errors, warnings, normalizedRequest: null }
+  }
+
+  return {
+    errors,
+    warnings,
+    normalizedRequest: {
+      responses,
+      locale: typeof candidate.locale === 'string' && candidate.locale.trim() ? candidate.locale.trim() : null,
+      source: candidate.source === 'generated_form' || candidate.source === 'manual_json' || candidate.source === 'seeded_scenario'
+        ? candidate.source
+        : fallbackSource,
+      scenarioKey: candidate.scenarioKey === 'sensible_defaults' || candidate.scenarioKey === 'high' || candidate.scenarioKey === 'low' || candidate.scenarioKey === 'balanced'
+        ? candidate.scenarioKey
+        : null,
+    },
+  }
+}
+
+function toIssuesFromTechnicalDiagnostics(diagnostics: MaterializationTechnicalDiagnosticV2[]): AdminAssessmentSimulationIssue[] {
+  return diagnostics.map((diagnostic) => toIssue(diagnostic.path, diagnostic.message))
+}
+
 export function parseAdminAssessmentSimulationPayloadV2(
   input: string,
   fallbackSource: AdminAssessmentSimulationRequestV2['source'] = 'manual_json',
 ): { ok: boolean; errors: AdminAssessmentSimulationIssue[]; warnings: AdminAssessmentSimulationIssue[]; normalizedRequest: AdminAssessmentSimulationRequestV2 | null } {
-  const errors: AdminAssessmentSimulationIssue[] = []
-  const warnings: AdminAssessmentSimulationIssue[] = []
   const trimmed = input.trim()
 
   if (!trimmed) {
-    errors.push(toIssue('responsePayload', 'Provide a simulation response payload before running the simulation.'))
-    return { ok: false, errors, warnings, normalizedRequest: null }
+    const errors = [toIssue('responsePayload', 'Provide a simulation response payload before running the simulation.')]
+    return { ok: false, errors, warnings: [], normalizedRequest: null }
   }
 
   let parsed: unknown
   try {
     parsed = JSON.parse(trimmed)
   } catch {
-    errors.push(toIssue('responsePayload', 'Simulation payload must be valid JSON.'))
-    return { ok: false, errors, warnings, normalizedRequest: null }
+    const errors = [toIssue('responsePayload', 'Simulation payload must be valid JSON.')]
+    return { ok: false, errors, warnings: [], normalizedRequest: null }
   }
 
-  let responses: Record<string, unknown> | null = null
-  let locale: string | null = null
-  let source: AdminAssessmentSimulationRequestV2['source'] = fallbackSource
-  let scenarioKey: AdminAssessmentSimulationScenarioKey | null = null
-
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    const candidate = parsed as Record<string, unknown>
-    if ('responses' in candidate) {
-      if (candidate.responses && typeof candidate.responses === 'object' && !Array.isArray(candidate.responses)) {
-        responses = { ...(candidate.responses as Record<string, unknown>) }
-      } else {
-        errors.push(toIssue('responsePayload.responses', 'Simulation payload must include a responses object or a question-value map.'))
-      }
-    } else {
-      responses = Object.fromEntries(Object.entries(candidate).filter(([key]) => !['locale', 'source', 'scenarioKey'].includes(key)))
-    }
-    locale = typeof candidate.locale === 'string' && candidate.locale.trim() ? candidate.locale.trim() : null
-    source = candidate.source === 'generated_form' || candidate.source === 'manual_json' || candidate.source === 'seeded_scenario'
-      ? candidate.source
-      : fallbackSource
-    scenarioKey = candidate.scenarioKey === 'sensible_defaults' || candidate.scenarioKey === 'high' || candidate.scenarioKey === 'low' || candidate.scenarioKey === 'balanced'
-      ? candidate.scenarioKey
-      : null
-  }
-
-  if (!responses || Object.keys(responses).length === 0) {
-    errors.push(toIssue('responsePayload.responses', 'Simulation payload must include a responses object or a question-value map.'))
-    return { ok: false, errors, warnings, normalizedRequest: null }
-  }
-
+  const normalized = normalizeAdminAssessmentSimulationRequestV2(parsed, fallbackSource)
   return {
-    ok: true,
-    errors,
-    warnings,
-    normalizedRequest: {
-      responses,
-      locale,
-      source,
-      scenarioKey,
-    },
+    ok: normalized.errors.length === 0,
+    errors: normalized.errors,
+    warnings: normalized.warnings,
+    normalizedRequest: normalized.errors.length === 0 ? normalized.normalizedRequest : null,
   }
 }
 
@@ -292,14 +314,8 @@ export function executeAdminAssessmentSimulationV2(
   })
 
   const materializedOutputs = materializeAssessmentOutputsV2(compileResult.executablePackage, evaluation)
-  const warnings = [
-    ...evaluation.warnings.map((warning) => toIssue(warning.path, warning.message)),
-    ...materializedOutputs.diagnostics.filter((entry) => entry.severity === 'warning').map((warning) => toIssue(warning.path, warning.message)),
-  ]
-  const errors = [
-    ...evaluation.errors.map((error) => toIssue(error.path, error.message)),
-    ...materializedOutputs.diagnostics.filter((entry) => entry.severity === 'error').map((error) => toIssue(error.path, error.message)),
-  ]
+  const warnings = toIssuesFromTechnicalDiagnostics(materializedOutputs.technicalDiagnostics.filter((entry) => entry.severity === 'warning'))
+  const errors = toIssuesFromTechnicalDiagnostics(materializedOutputs.technicalDiagnostics.filter((entry) => entry.severity === 'error'))
 
   const answeredQuestionIds = Object.keys(request.responses).filter((questionId) => request.responses[questionId] !== undefined)
   const missingQuestionIds = compileResult.executablePackage.executionPlan.questionIds.filter((questionId) => !answeredQuestionIds.includes(questionId))
@@ -354,7 +370,11 @@ export function executeAdminAssessmentSimulationV2(
     })),
     materializedWebSummaryOutputs: materializedOutputs.webSummaryOutputs,
     materializedReportSections: materializedOutputs.reportDocument.sections,
-    diagnostics: materializedOutputs.diagnostics,
+    technicalDiagnostics: materializedOutputs.technicalDiagnostics,
+    materializationDebug: {
+      triggeredOutputKeys: evaluation.outputRuleFindings.filter((finding) => finding.status === 'triggered').map((finding) => finding.key),
+      nonTriggeredOutputKeys: evaluation.outputRuleFindings.filter((finding) => finding.status !== 'triggered').map((finding) => finding.key),
+    },
   }
 
   return {

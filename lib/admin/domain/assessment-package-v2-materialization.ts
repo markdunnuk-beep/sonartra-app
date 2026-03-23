@@ -11,12 +11,14 @@ export type MaterializedOutputSeverity = 'info' | 'warning' | 'error'
 export type WebSummaryOutputStatusV2 = 'available' | 'warning' | 'limited'
 export type ReportOutputSectionKindV2 = 'overview' | 'dimension_summary' | 'triggered_outputs' | 'integrity' | 'limitations' | 'debug'
 export type ReportOutputBlockKindV2 = 'metric' | 'narrative' | 'notice' | 'list' | 'table'
+export type MaterializationTechnicalDiagnosticStage = 'evaluation' | 'materialization'
 
-export interface EvaluationMaterializationDiagnostic {
+export interface MaterializationTechnicalDiagnosticV2 {
   severity: 'warning' | 'error'
   code: string
   message: string
   path: string
+  stage: MaterializationTechnicalDiagnosticStage
   relatedKey?: string | null
 }
 
@@ -36,9 +38,6 @@ export interface WebSummaryOutputV2 {
   }
   explanation: {
     text: string | null
-    narrativeBindingKey: string | null
-    reportBindingKey: string | null
-    source: 'report_binding' | 'output_rule_metadata' | 'system_fallback'
   }
   visibleInProduct: boolean
 }
@@ -48,7 +47,7 @@ export interface IntegrityOutputNoticeV2 {
   severity: MaterializedOutputSeverity
   title: string
   message: string
-  source: 'integrity_rule' | 'evaluation_warning' | 'evaluation_error'
+  source: 'integrity_rule'
   affectedIds: string[]
 }
 
@@ -81,12 +80,7 @@ export interface MaterializedAssessmentOutputsV2 {
   webSummaryOutputs: WebSummaryOutputV2[]
   reportDocument: ReportOutputDocumentV2
   integrityNotices: IntegrityOutputNoticeV2[]
-  diagnostics: EvaluationMaterializationDiagnostic[]
-  adminDebug: {
-    triggeredOutputKeys: string[]
-    nonTriggeredOutputKeys: string[]
-    missingNarrativeBindingKeys: string[]
-  }
+  technicalDiagnostics: MaterializationTechnicalDiagnosticV2[]
 }
 
 function toSeverity(value: string | null | undefined): MaterializedOutputSeverity | null {
@@ -96,25 +90,26 @@ function toSeverity(value: string | null | undefined): MaterializedOutputSeverit
   return null
 }
 
-function pushDiagnostic(
-  diagnostics: EvaluationMaterializationDiagnostic[],
+function pushTechnicalDiagnostic(
+  diagnostics: MaterializationTechnicalDiagnosticV2[],
   severity: 'warning' | 'error',
   code: string,
   path: string,
   message: string,
+  stage: MaterializationTechnicalDiagnosticStage,
   relatedKey?: string | null,
 ) {
-  diagnostics.push({ severity, code, path, message, relatedKey: relatedKey ?? null })
+  diagnostics.push({ severity, code, path, message, stage, relatedKey: relatedKey ?? null })
 }
 
-function toNoticeFromDiagnostic(diagnostic: AssessmentEvaluationDiagnostic): IntegrityOutputNoticeV2 {
+function toTechnicalDiagnosticFromEvaluation(diagnostic: AssessmentEvaluationDiagnostic): MaterializationTechnicalDiagnosticV2 {
   return {
-    id: `${diagnostic.code}:${diagnostic.path}`,
-    severity: diagnostic.severity === 'error' ? 'error' : 'warning',
-    title: diagnostic.severity === 'error' ? 'Evaluation error' : 'Evaluation warning',
+    severity: diagnostic.severity,
+    code: diagnostic.code,
     message: diagnostic.message,
-    source: diagnostic.severity === 'error' ? 'evaluation_error' : 'evaluation_warning',
-    affectedIds: [diagnostic.entityId ?? diagnostic.path].filter(Boolean),
+    path: diagnostic.path,
+    stage: 'evaluation',
+    relatedKey: diagnostic.entityId ?? null,
   }
 }
 
@@ -151,7 +146,10 @@ export function materializeAssessmentOutputsV2(
   executablePackage: ExecutableAssessmentPackageV2,
   evaluationResult: AssessmentEvaluationResultV2,
 ): MaterializedAssessmentOutputsV2 {
-  const diagnostics: EvaluationMaterializationDiagnostic[] = []
+  const technicalDiagnostics: MaterializationTechnicalDiagnosticV2[] = [
+    ...evaluationResult.warnings.map(toTechnicalDiagnosticFromEvaluation),
+    ...evaluationResult.errors.map(toTechnicalDiagnosticFromEvaluation),
+  ]
   const webSummaryOutputs: WebSummaryOutputV2[] = []
 
   for (const normalized of evaluationResult.normalizedResults) {
@@ -178,36 +176,28 @@ export function materializeAssessmentOutputsV2(
         text: normalized.method === 'band_table'
           ? 'Materialized from normalized band mapping.'
           : `Materialized from ${normalized.method}.`,
-        narrativeBindingKey: null,
-        reportBindingKey: null,
-        source: 'system_fallback',
       },
       visibleInProduct: true,
     })
   }
-
-  const triggeredOutputKeys: string[] = []
-  const nonTriggeredOutputKeys: string[] = []
-  const missingNarrativeBindingKeys = new Set<string>()
 
   for (const output of evaluationResult.outputRuleFindings) {
     const bindingKey = output.narrativeBindingKeys[0] ?? output.targetReportKeys[0] ?? null
     const binding = bindingKey ? executablePackage.reportBindingsByKey[bindingKey] ?? null : null
 
     if (bindingKey && !binding) {
-      missingNarrativeBindingKeys.add(bindingKey)
-      pushDiagnostic(
-        diagnostics,
+      pushTechnicalDiagnostic(
+        technicalDiagnostics,
         'warning',
         'missing_report_binding',
         `outputRuleFindings.${output.ruleId}`,
         `Output rule "${output.ruleId}" references missing report binding "${bindingKey}" during materialization.`,
+        'materialization',
         bindingKey,
       )
     }
 
     if (output.status === 'triggered') {
-      triggeredOutputKeys.push(output.key)
       webSummaryOutputs.push({
         id: `output:${output.key}`,
         key: output.key,
@@ -224,35 +214,26 @@ export function materializeAssessmentOutputsV2(
         },
         explanation: {
           text: binding?.explanation ?? executablePackage.outputRulesById[output.ruleId]?.severity ?? null,
-          narrativeBindingKey: bindingKey,
-          reportBindingKey: binding?.key ?? null,
-          source: binding ? 'report_binding' : 'output_rule_metadata',
         },
         visibleInProduct: true,
       })
-    } else {
-      nonTriggeredOutputKeys.push(output.key)
     }
   }
 
-  const integrityNotices: IntegrityOutputNoticeV2[] = [
-    ...evaluationResult.integrityFindings
-      .filter((finding) => finding.status === 'triggered')
-      .map((finding) => ({
-        id: `integrity:${finding.ruleId}`,
-        severity: toSeverity(finding.severity) ?? 'warning',
-        title: finding.kind.replace(/_/g, ' '),
-        message: finding.message,
-        source: 'integrity_rule' as const,
-        affectedIds: [
-          ...finding.affectedQuestionIds,
-          ...finding.affectedDimensionIds,
-          ...finding.affectedDerivedDimensionIds,
-        ],
-      })),
-    ...evaluationResult.warnings.map(toNoticeFromDiagnostic),
-    ...evaluationResult.errors.map(toNoticeFromDiagnostic),
-  ]
+  const integrityNotices: IntegrityOutputNoticeV2[] = evaluationResult.integrityFindings
+    .filter((finding) => finding.status === 'triggered')
+    .map((finding) => ({
+      id: `integrity:${finding.ruleId}`,
+      severity: toSeverity(finding.severity) ?? 'warning',
+      title: finding.kind.replace(/_/g, ' '),
+      message: finding.message,
+      source: 'integrity_rule' as const,
+      affectedIds: [
+        ...finding.affectedQuestionIds,
+        ...finding.affectedDimensionIds,
+        ...finding.affectedDerivedDimensionIds,
+      ],
+    }))
 
   const overviewSection: ReportOutputSectionV2 = {
     id: 'overview',
@@ -319,12 +300,10 @@ export function materializeAssessmentOutputsV2(
         items: [
           `Severity: ${entry.severity ?? 'n/a'}`,
           `Band: ${entry.band ?? 'n/a'}`,
-          `Narrative binding: ${entry.explanation.narrativeBindingKey ?? 'n/a'}`,
-          `Report binding: ${entry.explanation.reportBindingKey ?? 'n/a'}`,
+          `Descriptor: ${entry.value.descriptor ?? 'n/a'}`,
         ],
         metadata: {
           key: entry.key,
-          source: entry.explanation.source,
         },
       })),
   }
@@ -332,7 +311,7 @@ export function materializeAssessmentOutputsV2(
   const integritySection: ReportOutputSectionV2 = {
     id: 'integrity',
     key: 'integrity',
-    title: 'Integrity and warnings',
+    title: 'Integrity notices',
     kind: 'integrity',
     blocks: integrityNotices.map((notice) => ({
       id: `report-${notice.id}`,
@@ -347,12 +326,9 @@ export function materializeAssessmentOutputsV2(
     })),
   }
 
-  const limitationItems = [
-    ...evaluationResult.rawDimensions ? Object.values(evaluationResult.rawDimensions)
-      .filter((result) => result.status !== 'scored')
-      .map((result) => `${result.label}: ${result.status.replace(/_/g, ' ')}`) : [],
-    ...Array.from(missingNarrativeBindingKeys).map((key) => `Missing narrative/report binding: ${key}`),
-  ]
+  const limitationItems = Object.values(evaluationResult.rawDimensions)
+    .filter((result) => result.status !== 'scored')
+    .map((result) => `${result.label}: ${result.status.replace(/_/g, ' ')}`)
 
   const limitationSection: ReportOutputSectionV2 = {
     id: 'limitations',
@@ -363,8 +339,8 @@ export function materializeAssessmentOutputsV2(
       ? [{
           id: 'limitations-list',
           kind: 'list',
-          title: 'Simulation limitations',
-          text: 'These limits are surfaced explicitly so admin preview does not overclaim live readiness.',
+          title: 'Assessment limitations',
+          text: 'Limitations produced during scoring are carried alongside the report content contract.',
           items: limitationItems,
           metadata: {},
         }]
@@ -383,11 +359,6 @@ export function materializeAssessmentOutputsV2(
     webSummaryOutputs,
     reportDocument: document,
     integrityNotices,
-    diagnostics,
-    adminDebug: {
-      triggeredOutputKeys,
-      nonTriggeredOutputKeys,
-      missingNarrativeBindingKeys: Array.from(missingNarrativeBindingKeys),
-    },
+    technicalDiagnostics,
   }
 }
