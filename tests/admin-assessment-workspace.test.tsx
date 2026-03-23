@@ -159,6 +159,11 @@ const registryData = {
       description: 'Core behavioural intelligence line.',
     },
   ],
+  summary: {
+    publishedCount: 1,
+    draftCount: 0,
+    archivedCount: 0,
+  },
   pagination: {
     page: 1,
     pageSize: 20,
@@ -423,12 +428,23 @@ const detailData = {
   },
 }
 
-test('assessment registry renders server-driven list rows and package-first primary action', () => {
+test('assessment registry renders simplified framing, summary cards, and a single upload CTA', () => {
   const html = renderToStaticMarkup(<AdminAssessmentsRegistrySurface data={registryData} />)
 
-  assert.match(html, /Assessment registry/)
-  assert.match(html, /Import assessment package/)
-  assert.match(html, /Manual draft fallback/)
+  assert.match(html, /Assessment Registry/)
+  assert.match(html, /Manage your assessments, upload new packages, and control what’s live\./)
+  assert.match(html, /Upload Assessment Package/)
+  assert.doesNotMatch(html, /Import assessment package/)
+  assert.doesNotMatch(html, /Operational registry/)
+  assert.doesNotMatch(html, /Assessment registry workspace/)
+  assert.doesNotMatch(html, /Server-rendered registry view/)
+  assert.match(html, /Published Assessments/)
+  assert.match(html, /Draft Assessments/)
+  assert.match(html, /Archived Assessments/)
+  assert.match(html, /Live and available to users\./)
+  assert.match(html, /In progress and not yet live\./)
+  assert.match(html, /No longer active in the registry\./)
+  assert.match(html, /All Assessments/)
   assert.match(html, /Sonartra Signals/)
   assert.match(html, /sonartra_signals/)
   assert.match(html, /No published version|v1.2.0/)

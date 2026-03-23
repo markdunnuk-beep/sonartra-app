@@ -99,6 +99,12 @@ interface AssessmentSummaryRow {
   updated_at: string | Date | null
 }
 
+interface AssessmentRegistrySummaryRow {
+  published_count: number | string | null
+  draft_count: number | string | null
+  archived_count: number | string | null
+}
+
 interface AssessmentIdentityRow {
   id: string | null
   key: string | null
@@ -944,6 +950,7 @@ function buildAdminAssessmentRegistryData(
   filters: AdminAssessmentRegistryFilters,
   entries: AdminAssessmentRegistryItem[],
   totalCount: number,
+  summary: AdminAssessmentRegistryData['summary'] = { publishedCount: 0, draftCount: 0, archivedCount: 0 },
   notice: AdminAssessmentRegistryNotice | null = null,
 ): AdminAssessmentRegistryData {
   const totalPages = Math.max(1, Math.ceil(totalCount / filters.pageSize))
@@ -952,6 +959,7 @@ function buildAdminAssessmentRegistryData(
   return {
     filters: { ...filters, page },
     entries,
+    summary,
     pagination: {
       page,
       pageSize: filters.pageSize,
@@ -1630,6 +1638,10 @@ export async function getAdminAssessmentRegistryData(
     toPattern(filters.query),
   ]
   const orderClause = buildRegistryOrderClause(filters.sort)
+  const summaryParams = [
+    filters.category === 'all' ? null : filters.category,
+    toPattern(filters.query),
+  ]
 
   const baseQuery = `
     with version_stats as (
@@ -1658,7 +1670,34 @@ export async function getAdminAssessmentRegistryData(
       )
   `
 
+  const summaryFromClause = `
+    from assessment_definitions ad
+    where ($1::text is null or ad.category = $1::text)
+      and (
+        $2::text is null
+        or ad.name ilike $2 escape '\\'
+        or ad.key ilike $2 escape '\\'
+        or ad.slug ilike $2 escape '\\'
+        or coalesce(ad.description, '') ilike $2 escape '\\'
+      )
+  `
+
   try {
+    const summaryResult = await deps.queryDb<AssessmentRegistrySummaryRow>(
+      `select
+         count(*) filter (where ad.lifecycle_status = 'published')::int as published_count,
+         count(*) filter (where ad.lifecycle_status = 'draft')::int as draft_count,
+         count(*) filter (where ad.lifecycle_status = 'archived')::int as archived_count
+       ${summaryFromClause}`,
+      summaryParams,
+    )
+
+    const summary = {
+      publishedCount: normaliseCount(summaryResult.rows[0]?.published_count),
+      draftCount: normaliseCount(summaryResult.rows[0]?.draft_count),
+      archivedCount: normaliseCount(summaryResult.rows[0]?.archived_count),
+    }
+
     const countResult = await deps.queryDb<{ total_count: number | string | null }>(
       `${baseQuery}
        select count(*)::int as total_count
@@ -1692,11 +1731,11 @@ export async function getAdminAssessmentRegistryData(
 
     const entries = mapAssessmentRegistryRows(rowsResult.rows ?? [])
 
-    return buildAdminAssessmentRegistryData({ ...filters, page }, entries, totalCount)
+    return buildAdminAssessmentRegistryData({ ...filters, page }, entries, totalCount, summary)
   } catch (error) {
     const notice = classifyAssessmentRegistryLoadFailure(error)
     logDatabaseError(`[admin-assessment-management] Admin assessment registry load failed: ${notice.title}`, error)
-    return buildAdminAssessmentRegistryData(filters, [], 0, notice)
+    return buildAdminAssessmentRegistryData(filters, [], 0, undefined, notice)
   }
 }
 

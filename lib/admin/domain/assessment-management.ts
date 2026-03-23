@@ -43,9 +43,16 @@ export interface AdminAssessmentRegistryNotice {
   detail: string
 }
 
+export interface AdminAssessmentRegistrySummary {
+  publishedCount: number
+  draftCount: number
+  archivedCount: number
+}
+
 export interface AdminAssessmentRegistryData {
   filters: AdminAssessmentRegistryFilters
   entries: AdminAssessmentRegistryItem[]
+  summary: AdminAssessmentRegistrySummary
   pagination: AdminAssessmentRegistryPagination
   notice?: AdminAssessmentRegistryNotice | null
 }

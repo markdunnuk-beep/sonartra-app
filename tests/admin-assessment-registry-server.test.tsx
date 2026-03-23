@@ -21,13 +21,17 @@ test('assessment registry loader returns an empty-state payload when no records 
     },
   })
 
-  assert.equal(queries.length, 2)
+  assert.equal(queries.length, 3)
+  assert.equal(data.summary.publishedCount, 0)
+  assert.equal(data.summary.draftCount, 0)
+  assert.equal(data.summary.archivedCount, 0)
   assert.equal(data.pagination.totalCount, 0)
   assert.equal(data.entries.length, 0)
   assert.equal(data.notice ?? null, null)
 
   const html = renderToStaticMarkup(<AdminAssessmentsRegistrySurface data={data} />)
   assert.match(html, /No assessments are registered yet/)
+  assert.match(html, /Upload Assessment Package/)
 })
 
 test('assessment registry loader tolerates absent optional relations and clamps invalid pages', async () => {
@@ -35,6 +39,10 @@ test('assessment registry loader tolerates absent optional relations and clamps 
   const data = await getAdminAssessmentRegistryData({ page: '99' }, {
     queryDb: async (sql, params) => {
       queries.push({ sql, params })
+
+      if (/published_count/i.test(sql)) {
+        return { rows: [{ published_count: 0, draft_count: 1, archived_count: 0 }] } as never
+      }
 
       if (/count\(\*\)::int as total_count/i.test(sql)) {
         return { rows: [{ total_count: 1 }] } as never
@@ -60,15 +68,21 @@ test('assessment registry loader tolerates absent optional relations and clamps 
 
   assert.equal(data.filters.page, 1)
   assert.equal(data.pagination.page, 1)
+  assert.equal(data.summary.publishedCount, 0)
+  assert.equal(data.summary.draftCount, 1)
+  assert.equal(data.summary.archivedCount, 0)
   assert.equal(data.entries[0]?.versionCount, 0)
   assert.equal(data.entries[0]?.currentPublishedVersionLabel, null)
 
-  const rowsQuery = queries[1]
+  const rowsQuery = queries[2]
   assert.ok(rowsQuery)
   assert.match(rowsQuery.sql, /left join assessment_versions current_version[\s\S]*where/i)
   assert.equal(rowsQuery.params?.[4], 0)
 
   const html = renderToStaticMarkup(<AdminAssessmentsRegistrySurface data={data} />)
+  assert.match(html, /Published Assessments/)
+  assert.match(html, /Draft Assessments/)
+  assert.match(html, /Archived Assessments/)
   assert.match(html, /No internal summary yet\./)
   assert.match(html, /No published version/)
 })
@@ -84,6 +98,8 @@ test('assessment registry loader degrades to a setup state when required schema 
 
   assert.equal(data.notice?.kind, 'setup_required')
   assert.match(data.notice?.detail ?? '', /0007_assessment_admin_registry\.sql/)
+
+  assert.equal(data.summary.archivedCount, 0)
 
   const html = renderToStaticMarkup(<AdminAssessmentsRegistrySurface data={data} />)
   assert.match(html, /Assessment registry setup is incomplete/)
