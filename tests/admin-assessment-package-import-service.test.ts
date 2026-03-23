@@ -25,6 +25,7 @@ test('valid v2 package import artifact produces admin-compatible summary and rea
   assert.equal(result.summary?.derivedDimensionCount, 1)
   assert.equal(result.summary?.packageName, 'Adaptive Workstyle Sample')
   assert.equal(result.readiness.importable, true)
+  assert.equal(result.readiness.compilable, true)
   assert.equal(result.readiness.runtimeExecutable, false)
   assert.equal(result.readiness.publishable, false)
 })

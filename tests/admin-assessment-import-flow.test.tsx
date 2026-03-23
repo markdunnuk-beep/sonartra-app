@@ -275,6 +275,7 @@ test('normalizeAdminAssessmentPackageImportState preserves version-aware validat
       readiness: {
         structurallyValid: true,
         importable: true,
+        compilable: true,
         runtimeExecutable: false,
         publishable: false,
       },
@@ -285,6 +286,7 @@ test('normalizeAdminAssessmentPackageImportState preserves version-aware validat
 
   assert.equal(state.validationResult?.detectedVersion, 'package_contract_v2')
   assert.equal(state.validationResult?.summary?.sectionCount, 2)
+  assert.equal(state.validationResult?.readiness?.compilable, true)
   assert.equal(state.validationResult?.readiness?.runtimeExecutable, false)
   assert.equal(state.validationResult?.packageName, 'Adaptive Workstyle Signals')
 })

@@ -251,6 +251,7 @@ export interface AdminAssessmentPackageImportState {
     readiness?: {
       structurallyValid: boolean
       importable: boolean
+      compilable: boolean
       runtimeExecutable: boolean
       publishable: boolean
     }
@@ -329,6 +330,7 @@ export function normalizeAdminAssessmentPackageImportState(
             ? {
                 structurallyValid: Boolean(readiness.structurallyValid),
                 importable: Boolean(readiness.importable),
+                compilable: Boolean(readiness.compilable),
                 runtimeExecutable: Boolean(readiness.runtimeExecutable),
                 publishable: Boolean(readiness.publishable),
               }

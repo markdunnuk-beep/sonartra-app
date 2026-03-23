@@ -1686,6 +1686,7 @@ function buildPackageValidationReport(input: {
   readiness?: {
     structurallyValid: boolean
     importable: boolean
+    compilable: boolean
     runtimeExecutable: boolean
     publishable: boolean
   }
@@ -2205,6 +2206,7 @@ export async function importAdminAssessmentPackage(
         readiness: {
           structurallyValid: false,
           importable: false,
+          compilable: false,
           runtimeExecutable: false,
           publishable: false,
         },

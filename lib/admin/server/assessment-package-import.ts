@@ -1,4 +1,5 @@
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1, validateSonartraAssessmentPackage, type AssessmentPackageStatus, type SonartraAssessmentPackageSummary, type SonartraAssessmentPackageValidationIssue } from '@/lib/admin/domain/assessment-package'
+import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, validateSonartraAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
 
 export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contract_v2' | 'unknown'
@@ -6,6 +7,7 @@ export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contr
 export interface AdminAssessmentPackageReadinessFlags {
   structurallyValid: boolean
   importable: boolean
+  compilable: boolean
   runtimeExecutable: boolean
   publishable: boolean
 }
@@ -153,6 +155,7 @@ export function importAssessmentPackagePayload(input: unknown): ImportedAssessme
       const readiness: AdminAssessmentPackageReadinessFlags = {
         structurallyValid: validation.ok,
         importable: validation.ok,
+        compilable: validation.ok,
         runtimeExecutable: validation.ok,
         publishable: validation.ok,
       }
@@ -178,9 +181,11 @@ export function importAssessmentPackagePayload(input: unknown): ImportedAssessme
     case 'package_contract_v2': {
       const validation = validateSonartraAssessmentPackageV2(input)
       const packageStatus: AssessmentPackageStatus = !validation.ok ? 'invalid' : validation.warnings.length > 0 ? 'valid_with_warnings' : 'valid'
+      const compileResult = validation.normalizedPackage ? compileAssessmentPackageV2(validation.normalizedPackage) : null
       const readiness: AdminAssessmentPackageReadinessFlags = {
         structurallyValid: validation.ok,
         importable: validation.ok,
+        compilable: Boolean(compileResult?.ok),
         runtimeExecutable: false,
         publishable: false,
       }
@@ -235,6 +240,7 @@ export function importAssessmentPackagePayload(input: unknown): ImportedAssessme
         readiness: {
           structurallyValid: false,
           importable: false,
+          compilable: false,
           runtimeExecutable: false,
           publishable: false,
         },

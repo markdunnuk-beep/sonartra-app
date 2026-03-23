@@ -41,14 +41,6 @@ export interface SonartraAssessmentPackageV2ValidatedImport extends SonartraAsse
   report: SonartraAssessmentPackageV2ReportBlock
 }
 
-/**
- * Executable runtime contract reserved for later compiler work.
- * For this foundational prompt the runtime shape is intentionally aligned with the validated contract.
- */
-export interface SonartraAssessmentPackageV2Runtime extends SonartraAssessmentPackageV2ValidatedImport {
-  runtimeVersion: 'package-contract-v2-runtime/1'
-}
-
 export interface SonartraAssessmentPackageV2Metadata {
   assessmentKey: string
   assessmentName: string
@@ -1248,14 +1240,5 @@ export function validateSonartraAssessmentPackageV2(input: unknown): SonartraAss
     warnings,
     summary,
     normalizedPackage,
-  }
-}
-
-export function compileValidatedAssessmentPackageV2ToRuntime(
-  input: SonartraAssessmentPackageV2ValidatedImport,
-): SonartraAssessmentPackageV2Runtime {
-  return {
-    ...input,
-    runtimeVersion: 'package-contract-v2-runtime/1',
   }
 }
