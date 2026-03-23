@@ -12,3 +12,5 @@ export * from './access-selectors'
 export * from './access-priority'
 
 export * from './assessment-management'
+
+export * from './assessment-package-v2'

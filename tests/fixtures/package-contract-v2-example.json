@@ -1,0 +1,282 @@
+{
+  "packageVersion": "2",
+  "schemaVersion": "sonartra-assessment-package/v2",
+  "metadata": {
+    "assessmentKey": "adaptive-workstyle",
+    "assessmentName": "Adaptive Workstyle Sample",
+    "description": "Small example Package Contract v2 fixture for structural validation.",
+    "locales": {
+      "defaultLocale": "en-US",
+      "supportedLocales": ["en-US"]
+    },
+    "authoring": {
+      "author": "OpenAI Codex",
+      "organization": "Sonartra",
+      "source": "example-fixture"
+    },
+    "compatibility": {
+      "packageSemver": "2.0.0",
+      "contractVersion": "2",
+      "compatibleRuntimeRange": ">=2.0.0"
+    },
+    "tags": ["sample", "generic"]
+  },
+  "responseModels": {
+    "optionSets": [
+      {
+        "id": "likert-5-frequency",
+        "label": "Five-point frequency scale",
+        "options": [
+          { "id": "never", "label": "Never", "value": 1 },
+          { "id": "rarely", "label": "Rarely", "value": 2 },
+          { "id": "sometimes", "label": "Sometimes", "value": 3 },
+          { "id": "often", "label": "Often", "value": 4 },
+          { "id": "always", "label": "Always", "value": 5 }
+        ]
+      }
+    ],
+    "models": [
+      {
+        "id": "likert-5",
+        "type": "likert",
+        "optionSetId": "likert-5-frequency"
+      }
+    ]
+  },
+  "questions": [
+    {
+      "id": "q1",
+      "code": "AWS-01",
+      "prompt": "I stay calm when priorities shift unexpectedly.",
+      "responseModelId": "likert-5",
+      "sectionIds": ["self-regulation"],
+      "tags": ["composure"],
+      "scoring": [{ "dimensionId": "stability" }]
+    },
+    {
+      "id": "q2",
+      "code": "AWS-02",
+      "prompt": "I lose focus when several tasks compete for attention.",
+      "responseModelId": "likert-5",
+      "sectionIds": ["self-regulation"],
+      "tags": ["focus"],
+      "scoring": [{ "dimensionId": "stability", "transformIds": ["reverse-q2"] }]
+    },
+    {
+      "id": "q3",
+      "code": "AWS-03",
+      "prompt": "I actively look for better ways to solve new problems.",
+      "responseModelId": "likert-5",
+      "sectionIds": ["adaptability"],
+      "tags": ["learning"],
+      "scoring": [{ "dimensionId": "adaptability" }]
+    },
+    {
+      "id": "q4",
+      "code": "AWS-04",
+      "prompt": "I can quickly switch approaches when the situation changes.",
+      "responseModelId": "likert-5",
+      "sectionIds": ["adaptability"],
+      "tags": ["flexibility"],
+      "scoring": [{ "dimensionId": "adaptability" }]
+    }
+  ],
+  "sections": [
+    {
+      "id": "self-regulation",
+      "title": "Self-Regulation",
+      "description": "Stability and consistency under pressure.",
+      "order": 1,
+      "completion": { "kind": "minimum_answered", "minimumAnswered": 2 }
+    },
+    {
+      "id": "adaptability",
+      "title": "Adaptability",
+      "description": "Learning orientation and behavioral flexibility.",
+      "order": 2,
+      "completion": { "kind": "all_required" }
+    }
+  ],
+  "dimensions": [
+    {
+      "id": "stability",
+      "label": "Stability",
+      "description": "Composure and sustained focus.",
+      "scoringMethod": "weighted_average",
+      "weightedQuestions": [
+        { "questionId": "q1", "weight": 1 },
+        { "questionId": "q2", "weight": 1 }
+      ],
+      "minimumAnswered": 2,
+      "missingDataPolicy": "minimum_answer_threshold"
+    },
+    {
+      "id": "adaptability",
+      "label": "Adaptability",
+      "description": "Ability to pivot and learn.",
+      "scoringMethod": "average",
+      "inputQuestionIds": ["q3", "q4"],
+      "minimumAnswered": 2,
+      "missingDataPolicy": "skip"
+    }
+  ],
+  "derivedDimensions": [
+    {
+      "id": "adaptive-balance",
+      "label": "Adaptive Balance",
+      "description": "Composite view of stability and adaptability.",
+      "computation": {
+        "method": "formula",
+        "formula": "(stability + adaptability) / 2",
+        "sourceDimensionIds": ["stability", "adaptability"]
+      }
+    }
+  ],
+  "scoring": {
+    "transforms": [
+      {
+        "id": "reverse-q2",
+        "kind": "reverse_scale",
+        "target": {
+          "level": "item",
+          "questionId": "q2"
+        },
+        "config": {
+          "min": 1,
+          "max": 5
+        }
+      }
+    ],
+    "rules": [
+      {
+        "id": "boost-balance-when-both-high",
+        "scope": "derived_dimension",
+        "predicate": {
+          "type": "group",
+          "operator": "and",
+          "conditions": [
+            {
+              "type": "comparison",
+              "operator": "gte",
+              "left": { "type": "dimension_score", "dimensionId": "stability" },
+              "right": { "type": "constant", "value": 4 }
+            },
+            {
+              "type": "comparison",
+              "operator": "gte",
+              "left": { "type": "dimension_score", "dimensionId": "adaptability" },
+              "right": { "type": "constant", "value": 4 }
+            }
+          ]
+        },
+        "effect": {
+          "action": "add",
+          "targetId": "adaptive-balance",
+          "value": 0.25
+        }
+      }
+    ]
+  },
+  "normalization": {
+    "rules": [
+      {
+        "id": "adaptive-balance-bands-v1",
+        "method": "band_table",
+        "appliesTo": {
+          "derivedDimensionIds": ["adaptive-balance"]
+        },
+        "version": "2026.03",
+        "table": [
+          { "rawMin": 1, "rawMax": 2.49, "band": "low", "label": "Low" },
+          { "rawMin": 2.5, "rawMax": 3.74, "band": "moderate", "label": "Moderate" },
+          { "rawMin": 3.75, "rawMax": 5, "band": "high", "label": "High" }
+        ]
+      }
+    ]
+  },
+  "integrity": {
+    "rules": [
+      {
+        "id": "stability-contradiction",
+        "kind": "contradiction",
+        "severity": "warning",
+        "message": "The response pattern suggests inconsistent self-regulation reporting.",
+        "predicate": {
+          "type": "group",
+          "operator": "and",
+          "conditions": [
+            {
+              "type": "comparison",
+              "operator": "gte",
+              "left": { "type": "question_answer", "questionId": "q1" },
+              "right": { "type": "constant", "value": 5 }
+            },
+            {
+              "type": "comparison",
+              "operator": "gte",
+              "left": { "type": "question_answer", "questionId": "q2" },
+              "right": { "type": "constant", "value": 5 }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "outputs": {
+    "rules": [
+      {
+        "id": "adaptive-balance-summary",
+        "key": "adaptive-balance-summary",
+        "type": "summary",
+        "predicate": {
+          "type": "comparison",
+          "operator": "gte",
+          "left": { "type": "derived_dimension_score", "derivedDimensionId": "adaptive-balance" },
+          "right": { "type": "constant", "value": 3.75 }
+        },
+        "severity": "info",
+        "metadata": {
+          "label": "Adaptive balance summary",
+          "narrativeKey": "adaptive-balance-summary",
+          "band": "high",
+          "explanation": "Use when the respondent demonstrates strong adaptive balance."
+        }
+      },
+      {
+        "id": "integrity-warning",
+        "key": "integrity-warning",
+        "type": "warning",
+        "predicate": {
+          "type": "comparison",
+          "operator": "eq",
+          "left": { "type": "integrity_flag", "ruleId": "stability-contradiction" },
+          "right": { "type": "constant", "value": true }
+        },
+        "severity": "warning",
+        "metadata": {
+          "label": "Integrity warning",
+          "narrativeKey": "integrity-warning",
+          "explanation": "Surface when the package integrity contradiction fires."
+        }
+      }
+    ]
+  },
+  "report": {
+    "content": [
+      {
+        "key": "adaptive-balance-summary",
+        "label": "Adaptive Balance Summary",
+        "contentRef": "report.summary.adaptive-balance",
+        "severity": "info",
+        "explanation": "Narrative payload for high adaptive balance."
+      },
+      {
+        "key": "integrity-warning",
+        "label": "Integrity Warning",
+        "contentRef": "report.warning.integrity",
+        "severity": "warning",
+        "explanation": "Narrative payload for flagged integrity warnings."
+      }
+    ]
+  }
+}
