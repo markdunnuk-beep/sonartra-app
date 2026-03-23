@@ -423,11 +423,12 @@ const detailData = {
   },
 }
 
-test('assessment registry renders server-driven list rows and create action', () => {
+test('assessment registry renders server-driven list rows and package-first primary action', () => {
   const html = renderToStaticMarkup(<AdminAssessmentsRegistrySurface data={registryData} />)
 
   assert.match(html, /Assessment registry/)
-  assert.match(html, /Create assessment record/)
+  assert.match(html, /Import assessment package/)
+  assert.match(html, /Manual container fallback/)
   assert.match(html, /Sonartra Signals/)
   assert.match(html, /sonartra_signals/)
   assert.match(html, /No published version|v1.2.0/)
@@ -447,6 +448,19 @@ test('assessment detail overview renders workspace tabs, metadata, and audit act
   assert.match(html, /Published version v1.2.0/)
   assert.match(html, /Package spec v1 enabled/)
   assert.match(html, /\/admin\/audit\?entityType=assessment&amp;entityId=assessment-1/)
+})
+
+test('manual container and package-first import surfaces describe the transition truthfully', async () => {
+  const [manualCreateSource, packageImportSource] = await Promise.all([
+    readFile(new URL('../components/admin/surfaces/AdminAssessmentCreateForm.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/admin/surfaces/AdminAssessmentPackageCreateOrAttachForm.tsx', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(manualCreateSource, /Create manual assessment container/)
+  assert.match(manualCreateSource, /Package import is now the preferred way/)
+  assert.match(packageImportSource, /Package-first workflow/)
+  assert.match(packageImportSource, /Package owns identity/)
+  assert.match(packageImportSource, /Open manual container flow/)
 })
 
 test('assessment versions workspace surfaces package evidence and diff snippets', async () => {

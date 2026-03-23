@@ -264,6 +264,100 @@ export interface AdminAssessmentPackageImportState {
   }
 }
 
+export interface AssessmentPackageIdentity {
+  assessmentName: string
+  libraryKey: string
+  slug: string
+  category: string
+  description: string | null
+  defaultLocale: string | null
+  supportedLocales: string[]
+  assessmentType: string | null
+  authorName: string | null
+  authorSource: string | null
+  versionLabel: string | null
+  schemaVersion: string | null
+  detectedVersion: AdminAssessmentPackageDetectedVersion | null
+  derivedFields: Array<'slug' | 'category'>
+}
+
+export interface AssessmentIdentityMutabilityRule {
+  field: 'libraryKey' | 'assessmentName' | 'slug' | 'category'
+  mutability: 'immutable' | 'mutable_with_conflict_rules' | 'mutable'
+  summary: string
+}
+
+export const ADMIN_ASSESSMENT_IDENTITY_MUTABILITY_RULES: AssessmentIdentityMutabilityRule[] = [
+  {
+    field: 'libraryKey',
+    mutability: 'immutable',
+    summary: 'Stable assessment identity anchor used for import matching and create-or-attach decisions.',
+  },
+  {
+    field: 'assessmentName',
+    mutability: 'mutable_with_conflict_rules',
+    summary: 'Display name can evolve over time, but changes should be surfaced in import review before they are applied.',
+  },
+  {
+    field: 'slug',
+    mutability: 'mutable_with_conflict_rules',
+    summary: 'Slug can evolve when it remains unique; collisions with a different library key must block import.',
+  },
+  {
+    field: 'category',
+    mutability: 'mutable',
+    summary: 'Category is taxonomy metadata and can be updated by package import without changing stable identity.',
+  },
+]
+
+export interface AssessmentImportConflict {
+  code:
+    | 'missing_identity_metadata'
+    | 'immutable_library_key_mismatch'
+    | 'slug_collision'
+    | 'duplicate_version_label'
+    | 'package_validation_failed'
+    | 'identity_metadata_changed'
+  severity: 'error' | 'warning'
+  field?: 'libraryKey' | 'assessmentName' | 'slug' | 'category' | 'versionLabel'
+  message: string
+}
+
+export interface AssessmentImportTargetDecision {
+  action: 'create_assessment' | 'attach_version'
+  assessmentId: string | null
+  versionId: string | null
+  versionLabel: string | null
+  matchedAssessment: {
+    id: string
+    name: string
+    key: string
+    slug: string
+    category: string
+  } | null
+  willCreateAssessment: boolean
+  willCreateVersion: boolean
+}
+
+export interface AdminAssessmentImportReviewContract {
+  packageIdentity: AssessmentPackageIdentity | null
+  decision: AssessmentImportTargetDecision | null
+  conflicts: AssessmentImportConflict[]
+  validationResult: AdminAssessmentPackageImportState['validationResult']
+  governanceNotice: string
+}
+
+export interface AdminAssessmentPackageCreateOrAttachState {
+  status: 'idle' | 'review' | 'error' | 'success'
+  message?: string
+  packageText?: string
+  fieldErrors?: {
+    packageText?: string
+    packageFile?: string
+  }
+  review?: AdminAssessmentImportReviewContract
+}
+
 function normaliseAssessmentIssueCollection(value: unknown): Array<{ path: string; message: string }> {
   if (!Array.isArray(value)) {
     return []
@@ -344,6 +438,49 @@ export function normalizeAdminAssessmentPackageImportState(
             : undefined,
           errors: validationErrors,
           warnings: validationWarnings,
+        }
+      : undefined,
+  }
+}
+
+export function normalizeAdminAssessmentPackageCreateOrAttachState(
+  state: Partial<AdminAssessmentPackageCreateOrAttachState> | null | undefined,
+): AdminAssessmentPackageCreateOrAttachState {
+  const status = state?.status === 'review' || state?.status === 'error' || state?.status === 'success'
+    ? state.status
+    : 'idle'
+
+  const review = state?.review
+
+  return {
+    status,
+    message: normaliseSingleValue(state?.message) || undefined,
+    packageText: typeof state?.packageText === 'string' ? state.packageText : '',
+    fieldErrors: state?.fieldErrors
+      ? {
+          ...(state.fieldErrors.packageText ? { packageText: normaliseSingleValue(state.fieldErrors.packageText) } : {}),
+          ...(state.fieldErrors.packageFile ? { packageFile: normaliseSingleValue(state.fieldErrors.packageFile) } : {}),
+        }
+      : undefined,
+    review: review
+      ? {
+          packageIdentity: review.packageIdentity
+            ? {
+                ...review.packageIdentity,
+                derivedFields: Array.isArray(review.packageIdentity.derivedFields)
+                  ? review.packageIdentity.derivedFields.filter((field): field is 'slug' | 'category' => field === 'slug' || field === 'category')
+                  : [],
+                supportedLocales: Array.isArray(review.packageIdentity.supportedLocales)
+                  ? review.packageIdentity.supportedLocales.filter((locale): locale is string => typeof locale === 'string' && locale.trim().length > 0)
+                  : [],
+              }
+            : null,
+          decision: review.decision ?? null,
+          conflicts: Array.isArray(review.conflicts) ? review.conflicts.filter((conflict) => {
+            return Boolean(conflict && typeof conflict.message === 'string' && (conflict.severity === 'error' || conflict.severity === 'warning'))
+          }) : [],
+          validationResult: normalizeAdminAssessmentPackageImportState({ validationResult: review.validationResult }).validationResult,
+          governanceNotice: normaliseSingleValue(review.governanceNotice) || 'Package metadata drives identity. Admin controls publish and deployment governance only.',
         }
       : undefined,
   }

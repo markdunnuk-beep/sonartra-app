@@ -2,7 +2,11 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 import type { PoolClient } from 'pg'
 import { resolveAdminAccess, type AdminAccessContext } from '@/lib/admin/access'
 import {
+  ADMIN_ASSESSMENT_IDENTITY_MUTABILITY_RULES,
+  type AdminAssessmentImportReviewContract,
+  type AdminAssessmentPackageCreateOrAttachState,
   getAdminAssessmentRegistryFilters,
+  type AssessmentImportConflict,
   type AdminAssessmentCreateState,
   type AdminAssessmentDetailData,
   type AdminAssessmentLatestSuiteSnapshot,
@@ -27,7 +31,11 @@ import {
   type SonartraAssessmentPackageValidationIssue,
   parseStoredNormalizedAssessmentPackage,
 } from '@/lib/admin/domain/assessment-package'
-import { importAssessmentPackagePayload, type AdminAssessmentPackageValidationSummary } from '@/lib/admin/server/assessment-package-import'
+import {
+  extractAssessmentPackageIdentity,
+  importAssessmentPackagePayload,
+  type AdminAssessmentPackageValidationSummary,
+} from '@/lib/admin/server/assessment-package-import'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
 import { getAdminAssessmentVersionReadiness } from '@/lib/admin/domain/assessment-package-review'
 import { evaluatePackageV2LiveRuntimeSupport } from '@/lib/package-contract-v2-live-runtime'
@@ -89,6 +97,15 @@ interface AssessmentSummaryRow {
   current_published_version_label: string | null
   created_at: string | Date | null
   updated_at: string | Date | null
+}
+
+interface AssessmentIdentityRow {
+  id: string | null
+  key: string | null
+  slug: string | null
+  name: string | null
+  category: string | null
+  description: string | null
 }
 
 interface AssessmentVersionRow {
@@ -226,6 +243,7 @@ export interface AdminAssessmentPackageImportResult {
   ok: boolean
   code:
     | 'imported'
+    | 'conflict'
     | 'schema_incompatible'
     | 'validation_error'
     | 'permission_denied'
@@ -237,6 +255,33 @@ export interface AdminAssessmentPackageImportResult {
   assessmentId?: string
   versionId?: string
   validationResult?: AdminAssessmentPackageValidationSummary
+  fieldErrors?: {
+    packageText?: string
+    packageFile?: string
+  }
+}
+
+export interface AdminAssessmentPackageCreateOrAttachInput {
+  packageText: string
+  sourceFilename?: string | null
+  confirmation?: 'confirm'
+}
+
+export interface AdminAssessmentPackageCreateOrAttachResult {
+  ok: boolean
+  code:
+    | 'review_required'
+    | 'imported'
+    | 'conflict'
+    | 'schema_incompatible'
+    | 'validation_error'
+    | 'permission_denied'
+    | 'unknown_error'
+  message: string
+  assessmentId?: string
+  versionId?: string
+  versionLabel?: string | null
+  review?: AdminAssessmentImportReviewContract
   fieldErrors?: {
     packageText?: string
     packageFile?: string
@@ -802,6 +847,27 @@ function mapAssessmentSummaryRow(row: AssessmentSummaryRow | undefined): AdminAs
     currentPublishedVersionLabel: normaliseNullableField(row.current_published_version_label),
     createdAt,
     updatedAt,
+  }
+}
+
+function mapAssessmentIdentityRow(row: AssessmentIdentityRow | undefined) {
+  const id = normaliseRequiredString(row?.id)
+  const key = normaliseRequiredString(row?.key)
+  const slug = normaliseRequiredString(row?.slug)
+  const name = normaliseRequiredString(row?.name)
+  const category = normaliseRequiredString(row?.category)
+
+  if (!id || !key || !slug || !name || !category) {
+    return null
+  }
+
+  return {
+    id,
+    key,
+    slug,
+    name,
+    category,
+    description: normaliseNullableField(row?.description),
   }
 }
 
@@ -1402,6 +1468,42 @@ async function loadAssessmentVersionRowById(
 
   const row = result.rows[0]
   return row ? { ...mapAssessmentVersionDetailRow(row), assessment_name: row.assessment_name ?? null } : null
+}
+
+async function loadAssessmentIdentityById(client: PoolClient, assessmentId: string) {
+  const result = await client.query<AssessmentIdentityRow>(
+    `select id, key, slug, name, category, description
+     from assessment_definitions
+     where id = $1
+     limit 1`,
+    [assessmentId],
+  )
+
+  return mapAssessmentIdentityRow(result.rows[0])
+}
+
+async function loadAssessmentIdentityByKey(client: PoolClient, libraryKey: string) {
+  const result = await client.query<AssessmentIdentityRow>(
+    `select id, key, slug, name, category, description
+     from assessment_definitions
+     where key = $1
+     limit 1`,
+    [libraryKey],
+  )
+
+  return mapAssessmentIdentityRow(result.rows[0])
+}
+
+async function loadAssessmentIdentityBySlug(client: PoolClient, slug: string) {
+  const result = await client.query<AssessmentIdentityRow>(
+    `select id, key, slug, name, category, description
+     from assessment_definitions
+     where slug = $1
+     limit 1`,
+    [slug],
+  )
+
+  return mapAssessmentIdentityRow(result.rows[0])
 }
 
 async function loadAssessmentVersionDetailRows(
@@ -2167,6 +2269,369 @@ export async function createAdminAssessmentDraftVersion(
   }
 }
 
+function buildAssessmentImportReviewContract(input: {
+  validationSummary: AdminAssessmentPackageValidationSummary
+  packageIdentity: AdminAssessmentImportReviewContract['packageIdentity']
+  decision: AdminAssessmentImportReviewContract['decision']
+  conflicts: AssessmentImportConflict[]
+}): AdminAssessmentImportReviewContract {
+  const validationConflicts: AssessmentImportConflict[] = input.validationSummary.success
+    ? []
+    : [{
+        code: 'package_validation_failed',
+        severity: 'error',
+        message: 'The uploaded package did not pass structural validation, so import is blocked until the validation issues are resolved.',
+      }]
+
+  return {
+    packageIdentity: input.packageIdentity,
+    decision: input.decision,
+    conflicts: [...input.conflicts, ...validationConflicts],
+    validationResult: {
+      success: input.validationSummary.success,
+      detectedVersion: input.validationSummary.detectedVersion,
+      schemaVersion: input.validationSummary.schemaVersion,
+      packageName: input.validationSummary.packageName,
+      versionLabel: input.validationSummary.versionLabel,
+      summary: input.validationSummary.summary,
+      readiness: input.validationSummary.readiness,
+      errors: input.validationSummary.errors,
+      warnings: input.validationSummary.warnings,
+    },
+    governanceNotice: 'Package metadata owns assessment identity and the assessment definition. Admin import only controls governance state such as publish readiness, release notes, and deployment status.',
+  }
+}
+
+async function reviewAssessmentPackageCreateOrAttach(
+  client: PoolClient,
+  packageText: string,
+): Promise<{
+  parsedPayload: unknown
+  importedPackage: ReturnType<typeof importAssessmentPackagePayload>
+  review: AdminAssessmentImportReviewContract
+}> {
+  let parsedPayload: unknown
+
+  try {
+    parsedPayload = JSON.parse(packageText)
+  } catch {
+    return {
+      parsedPayload: null,
+      importedPackage: importAssessmentPackagePayload(null),
+      review: buildAssessmentImportReviewContract({
+        validationSummary: {
+          success: false,
+          detectedVersion: 'unknown',
+          schemaVersion: null,
+          packageName: null,
+          versionLabel: null,
+          summary: null,
+          readiness: {
+            structurallyValid: false,
+            importable: false,
+            compilable: false,
+            evaluatable: false,
+            simulatable: false,
+            runtimeExecutable: false,
+            liveRuntimeEnabled: false,
+            publishable: false,
+          },
+          errors: [{ path: '$', message: 'Malformed JSON.' }],
+          warnings: [],
+        },
+        packageIdentity: null,
+        decision: null,
+        conflicts: [{
+          code: 'missing_identity_metadata',
+          severity: 'error',
+          message: 'Package JSON could not be parsed, so assessment identity could not be reviewed.',
+        }],
+      }),
+    }
+  }
+
+  const importedPackage = importAssessmentPackagePayload(parsedPayload)
+  const identityResult = extractAssessmentPackageIdentity(parsedPayload, importedPackage)
+  const identity = identityResult.identity
+  const conflicts: AssessmentImportConflict[] = [...identityResult.conflicts]
+
+  let matchedAssessment: Awaited<ReturnType<typeof loadAssessmentIdentityByKey>> | null = null
+  let decision: AdminAssessmentImportReviewContract['decision'] = null
+
+  if (identity) {
+    matchedAssessment = await loadAssessmentIdentityByKey(client, identity.libraryKey)
+
+    const slugOwner = await loadAssessmentIdentityBySlug(client, identity.slug)
+    if (slugOwner && slugOwner.key !== identity.libraryKey) {
+      conflicts.push({
+        code: 'slug_collision',
+        severity: 'error',
+        field: 'slug',
+        message: `Slug ${identity.slug} is already assigned to ${slugOwner.name} (${slugOwner.key}) and cannot be claimed by a different library key.`,
+      })
+    }
+
+    if (matchedAssessment) {
+      if (matchedAssessment.name !== identity.assessmentName) {
+        conflicts.push({
+          code: 'identity_metadata_changed',
+          severity: 'warning',
+          field: 'assessmentName',
+          message: `Package name differs from the existing registry entry (${matchedAssessment.name} → ${identity.assessmentName}). The new package can update the mutable assessment name after confirmation.`,
+        })
+      }
+
+      if (matchedAssessment.slug !== identity.slug) {
+        conflicts.push({
+          code: 'identity_metadata_changed',
+          severity: 'warning',
+          field: 'slug',
+          message: `Package slug differs from the existing registry entry (${matchedAssessment.slug} → ${identity.slug}). The new package can update the mutable slug after confirmation if it stays unique.`,
+        })
+      }
+
+      if (matchedAssessment.category !== identity.category) {
+        conflicts.push({
+          code: 'identity_metadata_changed',
+          severity: 'warning',
+          field: 'category',
+          message: `Package category differs from the existing registry entry (${matchedAssessment.category} → ${identity.category}). The package can update this mutable taxonomy field after confirmation.`,
+        })
+      }
+    }
+
+    decision = {
+      action: matchedAssessment ? 'attach_version' : 'create_assessment',
+      assessmentId: matchedAssessment?.id ?? null,
+      versionId: null,
+      versionLabel: identity.versionLabel ?? importedPackage.versionLabel ?? '1.0.0',
+      matchedAssessment: matchedAssessment
+        ? {
+            id: matchedAssessment.id,
+            name: matchedAssessment.name,
+            key: matchedAssessment.key,
+            slug: matchedAssessment.slug,
+            category: matchedAssessment.category,
+          }
+        : null,
+      willCreateAssessment: !matchedAssessment,
+      willCreateVersion: true,
+    }
+  }
+
+  if (matchedAssessment && decision?.versionLabel) {
+    const duplicateVersion = await client.query<{ id: string }>(
+      `select id
+       from assessment_versions
+       where assessment_definition_id = $1
+         and version_label = $2
+       limit 1`,
+      [matchedAssessment.id, decision.versionLabel],
+    )
+
+    if (duplicateVersion.rows[0]) {
+      conflicts.push({
+        code: 'duplicate_version_label',
+        severity: 'error',
+        field: 'versionLabel',
+        message: `Version ${decision.versionLabel} already exists for ${matchedAssessment.name}. Import a new version label or use the existing version workspace.`,
+      })
+    }
+  }
+
+  return {
+    parsedPayload,
+    importedPackage,
+    review: buildAssessmentImportReviewContract({
+      validationSummary: importedPackage.validationSummary,
+      packageIdentity: identity,
+      decision,
+      conflicts,
+    }),
+  }
+}
+
+async function persistImportedPackageOnVersion(
+  client: PoolClient,
+  input: {
+    assessmentId: string
+    versionId: string
+    sourceFilename?: string | null
+    parsedPayload: unknown
+    importedPackage: ReturnType<typeof importAssessmentPackagePayload>
+    version: Awaited<ReturnType<typeof loadAssessmentVersionRowById>>
+    actor: ActorRow | null
+    nowIso: string
+    deps: AssessmentMutationDependencies
+  },
+): Promise<AdminAssessmentPackageImportResult> {
+  const capabilities = await resolveAssessmentVersionSchemaCapabilities(
+    client.query.bind(client),
+    input.deps.getAssessmentVersionSchemaCapabilities,
+  )
+  const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
+    client.query.bind(client),
+    input.deps.getAssessmentVersionSchemaCapabilities,
+  )
+  if (writePolicy.packageMetadata.mode !== 'supported') {
+    writePolicy.assertSupported('package_metadata', 'importing assessment packages')
+  }
+
+  const version = input.version
+  const assessmentName = normaliseNullableField(version?.assessment_name) ?? 'Assessment'
+  const existingVersion = version ? mapAssessmentVersionRows([version])[0] ?? null : null
+  const packageStatus = input.importedPackage.packageStatus
+  const includeMaterialUpdatedAt = writePolicy.releaseSignOff.mode === 'supported'
+
+  if (writePolicy.releaseSignOff.mode === 'partial') {
+    writePolicy.assertSupported('release_sign_off', 'tracking package material updates')
+  }
+
+  await client.query(
+    `update assessment_versions
+     set definition_payload = $3::jsonb,
+         package_raw_payload = $4::jsonb,
+         package_schema_version = $5,
+         package_status = $6,
+         package_source_type = 'manual_import',
+         package_source_filename = $7,
+         package_imported_at = $8::timestamptz,
+         package_imported_by_identity_id = $9,
+         package_validation_report_json = $10::jsonb,
+         source_type = 'import',
+         validation_status = $11,
+         total_questions = coalesce($12, total_questions),
+         ${includeMaterialUpdatedAt ? 'material_updated_at = $8::timestamptz,' : ''}
+         updated_at = $8::timestamptz,
+         updated_by_identity_id = $9
+     where id = $1
+       and assessment_definition_id = $2`,
+    [
+      input.versionId,
+      input.assessmentId,
+      input.importedPackage.definitionPayload ? JSON.stringify(input.importedPackage.definitionPayload) : null,
+      JSON.stringify(input.parsedPayload),
+      input.importedPackage.schemaVersion ?? SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1,
+      packageStatus,
+      normaliseNullableField(input.sourceFilename),
+      input.nowIso,
+      input.actor?.id ?? null,
+      JSON.stringify(buildPackageValidationReport({
+        detectedVersion: input.importedPackage.detectedVersion,
+        success: input.importedPackage.validationSummary.success,
+        schemaVersion: input.importedPackage.schemaVersion,
+        packageName: input.importedPackage.packageName,
+        versionLabel: input.importedPackage.versionLabel,
+        readiness: input.importedPackage.readiness,
+        summary: input.importedPackage.summary,
+        errors: input.importedPackage.errors,
+        warnings: input.importedPackage.warnings,
+      })),
+      input.importedPackage.validationStatus === 'valid_with_warnings' ? 'valid_with_warnings' : input.importedPackage.validationStatus,
+      input.importedPackage.summary?.questionsCount ?? null,
+    ],
+  )
+
+  await client.query(
+    `update assessment_definitions
+     set updated_at = $2::timestamptz,
+         updated_by_identity_id = $3
+     where id = $1`,
+    [input.assessmentId, input.nowIso, input.actor?.id ?? null],
+  )
+
+  if (existingVersion) {
+    await invalidateVersionSignOffIfStale(client, {
+      version: existingVersion,
+      assessmentName,
+      assessmentId: input.assessmentId,
+      actor: input.actor,
+      nowIso: input.nowIso,
+      createId: input.deps.createId,
+      reason: 'material_update',
+      writePolicy,
+    })
+  }
+
+  await persistVersionReleaseReadiness(client, {
+    assessmentId: input.assessmentId,
+    versionId: input.versionId,
+    actor: input.actor,
+    nowIso: input.nowIso,
+    createId: input.deps.createId,
+    reason: 'package_import',
+    getAssessmentVersionSchemaCapabilities: input.deps.getAssessmentVersionSchemaCapabilities,
+    onUnsupported: 'skip',
+  })
+
+  if (!input.importedPackage.validationSummary.success) {
+    await writeAssessmentAuditEvent(client, {
+      createId: input.deps.createId,
+      actor: input.actor,
+      nowIso: input.nowIso,
+      eventType: 'assessment_package_validation_failed',
+      summary: `Assessment package import failed validation for ${assessmentName} v${version?.version_label} with ${input.importedPackage.errors.length} blocking issue(s) and ${input.importedPackage.warnings.length} warning(s).`,
+      assessmentId: input.assessmentId,
+      assessmentName,
+      versionId: input.versionId,
+      versionLabel: version?.version_label,
+      metadata: {
+        packageStatus,
+        detectedVersion: input.importedPackage.detectedVersion,
+        schemaVersion: input.importedPackage.schemaVersion,
+        errors: input.importedPackage.errors.length,
+        warnings: input.importedPackage.warnings.length,
+      },
+    })
+
+    return {
+      ok: false,
+      code: 'validation_error',
+      message: 'Package validation failed. Review the validation results and re-import.',
+      assessmentId: input.assessmentId,
+      versionId: input.versionId,
+      validationResult: input.importedPackage.validationSummary,
+    }
+  }
+
+  await writeAssessmentAuditEvent(client, {
+    createId: input.deps.createId,
+    actor: input.actor,
+    nowIso: input.nowIso,
+    eventType: version?.package_status && version.package_status !== 'missing' ? 'assessment_package_replaced' : 'assessment_package_imported',
+    summary: `${version?.package_status && version.package_status !== 'missing' ? 'Assessment package replaced' : 'Assessment package imported'} for ${assessmentName} v${version?.version_label} · ${input.importedPackage.summary?.questionsCount ?? 0} questions · ${input.importedPackage.summary?.dimensionsCount ?? 0} dimensions · ${input.importedPackage.warnings.length} warning(s).`,
+    assessmentId: input.assessmentId,
+    assessmentName,
+    versionId: input.versionId,
+    versionLabel: version?.version_label,
+    metadata: {
+      packageStatus,
+      detectedVersion: input.importedPackage.detectedVersion,
+      schemaVersion: input.importedPackage.schemaVersion,
+      runtimeExecutable: input.importedPackage.readiness.runtimeExecutable,
+      evaluatable: input.importedPackage.readiness.evaluatable,
+      publishable: input.importedPackage.readiness.publishable,
+      warnings: input.importedPackage.warnings.length,
+      sourceFilename: normaliseNullableField(input.sourceFilename),
+    },
+  })
+
+  return {
+    ok: true,
+    code: 'imported',
+    message: input.importedPackage.detectedVersion === 'package_contract_v2'
+      ? input.importedPackage.warnings.length > 0
+        ? 'Package Contract v2 imported with warnings. The package is stored and previewable, but publish stays blocked until the v2 runtime path is supported.'
+        : 'Package Contract v2 imported successfully. The package is stored and previewable, but publish stays blocked until the v2 runtime path is supported.'
+      : input.importedPackage.warnings.length > 0
+        ? 'Package imported with warnings. Publish remains allowed, but review the warnings first.'
+        : 'Package imported successfully.',
+    assessmentId: input.assessmentId,
+    versionId: input.versionId,
+    validationResult: input.importedPackage.validationSummary,
+  }
+}
+
 export async function importAdminAssessmentPackage(
   input: AdminAssessmentPackageImportInput,
   dependencies: Partial<AssessmentMutationDependencies> = {},
@@ -2224,40 +2689,21 @@ export async function importAdminAssessmentPackage(
   }
 
   const importedPackage = importAssessmentPackagePayload(parsedPayload)
-  const validationReport = buildPackageValidationReport({
-    detectedVersion: importedPackage.detectedVersion,
-    success: importedPackage.validationSummary.success,
-    schemaVersion: importedPackage.schemaVersion,
-    packageName: importedPackage.packageName,
-    versionLabel: importedPackage.versionLabel,
-    readiness: importedPackage.readiness,
-    summary: importedPackage.summary,
-    errors: importedPackage.errors,
-    warnings: importedPackage.warnings,
-  })
-  const validationStatus = importedPackage.validationStatus === 'valid_with_warnings' ? 'valid_with_warnings' : importedPackage.validationStatus
+  const identityResult = extractAssessmentPackageIdentity(parsedPayload, importedPackage)
 
   try {
     return await deps.withTransaction(async (client) => {
-      const capabilities = await resolveAssessmentVersionSchemaCapabilities(
-        client.query.bind(client),
-        deps.getAssessmentVersionSchemaCapabilities,
-      )
-      const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
-        client.query.bind(client),
-        deps.getAssessmentVersionSchemaCapabilities,
-      )
-      if (writePolicy.packageMetadata.mode !== 'supported') {
-        writePolicy.assertSupported('package_metadata', 'importing assessment packages')
+      const assessmentIdentity = await loadAssessmentIdentityById(client, input.assessmentId)
+      if (!assessmentIdentity) {
+        return { ok: false, code: 'not_found', message: 'Assessment not found.' }
       }
+
       const version = await loadAssessmentVersionRowById(
         client,
         input.assessmentId,
         input.versionId,
-        async () => capabilities,
+        async () => resolveAssessmentVersionSchemaCapabilities(client.query.bind(client), deps.getAssessmentVersionSchemaCapabilities),
       )
-      const assessmentName = normaliseNullableField(version?.assessment_name) ?? 'Assessment'
-      const existingVersion = version ? mapAssessmentVersionRows([version])[0] ?? null : null
 
       if (!version) {
         return { ok: false, code: 'not_found', message: 'Version not found.' }
@@ -2279,166 +2725,40 @@ export async function importAdminAssessmentPackage(
         }
       }
 
-      const actor = await deps.getActorIdentity(client)
-      const nowIso = deps.now().toISOString()
-      const packageStatus = importedPackage.packageStatus
-      const includeMaterialUpdatedAt = writePolicy.releaseSignOff.mode === 'supported'
-
-      if (writePolicy.releaseSignOff.mode === 'partial') {
-        writePolicy.assertSupported('release_sign_off', 'tracking package material updates')
-      }
-
-      await client.query(
-        `update assessment_versions
-         set definition_payload = $3::jsonb,
-             package_raw_payload = $4::jsonb,
-             package_schema_version = $5,
-             package_status = $6,
-             package_source_type = 'manual_import',
-             package_source_filename = $7,
-             package_imported_at = $8::timestamptz,
-             package_imported_by_identity_id = $9,
-             package_validation_report_json = $10::jsonb,
-             source_type = 'import',
-             validation_status = $11,
-             total_questions = coalesce($12, total_questions),
-             ${includeMaterialUpdatedAt ? 'material_updated_at = $8::timestamptz,' : ''}
-             updated_at = $8::timestamptz,
-             updated_by_identity_id = $9
-         where id = $1
-           and assessment_definition_id = $2`,
-        [
-          input.versionId,
-          input.assessmentId,
-          importedPackage.definitionPayload ? JSON.stringify(importedPackage.definitionPayload) : null,
-          JSON.stringify(parsedPayload),
-          importedPackage.schemaVersion ?? SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1,
-          packageStatus,
-          normaliseNullableField(input.sourceFilename),
-          nowIso,
-          actor?.id ?? null,
-          JSON.stringify(validationReport),
-          validationStatus,
-          importedPackage.summary?.questionsCount ?? null,
-        ],
-      )
-
-      await client.query(
-        `update assessment_definitions
-         set updated_at = $2::timestamptz,
-             updated_by_identity_id = $3
-         where id = $1`,
-        [input.assessmentId, nowIso, actor?.id ?? null],
-      )
-
-      if (existingVersion) {
-        await invalidateVersionSignOffIfStale(client, {
-          version: existingVersion,
-          assessmentName,
-          assessmentId: input.assessmentId,
-          actor,
-          nowIso,
-          createId: deps.createId,
-          reason: 'material_update',
-          writePolicy,
-        })
-      }
-
-      await persistVersionReleaseReadiness(client, {
-        assessmentId: input.assessmentId,
-        versionId: input.versionId,
-        actor,
-        nowIso,
-        createId: deps.createId,
-        reason: 'package_import',
-        getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
-        onUnsupported: 'skip',
-      })
-
-      if (!importedPackage.validationSummary.success) {
-        console.warn('[admin-assessment-import] Package validation failed.', {
-          assessmentId: input.assessmentId,
-          versionId: input.versionId,
-          detectedVersion: importedPackage.detectedVersion,
-          schemaVersion: importedPackage.schemaVersion,
-          errorCount: importedPackage.errors.length,
-          warningCount: importedPackage.warnings.length,
-        })
-        await writeAssessmentAuditEvent(client, {
-          createId: deps.createId,
-          actor,
-          nowIso,
-          eventType: 'assessment_package_validation_failed',
-          summary: `Assessment package import failed validation for ${assessmentName} v${version.version_label} with ${importedPackage.errors.length} blocking issue(s) and ${importedPackage.warnings.length} warning(s).`,
-          assessmentId: input.assessmentId,
-          assessmentName,
-          versionId: input.versionId,
-          versionLabel: version.version_label,
-          metadata: {
-            packageStatus,
-            detectedVersion: importedPackage.detectedVersion,
-            schemaVersion: importedPackage.schemaVersion,
-            errors: importedPackage.errors.length,
-            warnings: importedPackage.warnings.length,
-          },
-        })
-
+      const packageIdentity = identityResult.identity
+      if (!packageIdentity) {
         return {
           ok: false,
           code: 'validation_error',
-          message: 'Package validation failed. Review the validation results and re-import.',
+          message: 'Package identity is incomplete. Review the validation results and re-import.',
+          validationResult: importedPackage.validationSummary,
+        }
+      }
+
+      if (assessmentIdentity.key !== packageIdentity.libraryKey) {
+        return {
+          ok: false,
+          code: 'conflict',
+          message: `This draft belongs to ${assessmentIdentity.key}, but the uploaded package declares ${packageIdentity.libraryKey}. Library keys are immutable identity anchors; use the package-first import flow instead.`,
           assessmentId: input.assessmentId,
           versionId: input.versionId,
           validationResult: importedPackage.validationSummary,
         }
       }
 
-      await writeAssessmentAuditEvent(client, {
-        createId: deps.createId,
+      const actor = await deps.getActorIdentity(client)
+      const nowIso = deps.now().toISOString()
+      return persistImportedPackageOnVersion(client, {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+        sourceFilename: input.sourceFilename,
+        parsedPayload,
+        importedPackage,
+        version,
         actor,
         nowIso,
-        eventType: version.package_status && version.package_status !== 'missing' ? 'assessment_package_replaced' : 'assessment_package_imported',
-        summary: `${version.package_status && version.package_status !== 'missing' ? 'Assessment package replaced' : 'Assessment package imported'} for ${assessmentName} v${version.version_label} · ${importedPackage.summary?.questionsCount ?? 0} questions · ${importedPackage.summary?.dimensionsCount ?? 0} dimensions · ${importedPackage.warnings.length} warning(s).`,
-        assessmentId: input.assessmentId,
-        assessmentName,
-        versionId: input.versionId,
-        versionLabel: version.version_label,
-        metadata: {
-          packageStatus,
-          detectedVersion: importedPackage.detectedVersion,
-          schemaVersion: importedPackage.schemaVersion,
-          runtimeExecutable: importedPackage.readiness.runtimeExecutable,
-          evaluatable: importedPackage.readiness.evaluatable,
-          publishable: importedPackage.readiness.publishable,
-          warnings: importedPackage.warnings.length,
-          sourceFilename: normaliseNullableField(input.sourceFilename),
-        },
+        deps,
       })
-
-      console.info('[admin-assessment-import] Package import persisted successfully.', {
-        assessmentId: input.assessmentId,
-        versionId: input.versionId,
-        detectedVersion: importedPackage.detectedVersion,
-        schemaVersion: importedPackage.schemaVersion,
-        runtimeExecutable: importedPackage.readiness.runtimeExecutable,
-        evaluatable: importedPackage.readiness.evaluatable,
-        publishable: importedPackage.readiness.publishable,
-      })
-
-      return {
-        ok: true,
-        code: 'imported',
-        message: importedPackage.detectedVersion === 'package_contract_v2'
-          ? importedPackage.warnings.length > 0
-            ? 'Package Contract v2 imported with warnings. The package is stored and previewable, but publish stays blocked until the v2 runtime path is supported.'
-            : 'Package Contract v2 imported successfully. The package is stored and previewable, but publish stays blocked until the v2 runtime path is supported.'
-          : importedPackage.warnings.length > 0
-            ? 'Package imported with warnings. Publish remains allowed, but review the warnings first.'
-            : 'Package imported successfully.',
-        assessmentId: input.assessmentId,
-        versionId: input.versionId,
-        validationResult: importedPackage.validationSummary,
-      }
     })
   } catch (error) {
     const compatibilityFailure = buildAssessmentVersionSchemaCompatibilityResult<AdminAssessmentPackageImportResult>(error)
@@ -2446,6 +2766,280 @@ export async function importAdminAssessmentPackage(
       return compatibilityFailure
     }
     logDatabaseError('[admin-assessment-management] Failed to import assessment package.', error)
+    return {
+      ok: false,
+      code: 'unknown_error',
+      message: describeDatabaseError(error),
+    }
+  }
+}
+
+export async function createOrAttachAdminAssessmentPackage(
+  input: AdminAssessmentPackageCreateOrAttachInput,
+  dependencies: Partial<AssessmentMutationDependencies> = {},
+): Promise<AdminAssessmentPackageCreateOrAttachResult> {
+  const deps = { ...defaultDependencies, ...dependencies }
+  const denied = await requireAccess(deps)
+
+  if (denied) {
+    return denied
+  }
+
+  const packageText = normaliseWhitespace(input.packageText)
+  if (!packageText) {
+    return {
+      ok: false,
+      code: 'validation_error',
+      message: 'Paste a package payload or upload a JSON file before importing.',
+      fieldErrors: {
+        packageText: 'Package JSON is required.',
+        packageFile: 'Package JSON is required.',
+      },
+    }
+  }
+
+  try {
+    return await deps.withTransaction(async (client) => {
+      const writePolicy = await resolveAssessmentVersionGovernanceWritePolicy(
+        client.query.bind(client),
+        deps.getAssessmentVersionSchemaCapabilities,
+      )
+      if (writePolicy.packageMetadata.mode !== 'supported') {
+        writePolicy.assertSupported('package_metadata', 'importing assessment packages')
+      }
+
+      const reviewResult = await reviewAssessmentPackageCreateOrAttach(client, packageText)
+      const blockingConflicts = reviewResult.review.conflicts.filter((conflict) => conflict.severity === 'error')
+
+      if (blockingConflicts.length > 0) {
+        return {
+          ok: false,
+          code: 'conflict',
+          message: blockingConflicts[0]?.message ?? 'Import review found conflicts that must be resolved before the package can be imported.',
+          review: reviewResult.review,
+        }
+      }
+
+      if (input.confirmation !== 'confirm') {
+        return {
+          ok: false,
+          code: 'review_required',
+          message: reviewResult.review.decision?.action === 'create_assessment'
+            ? 'Review the package identity and confirm to create a new assessment plus its first imported version.'
+            : 'Review the package identity and confirm to attach a new version to the existing assessment.',
+          review: reviewResult.review,
+        }
+      }
+
+      const packageIdentity = reviewResult.review.packageIdentity
+      const decision = reviewResult.review.decision
+      if (!packageIdentity || !decision) {
+        return {
+          ok: false,
+          code: 'validation_error',
+          message: 'Package identity could not be resolved. Review the package metadata and try again.',
+          review: reviewResult.review,
+        }
+      }
+
+      const actor = await deps.getActorIdentity(client)
+      const nowIso = deps.now().toISOString()
+      let assessment = decision.matchedAssessment
+        ? await loadAssessmentIdentityById(client, decision.matchedAssessment.id)
+        : null
+
+      if (!assessment) {
+        const assessmentId = deps.createId()
+        await client.query(
+          `insert into assessment_definitions (
+             id,
+             key,
+             slug,
+             name,
+             category,
+             description,
+             lifecycle_status,
+             created_by_identity_id,
+             updated_by_identity_id,
+             created_at,
+             updated_at
+           )
+           values ($1, $2, $3, $4, $5, $6, 'draft', $7, $7, $8::timestamptz, $8::timestamptz)`,
+          [
+            assessmentId,
+            packageIdentity.libraryKey,
+            packageIdentity.slug,
+            packageIdentity.assessmentName,
+            packageIdentity.category,
+            packageIdentity.description,
+            actor?.id ?? null,
+            nowIso,
+          ],
+        )
+
+        await writeAssessmentAuditEvent(client, {
+          createId: deps.createId,
+          actor,
+          nowIso,
+          eventType: 'assessment_created',
+          summary: `Assessment record ${packageIdentity.assessmentName} created from an uploaded package.`,
+          assessmentId,
+          assessmentName: packageIdentity.assessmentName,
+          metadata: {
+            key: packageIdentity.libraryKey,
+            slug: packageIdentity.slug,
+            category: packageIdentity.category,
+            lifecycleStatus: 'draft',
+            source: 'package_import',
+          },
+        })
+
+        assessment = await loadAssessmentIdentityById(client, assessmentId)
+      } else if (
+        assessment.name !== packageIdentity.assessmentName
+        || assessment.slug !== packageIdentity.slug
+        || assessment.category !== packageIdentity.category
+        || assessment.description !== packageIdentity.description
+      ) {
+        await client.query(
+          `update assessment_definitions
+           set name = $2,
+               slug = $3,
+               category = $4,
+               description = $5,
+               updated_at = $6::timestamptz,
+               updated_by_identity_id = $7
+           where id = $1`,
+          [
+            assessment.id,
+            packageIdentity.assessmentName,
+            packageIdentity.slug,
+            packageIdentity.category,
+            packageIdentity.description,
+            nowIso,
+            actor?.id ?? null,
+          ],
+        )
+
+        await writeAssessmentAuditEvent(client, {
+          createId: deps.createId,
+          actor,
+          nowIso,
+          eventType: 'assessment_package_imported',
+          summary: `Package import updated mutable identity metadata for ${packageIdentity.assessmentName} while keeping library key ${packageIdentity.libraryKey} stable.`,
+          assessmentId: assessment.id,
+          assessmentName: packageIdentity.assessmentName,
+          metadata: {
+            identityMutabilityRules: ADMIN_ASSESSMENT_IDENTITY_MUTABILITY_RULES,
+            libraryKey: packageIdentity.libraryKey,
+            previousName: assessment.name,
+            previousSlug: assessment.slug,
+            previousCategory: assessment.category,
+          },
+        })
+      }
+
+      if (!assessment) {
+        return {
+          ok: false,
+          code: 'unknown_error',
+          message: 'Assessment import could not resolve the registry target after creation.',
+          review: reviewResult.review,
+        }
+      }
+
+      const versionId = deps.createId()
+      const versionLabel = decision.versionLabel ?? packageIdentity.versionLabel ?? reviewResult.importedPackage.versionLabel ?? '1.0.0'
+      const versionKey = `${assessment.key.replace(/[^a-z0-9]+/g, '-') || assessment.id}-v${versionLabel}`
+
+      await client.query(
+        `insert into assessment_versions (
+           id,
+           assessment_definition_id,
+           key,
+           name,
+           description,
+           total_questions,
+           is_active,
+           version_label,
+           lifecycle_status,
+           notes,
+           source_type,
+           created_by_identity_id,
+           updated_by_identity_id,
+           created_at,
+           updated_at
+         )
+         values ($1, $2, $3, $4, null, 80, false, $5, 'draft', $6, 'import', $7, $7, $8::timestamptz, $8::timestamptz)`,
+        [versionId, assessment.id, versionKey, packageIdentity.assessmentName, versionLabel, 'Created by package-first import.', actor?.id ?? null, nowIso],
+      )
+
+      await writeAssessmentAuditEvent(client, {
+        createId: deps.createId,
+        actor,
+        nowIso,
+        eventType: 'assessment_version_created',
+        summary: `${decision.action === 'create_assessment' ? 'Initial' : 'New'} draft version ${versionLabel} created for ${packageIdentity.assessmentName} from an uploaded package.`,
+        assessmentId: assessment.id,
+        assessmentName: packageIdentity.assessmentName,
+        versionId,
+        versionLabel,
+        metadata: {
+          action: decision.action,
+          source: 'package_import',
+          libraryKey: packageIdentity.libraryKey,
+        },
+      })
+
+      const version = await loadAssessmentVersionRowById(
+        client,
+        assessment.id,
+        versionId,
+        () => resolveAssessmentVersionSchemaCapabilities(client.query.bind(client), deps.getAssessmentVersionSchemaCapabilities),
+      )
+
+      if (!version) {
+        return {
+          ok: false,
+          code: 'unknown_error',
+          message: 'Assessment version could not be reloaded after creation.',
+          review: reviewResult.review,
+        }
+      }
+
+      const persisted = await persistImportedPackageOnVersion(client, {
+        assessmentId: assessment.id,
+        versionId,
+        sourceFilename: input.sourceFilename,
+        parsedPayload: reviewResult.parsedPayload,
+        importedPackage: reviewResult.importedPackage,
+        version,
+        actor,
+        nowIso,
+        deps,
+      })
+
+      return {
+        ok: persisted.ok,
+        code: persisted.ok ? 'imported' : persisted.code === 'validation_error' ? 'validation_error' : 'conflict',
+        message: persisted.ok
+          ? decision.action === 'create_assessment'
+            ? `Package import created ${packageIdentity.assessmentName} and attached version ${versionLabel}.`
+            : `Package import attached version ${versionLabel} to ${packageIdentity.assessmentName}.`
+          : persisted.message,
+        assessmentId: assessment.id,
+        versionId,
+        versionLabel,
+        review: reviewResult.review,
+      }
+    })
+  } catch (error) {
+    const compatibilityFailure = buildAssessmentVersionSchemaCompatibilityResult<AdminAssessmentPackageCreateOrAttachResult>(error)
+    if (compatibilityFailure) {
+      return compatibilityFailure
+    }
+
+    logDatabaseError('[admin-assessment-management] Failed to create or attach assessment package.', error)
     return {
       ok: false,
       code: 'unknown_error',

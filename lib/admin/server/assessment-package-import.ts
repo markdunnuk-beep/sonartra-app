@@ -1,6 +1,7 @@
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1, validateSonartraAssessmentPackage, type AssessmentPackageStatus, type SonartraAssessmentPackageSummary, type SonartraAssessmentPackageValidationIssue } from '@/lib/admin/domain/assessment-package'
 import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, validateSonartraAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
+import type { AssessmentImportConflict, AssessmentPackageIdentity } from '@/lib/admin/domain/assessment-management'
 
 export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contract_v2' | 'unknown'
 
@@ -49,12 +50,40 @@ export interface ImportedAssessmentPackageResult {
   validationSummary: AdminAssessmentPackageValidationSummary
 }
 
+export interface AssessmentPackageIdentityExtractionResult {
+  identity: AssessmentPackageIdentity | null
+  conflicts: AssessmentImportConflict[]
+}
+
 function asTrimmedString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeSlug(value: string | null): string | null {
+  if (!value) {
+    return null
+  }
+
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  return normalized || null
+}
+
+function normalizeCategory(value: string | null): string | null {
+  if (!value) {
+    return null
+  }
+
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  return normalized || null
 }
 
 function buildGenericSummary(input: Partial<SonartraAssessmentPackageSummary> & {
@@ -264,5 +293,194 @@ export function importAssessmentPackagePayload(input: unknown): ImportedAssessme
       })
       return result
     }
+  }
+}
+
+export function extractAssessmentPackageIdentity(
+  input: unknown,
+  importedPackage: ImportedAssessmentPackageResult | null = null,
+): AssessmentPackageIdentityExtractionResult {
+  const imported = importedPackage ?? importAssessmentPackagePayload(input)
+  const conflicts: AssessmentImportConflict[] = []
+
+  if (!isRecord(input)) {
+    return {
+      identity: null,
+      conflicts: [{
+        code: 'missing_identity_metadata',
+        severity: 'error',
+        message: 'Package identity could not be extracted because the payload is not a JSON object.',
+      }],
+    }
+  }
+
+  if (imported.detectedVersion === 'legacy_v1') {
+    const meta = isRecord(input.meta) ? input.meta : {}
+    const libraryKey = asTrimmedString(meta.assessmentKey)
+    const assessmentName = asTrimmedString(meta.assessmentTitle)
+    const explicitSlug = normalizeSlug(asTrimmedString((meta as Record<string, unknown>).slug) ?? asTrimmedString(input.slug))
+    const explicitCategory = normalizeCategory(asTrimmedString((meta as Record<string, unknown>).category) ?? asTrimmedString(input.category))
+    const derivedFields: Array<'slug' | 'category'> = []
+
+    if (!libraryKey) {
+      conflicts.push({
+        code: 'missing_identity_metadata',
+        severity: 'error',
+        field: 'libraryKey',
+        message: 'Package identity is missing the required library key.',
+      })
+    }
+
+    if (!assessmentName) {
+      conflicts.push({
+        code: 'missing_identity_metadata',
+        severity: 'error',
+        field: 'assessmentName',
+        message: 'Package identity is missing the required assessment name.',
+      })
+    }
+
+    const slug = explicitSlug ?? normalizeSlug(libraryKey ?? assessmentName ?? null)
+    if (!explicitSlug && slug) {
+      derivedFields.push('slug')
+      conflicts.push({
+        code: 'identity_metadata_changed',
+        severity: 'warning',
+        field: 'slug',
+        message: 'The package does not declare a slug, so the review generated one from the package identity for backward compatibility.',
+      })
+    }
+
+    const category = explicitCategory ?? 'other'
+    if (!explicitCategory) {
+      derivedFields.push('category')
+      conflicts.push({
+        code: 'identity_metadata_changed',
+        severity: 'warning',
+        field: 'category',
+        message: 'The package does not declare a category, so the review defaulted the category to other for backward compatibility.',
+      })
+    }
+
+    if (!libraryKey || !assessmentName || !slug) {
+      return { identity: null, conflicts }
+    }
+
+    const language = isRecord(input.language) ? input.language : {}
+    const locales = Array.isArray(language.locales)
+      ? language.locales.flatMap((entry) => isRecord(entry) ? [asTrimmedString(entry.locale)] : []).filter((locale): locale is string => Boolean(locale))
+      : []
+
+    return {
+      identity: {
+        assessmentName,
+        libraryKey,
+        slug,
+        category,
+        description: asTrimmedString(input.description),
+        defaultLocale: asTrimmedString(meta.defaultLocale),
+        supportedLocales: locales,
+        assessmentType: asTrimmedString((meta as Record<string, unknown>).assessmentType),
+        authorName: null,
+        authorSource: null,
+        versionLabel: asTrimmedString(meta.versionLabel),
+        schemaVersion: imported.schemaVersion,
+        detectedVersion: imported.detectedVersion,
+        derivedFields,
+      },
+      conflicts,
+    }
+  }
+
+  if (imported.detectedVersion === 'package_contract_v2') {
+    const metadata = isRecord(input.metadata) ? input.metadata : {}
+    const locales = isRecord(metadata.locales) ? metadata.locales : {}
+    const authoring = isRecord(metadata.authoring) ? metadata.authoring : {}
+    const compatibility = isRecord(metadata.compatibility) ? metadata.compatibility : {}
+    const libraryKey = asTrimmedString(metadata.assessmentKey)
+    const assessmentName = asTrimmedString(metadata.assessmentName)
+    const explicitSlug = normalizeSlug(asTrimmedString((metadata as Record<string, unknown>).slug))
+    const explicitCategory = normalizeCategory(
+      asTrimmedString((metadata as Record<string, unknown>).category)
+      ?? (Array.isArray(metadata.tags) ? asTrimmedString(metadata.tags[0]) : null),
+    )
+    const derivedFields: Array<'slug' | 'category'> = []
+
+    if (!libraryKey) {
+      conflicts.push({
+        code: 'missing_identity_metadata',
+        severity: 'error',
+        field: 'libraryKey',
+        message: 'Package identity is missing the required library key.',
+      })
+    }
+
+    if (!assessmentName) {
+      conflicts.push({
+        code: 'missing_identity_metadata',
+        severity: 'error',
+        field: 'assessmentName',
+        message: 'Package identity is missing the required assessment name.',
+      })
+    }
+
+    const slug = explicitSlug ?? normalizeSlug(libraryKey ?? assessmentName ?? null)
+    if (!explicitSlug && slug) {
+      derivedFields.push('slug')
+      conflicts.push({
+        code: 'identity_metadata_changed',
+        severity: 'warning',
+        field: 'slug',
+        message: 'The package does not declare a slug, so the review generated one from the package identity for backward compatibility.',
+      })
+    }
+
+    const category = explicitCategory ?? 'other'
+    if (!explicitCategory) {
+      derivedFields.push('category')
+      conflicts.push({
+        code: 'identity_metadata_changed',
+        severity: 'warning',
+        field: 'category',
+        message: 'The package does not declare a category, so the review defaulted the category to other for backward compatibility.',
+      })
+    }
+
+    if (!libraryKey || !assessmentName || !slug) {
+      return { identity: null, conflicts }
+    }
+
+    return {
+      identity: {
+        assessmentName,
+        libraryKey,
+        slug,
+        category,
+        description: asTrimmedString(metadata.description),
+        defaultLocale: asTrimmedString((locales as Record<string, unknown>).defaultLocale),
+        supportedLocales: Array.isArray((locales as Record<string, unknown>).supportedLocales)
+          ? ((locales as Record<string, unknown>).supportedLocales as unknown[])
+              .flatMap((locale) => asTrimmedString(locale))
+              .filter((locale): locale is string => Boolean(locale))
+          : [],
+        assessmentType: Array.isArray(metadata.tags) ? asTrimmedString(metadata.tags[0]) : null,
+        authorName: asTrimmedString(authoring.author) ?? asTrimmedString(authoring.organization),
+        authorSource: asTrimmedString(authoring.source),
+        versionLabel: asTrimmedString(compatibility.packageSemver),
+        schemaVersion: imported.schemaVersion,
+        detectedVersion: imported.detectedVersion,
+        derivedFields,
+      },
+      conflicts,
+    }
+  }
+
+  return {
+    identity: null,
+    conflicts: [{
+      code: 'missing_identity_metadata',
+      severity: 'error',
+      message: 'Package identity could not be extracted because the uploaded payload does not match a supported contract version.',
+    }],
   }
 }
