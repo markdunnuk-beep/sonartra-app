@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { AssessmentResultRow } from '../lib/assessment-types'
+import { PACKAGE_CONTRACT_V2_REPORT_ARTIFACT_VERSION } from '../lib/admin/domain/assessment-package-v2-performance'
 import {
   type AssessmentReportArtifactRecord,
   assembleAssessmentReportDocumentV2,
@@ -160,6 +161,8 @@ test('repeated report generation requests are idempotent and reuse the same arti
   const firstRecord = persistedRecord as AssessmentReportArtifactRecord
   const firstArtifactKey = firstRecord.artifactKey
   const firstGeneratedAt = firstRecord.generatedAt
+  assert.equal(firstRecord.reportArtifactVersion, PACKAGE_CONTRACT_V2_REPORT_ARTIFACT_VERSION)
+  assert.ok(firstRecord.content)
 
   const second = await getAssessmentReportArtifactForUser({ resultId: 'result-v2', ownerUserId: 'user-1' }, deps)
   assert.equal(second.kind, 'available')
@@ -195,4 +198,42 @@ test('missing or unsupported report artifacts fail safely for users', async () =
   if (unavailable.kind !== 'unavailable') return
   assert.equal(unavailable.view.state, 'failed')
   assert.match(unavailable.view.message, /could not be prepared safely/i)
+})
+
+
+test('corrupted persisted report artifacts fall back to safe regeneration instead of serving stale output', async () => {
+  let persistedRecord: AssessmentReportArtifactRecord | null = {
+    contractVersion: 'assessment_report_artifact/v1',
+    state: 'available',
+    format: 'html',
+    artifactKey: 'assessment-report/result-v2/html/stale',
+    reportArtifactVersion: PACKAGE_CONTRACT_V2_REPORT_ARTIFACT_VERSION,
+    rendererVersion: 'v2-html-renderer/2',
+    sourceHash: 'stale-source-hash',
+    contentHash: 'bad-hash',
+    generatedAt: '2026-03-20T09:15:00.000Z',
+    lastAttemptedAt: '2026-03-20T09:15:00.000Z',
+    lastErrorCode: null,
+    fileName: 'adaptive-balance-report.html',
+    content: '<html>stale</html>',
+  }
+
+  const regenerated = await getAssessmentReportArtifactForUser(
+    { resultId: 'result-v2', ownerUserId: 'user-1' },
+    {
+      async getOwnedResultById() {
+        return makeResult({ report_artifact_json: persistedRecord as unknown as Record<string, unknown> }) as AssessmentResultRow & { owner_user_id: string }
+      },
+      async updateArtifactRecord(_resultId, artifactRecord) {
+        persistedRecord = artifactRecord
+      },
+    },
+  )
+
+  assert.equal(regenerated.kind, 'available')
+  if (regenerated.kind !== 'available') return
+  assert.match(regenerated.body, /Assessment report/)
+  assert.ok(persistedRecord)
+  assert.notEqual(persistedRecord.content, '<html>stale</html>')
+  assert.notEqual(persistedRecord.sourceHash, 'stale-source-hash')
 })

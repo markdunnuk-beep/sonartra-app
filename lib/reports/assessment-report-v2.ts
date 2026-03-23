@@ -7,6 +7,7 @@ import type {
   ReportOutputSectionV2,
 } from '@/lib/admin/domain/assessment-package-v2-materialization'
 import type { AssessmentResultRow } from '@/lib/assessment-types'
+import { PACKAGE_CONTRACT_V2_HTML_RENDERER_VERSION, PACKAGE_CONTRACT_V2_REPORT_ARTIFACT_VERSION } from '@/lib/admin/domain/assessment-package-v2-performance'
 
 export type AssessmentReportAvailabilityState = 'available' | 'pending' | 'unavailable' | 'failed'
 export type AssessmentReportArtifactFormat = 'html'
@@ -63,11 +64,15 @@ export interface AssessmentReportArtifactRecord {
   state: AssessmentReportAvailabilityState
   format: AssessmentReportArtifactFormat | null
   artifactKey: string | null
+  reportArtifactVersion: string | null
   rendererVersion: string | null
   sourceHash: string | null
+  contentHash: string | null
   generatedAt: string | null
   lastAttemptedAt: string | null
   lastErrorCode: string | null
+  fileName: string | null
+  content: string | null
 }
 
 export interface AssessmentReportAssemblyResult {
@@ -200,11 +205,15 @@ export function parseAssessmentReportArtifactRecord(value: unknown): AssessmentR
     state,
     format,
     artifactKey: typeof value.artifactKey === 'string' ? value.artifactKey : null,
+    reportArtifactVersion: typeof value.reportArtifactVersion === 'string' ? value.reportArtifactVersion : null,
     rendererVersion: typeof value.rendererVersion === 'string' ? value.rendererVersion : null,
     sourceHash: typeof value.sourceHash === 'string' ? value.sourceHash : null,
+    contentHash: typeof value.contentHash === 'string' ? value.contentHash : null,
     generatedAt: typeof value.generatedAt === 'string' ? value.generatedAt : null,
     lastAttemptedAt: typeof value.lastAttemptedAt === 'string' ? value.lastAttemptedAt : null,
     lastErrorCode: typeof value.lastErrorCode === 'string' ? value.lastErrorCode : null,
+    fileName: typeof value.fileName === 'string' ? value.fileName : null,
+    content: typeof value.content === 'string' ? value.content : null,
   }
 }
 
@@ -214,11 +223,15 @@ export function createPendingAssessmentReportArtifactRecord(): AssessmentReportA
     state: 'pending',
     format: null,
     artifactKey: null,
+    reportArtifactVersion: PACKAGE_CONTRACT_V2_REPORT_ARTIFACT_VERSION,
     rendererVersion: null,
     sourceHash: null,
+    contentHash: null,
     generatedAt: null,
     lastAttemptedAt: null,
     lastErrorCode: null,
+    fileName: null,
+    content: null,
   }
 }
 
@@ -313,7 +326,7 @@ function renderBlock(block: AssessmentReportBlockV2): string {
 }
 
 export function renderAssessmentReportDocumentHtml(document: AssessmentReportDocumentV2): AssessmentReportRenderResult {
-  const rendererVersion = 'v2-html-renderer/1'
+  const rendererVersion = PACKAGE_CONTRACT_V2_HTML_RENDERER_VERSION
   const completionLabel = formatDate(document.metadata.completedAt)
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -390,6 +403,8 @@ export function buildAvailableAssessmentReportArtifactRecord(input: {
   rendererVersion: string
   format: AssessmentReportArtifactFormat
   resultId: string
+  fileName: string
+  content: string
 }) : AssessmentReportArtifactRecord {
   const generatedAt = new Date().toISOString()
   return {
@@ -397,11 +412,15 @@ export function buildAvailableAssessmentReportArtifactRecord(input: {
     state: 'available',
     format: input.format,
     artifactKey: `assessment-report/${input.resultId}/${input.format}/${input.sourceHash.slice(0, 16)}`,
+    reportArtifactVersion: PACKAGE_CONTRACT_V2_REPORT_ARTIFACT_VERSION,
     rendererVersion: input.rendererVersion,
     sourceHash: input.sourceHash,
+    contentHash: createHash('sha256').update(input.content).digest('hex'),
     generatedAt,
     lastAttemptedAt: generatedAt,
     lastErrorCode: null,
+    fileName: input.fileName,
+    content: input.content,
   }
 }
 
@@ -411,10 +430,14 @@ export function buildFailedAssessmentReportArtifactRecord(code: string): Assessm
     state: 'failed',
     format: null,
     artifactKey: null,
+    reportArtifactVersion: PACKAGE_CONTRACT_V2_REPORT_ARTIFACT_VERSION,
     rendererVersion: null,
     sourceHash: null,
+    contentHash: null,
     generatedAt: null,
     lastAttemptedAt: new Date().toISOString(),
     lastErrorCode: code,
+    fileName: null,
+    content: null,
   }
 }

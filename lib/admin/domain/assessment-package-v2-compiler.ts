@@ -11,6 +11,7 @@ import type {
 } from '@/lib/admin/domain/assessment-package-v2'
 
 export const EXECUTABLE_ASSESSMENT_PACKAGE_V2_RUNTIME_VERSION = 'package-contract-v2-runtime/1'
+const LARGE_ASSESSMENT_DIMENSION_WARNING_THRESHOLD = 80
 
 export type PackageCompileDiagnosticSeverity = 'error' | 'warning'
 
@@ -661,6 +662,17 @@ export function compileAssessmentPackageV2(
       pushDiagnostic(diagnostics, 'error', 'orphan_report_binding', `report.content.${binding.key}`, `Report binding "${binding.key}" does not map to any output rule.`)
     }
   })
+
+  const totalDimensionCount = input.dimensions.length + input.derivedDimensions.length
+  if (totalDimensionCount > LARGE_ASSESSMENT_DIMENSION_WARNING_THRESHOLD) {
+    pushDiagnostic(
+      diagnostics,
+      'warning',
+      'large_assessment_dimension_count',
+      'dimensions',
+      `Package declares ${totalDimensionCount} total dimensions/derived dimensions. Runtime execution remains available but should be monitored carefully at scale.`,
+    )
+  }
 
   const executableQuestions: Record<string, ExecutableQuestionNode> = {}
   input.questions.forEach((question, index) => {

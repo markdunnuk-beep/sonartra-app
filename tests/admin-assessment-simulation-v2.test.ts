@@ -109,7 +109,7 @@ test('integrity findings and technical diagnostics remain separated in materiali
   })
   const limitedMaterialized = materializeAssessmentOutputsV2(compiled.executablePackage!, limitedEvaluation)
   assert.ok(limitedMaterialized.reportDocument.sections.find((entry) => entry.key === 'limitations')?.blocks[0]?.items.some((item) => /Insufficient data/i.test(item)))
-  assert.ok(limitedMaterialized.technicalDiagnostics.some((entry) => entry.stage === 'evaluation' && /minimum answer threshold/i.test(entry.message)))
+  assert.ok(limitedMaterialized.technicalDiagnostics.some((entry) => entry.stage === 'evaluation' && entry.code === 'minimum_answer_threshold_not_met'))
   assert.equal(limitedMaterialized.integrityNotices.some((entry) => /minimum answer threshold/i.test(entry.message)), false)
 })
 
@@ -190,4 +190,38 @@ test('report document contract stays renderer-agnostic and avoids preview-specif
   assert.doesNotMatch(JSON.stringify(materialized.reportDocument), /admin preview/i)
   assert.doesNotMatch(JSON.stringify(materialized.reportDocument), /renderer readiness/i)
   assert.doesNotMatch(limitationText, /overclaim live readiness/i)
+})
+
+
+test('admin v2 simulation reuses the compiled runtime cache without caching simulation outputs themselves', () => {
+  const imported = importAssessmentPackagePayload(examplePackage)
+  const infoCalls: unknown[][] = []
+  const originalInfo = console.info
+  console.info = (...args: unknown[]) => {
+    infoCalls.push(args)
+  }
+
+  try {
+    const first = executeAdminAssessmentSimulationForPackage(imported.definitionPayload, imported.schemaVersion, {
+      answers: [],
+      responses: { q1: 'often', q2: 'rarely', q3: 'often', q4: 'often' },
+      locale: 'en-US',
+      source: 'manual_json',
+      scenarioKey: null,
+    })
+    const second = executeAdminAssessmentSimulationForPackage(imported.definitionPayload, imported.schemaVersion, {
+      answers: [],
+      responses: { q1: 'always', q2: 'rarely', q3: 'always', q4: 'often' },
+      locale: 'en-US',
+      source: 'manual_json',
+      scenarioKey: null,
+    })
+
+    assert.equal(first.ok, true)
+    assert.equal(second.ok, true)
+    assert.notDeepEqual(first.result?.debug.responsePayload, second.result?.debug.responsePayload)
+    assert.ok(infoCalls.some((call) => String(call[0]).includes('[admin-assessment-simulation-v2]') && JSON.stringify(call[1]).includes('"event":"hit"')))
+  } finally {
+    console.info = originalInfo
+  }
 })

@@ -1,4 +1,5 @@
 import type { ExecutableAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
+import { PACKAGE_CONTRACT_V2_MAX_REPORT_JSON_BYTES } from '@/lib/admin/domain/assessment-package-v2-performance'
 import type {
   AssessmentEvaluationDiagnostic,
   AssessmentEvaluationResultV2,
@@ -353,6 +354,19 @@ export function materializeAssessmentOutputsV2(
     subtitle: `Package ${evaluationResult.executionMetadata.packageSemver}`,
     sections: [overviewSection, dimensionSection, triggeredOutputSection, integritySection, limitationSection],
     warnings: integrityNotices,
+  }
+
+  const payloadBytes = Buffer.byteLength(JSON.stringify(document), 'utf8')
+  if (payloadBytes > PACKAGE_CONTRACT_V2_MAX_REPORT_JSON_BYTES) {
+    pushTechnicalDiagnostic(
+      technicalDiagnostics,
+      'warning',
+      'large_report_payload',
+      'reportDocument',
+      `Materialized report payload is ${payloadBytes} bytes and should be monitored for renderer/storage pressure.`,
+      'materialization',
+      executablePackage.metadata.assessmentKey,
+    )
   }
 
   return {

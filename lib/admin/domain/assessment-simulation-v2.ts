@@ -1,7 +1,8 @@
 import type { AdminAssessmentPackageReadinessFlags } from '@/lib/admin/server/assessment-package-import'
 import type { AdminAssessmentSimulationInputMode, AdminAssessmentSimulationIssue, AdminAssessmentSimulationScenarioKey } from '@/lib/admin/domain/assessment-simulation'
-import { compileAssessmentPackageV2, type ExecutableAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
+import type { ExecutableAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import { evaluateAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
+import { getOrCompileRuntime } from '@/lib/admin/domain/assessment-package-v2-performance'
 import {
   materializeAssessmentOutputsV2,
   type MaterializationTechnicalDiagnosticV2,
@@ -269,7 +270,9 @@ export function executeAdminAssessmentSimulationV2(
     pkgErrors.push(toIssue('package', 'Package Contract v2 simulation is unavailable because the stored package is missing or invalid.'))
   }
 
-  const compileResult = pkg ? compileAssessmentPackageV2(pkg) : null
+  const compileResult = pkg ? getOrCompileRuntime(pkg, {
+    onDiagnostic: (diagnostic) => console.info('[admin-assessment-simulation-v2]', diagnostic),
+  }) : null
   if (compileResult && !compileResult.ok) {
     for (const diagnostic of compileResult.diagnostics.filter((entry) => entry.severity === 'error')) {
       compileErrors.push(toIssue(diagnostic.path, diagnostic.message))
