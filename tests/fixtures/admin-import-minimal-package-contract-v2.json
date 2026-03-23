@@ -1,0 +1,77 @@
+{
+  "packageVersion": "2",
+  "schemaVersion": "sonartra-assessment-package/v2",
+  "metadata": {
+    "assessmentKey": "admin-import-minimal",
+    "assessmentName": "Admin Import Minimal",
+    "description": "Minimal Package Contract v2 fixture for admin import testing.",
+    "locales": {
+      "defaultLocale": "en-US",
+      "supportedLocales": ["en-US"]
+    },
+    "compatibility": {
+      "packageSemver": "0.0.1",
+      "contractVersion": "2"
+    }
+  },
+  "responseModels": {
+    "optionSets": [],
+    "models": [
+      {
+        "id": "three-point",
+        "type": "single_select",
+        "options": [
+          { "id": "low", "label": "Low", "value": 1 },
+          { "id": "mid", "label": "Mid", "value": 2 },
+          { "id": "high", "label": "High", "value": 3 }
+        ]
+      }
+    ]
+  },
+  "questions": [
+    {
+      "id": "q1",
+      "code": "AIM-01",
+      "prompt": "I can complete this test item.",
+      "responseModelId": "three-point",
+      "sectionIds": ["core"],
+      "scoring": [
+        { "dimensionId": "readiness" }
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "core",
+      "title": "Core",
+      "order": 1
+    }
+  ],
+  "dimensions": [
+    {
+      "id": "readiness",
+      "label": "Readiness",
+      "scoringMethod": "average",
+      "inputQuestionIds": ["q1"],
+      "minimumAnswered": 1,
+      "missingDataPolicy": "minimum_answer_threshold"
+    }
+  ],
+  "derivedDimensions": [],
+  "scoring": {
+    "transforms": [],
+    "rules": []
+  },
+  "normalization": {
+    "rules": []
+  },
+  "integrity": {
+    "rules": []
+  },
+  "outputs": {
+    "rules": []
+  },
+  "report": {
+    "content": []
+  }
+}
