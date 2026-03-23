@@ -123,7 +123,7 @@ test('saveV2AssessmentResponse validates and persists live v2 responses safely',
   const module = await import('../lib/server/live-assessment-v2')
 
   const updates: unknown[][] = []
-  const withTransactionFn = async <T>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+  const withTransactionFn = (async <T>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
     query: async (sql: string, params: unknown[] = []) => {
       if (/FROM assessments a\s+INNER JOIN assessment_versions av/i.test(sql)) {
         return {
@@ -149,7 +149,7 @@ test('saveV2AssessmentResponse validates and persists live v2 responses safely',
       }
       throw new Error(`Unexpected query: ${sql}`)
     },
-  } as never)
+  } as never)) as never
 
   const saved = await module.saveV2AssessmentResponse({
     assessmentId: 'assessment-v2',
@@ -239,6 +239,11 @@ test('getAssessmentResultReadModel returns stable v2 live result outputs', async
   if (result.body.result.availability !== 'available' || result.body.result.status !== 'complete') return
   assert.equal(result.body.result.contractVersion, 'package_contract_v2')
   assert.ok((result.body.result.liveRuntime?.webSummaryOutputs.length ?? 0) > 0)
+  assert.equal('evaluation' in (result.body.result.liveRuntime ?? {}), false)
+  assert.equal('technicalDiagnostics' in (result.body.result.liveRuntime ?? {}), false)
+  assert.equal('evaluation' in ((result.body.result.snapshot as Record<string, unknown>) ?? {}), false)
+  assert.equal('materializedOutputs' in ((result.body.result.snapshot as Record<string, unknown>) ?? {}), false)
+  assert.equal(result.body.result.responseQuality, null)
 })
 
 test('getAdminAssessmentVersionReadiness keeps publish gating truthful for runnable v2 packages', async () => {
@@ -265,4 +270,69 @@ test('getAdminAssessmentVersionReadiness keeps publish gating truthful for runna
 
   assert.notEqual(readiness.status, 'not_ready')
   assert.equal(readiness.checks.find((check) => check.key === 'runtime_execution_path')?.status, 'pass')
+})
+
+test('evaluateCompletedV2Assessment treats duplicate submits during scoring handoff as pending instead of regenerating results', async () => {
+  const pkg = await loadExamplePackage()
+  let persistCalls = 0
+  const { evaluateCompletedV2Assessment } = await import('../lib/server/live-assessment-v2')
+
+  const result = await evaluateCompletedV2Assessment({
+    assessmentId: 'assessment-v2',
+    ownerUserId: 'user-1',
+    persistResult: async () => {
+      persistCalls += 1
+      return { assessmentResultId: 'result-v2' }
+    },
+  }, {
+    withTransactionFn: (async <T>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        if (/FROM assessments a\s+INNER JOIN assessment_versions av/i.test(sql)) {
+          return {
+            rows: [{
+              assessment_id: 'assessment-v2',
+              assessment_version_id: 'version-v2',
+              assessment_version_key: 'signals-v2-live',
+              assessment_version_name: 'Signals v2 Live',
+              package_schema_version: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+              package_status: 'valid',
+              definition_payload: pkg,
+              assessment_status: 'completed',
+              total_questions: 4,
+              metadata_json: {
+                liveRuntimeV2: {
+                  responses: { q1: 'always', q2: 'rarely', q3: 'always', q4: 'often' },
+                  updatedAtByQuestionId: {
+                    q1: '2026-03-23T12:00:00.000Z',
+                    q2: '2026-03-23T12:00:01.000Z',
+                    q3: '2026-03-23T12:00:02.000Z',
+                    q4: '2026-03-23T12:00:03.000Z',
+                  },
+                },
+              },
+              completed_at: '2026-03-23T12:05:00.000Z',
+              scoring_status: 'pending',
+            }],
+          }
+        }
+
+        if (/UPDATE assessments/i.test(sql)) {
+          throw new Error(`Duplicate submit should not update assessments during pending handoff: ${sql}`)
+        }
+
+        throw new Error(`Unexpected query: ${sql} :: ${JSON.stringify(params)}`)
+      },
+    } as never)) as never,
+    getLatestResultSnapshot: (async () => null) as never,
+  })
+
+  assert.equal(result.httpStatus, 200)
+  assert.deepEqual(result.body, {
+    ok: true,
+    assessmentId: 'assessment-v2',
+    assessmentStatus: 'completed',
+    resultStatus: 'pending',
+    resultId: null,
+  })
+  assert.equal(persistCalls, 0)
 })

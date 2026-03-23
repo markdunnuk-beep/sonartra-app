@@ -164,8 +164,6 @@ export interface PersistedSuccessfulAssessmentResult {
   liveRuntime?: {
     webSummaryOutputs: unknown[];
     integrityNotices: unknown[];
-    technicalDiagnostics: unknown[];
-    evaluation: Record<string, unknown> | null;
     packageMetadata: Record<string, unknown> | null;
   };
 }

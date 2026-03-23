@@ -89,18 +89,28 @@ function parseV2LiveResult(payload: Record<string, unknown> | null) {
     return null
   }
 
+  const webSummaryOutputs = Array.isArray(payload.materializedOutputs && isRecord(payload.materializedOutputs) ? payload.materializedOutputs.webSummaryOutputs : null)
+    ? (payload.materializedOutputs as { webSummaryOutputs: unknown[] }).webSummaryOutputs
+    : []
+  const integrityNotices = Array.isArray(payload.materializedOutputs && isRecord(payload.materializedOutputs) ? payload.materializedOutputs.integrityNotices : null)
+    ? (payload.materializedOutputs as { integrityNotices: unknown[] }).integrityNotices
+    : []
+  const packageMetadata = isRecord(payload.packageMetadata) ? payload.packageMetadata : null
+
   return {
+    snapshot: {
+      contractVersion: 'package_contract_v2',
+      packageMetadata,
+      webSummaryOutputs,
+      integrityNotices,
+    },
     webSummaryOutputs: Array.isArray(payload.materializedOutputs && isRecord(payload.materializedOutputs) ? payload.materializedOutputs.webSummaryOutputs : null)
       ? (payload.materializedOutputs as { webSummaryOutputs: unknown[] }).webSummaryOutputs
       : [],
     integrityNotices: Array.isArray(payload.materializedOutputs && isRecord(payload.materializedOutputs) ? payload.materializedOutputs.integrityNotices : null)
       ? (payload.materializedOutputs as { integrityNotices: unknown[] }).integrityNotices
       : [],
-    technicalDiagnostics: Array.isArray(payload.materializedOutputs && isRecord(payload.materializedOutputs) ? payload.materializedOutputs.technicalDiagnostics : null)
-      ? (payload.materializedOutputs as { technicalDiagnostics: unknown[] }).technicalDiagnostics
-      : [],
-    evaluation: isRecord(payload.evaluation) ? payload.evaluation : null,
-    packageMetadata: isRecord(payload.packageMetadata) ? payload.packageMetadata : null,
+    packageMetadata,
   }
 }
 
@@ -200,8 +210,8 @@ export async function getAssessmentResultReadModel(
           scoredAt: result.scored_at,
           createdAt: result.created_at,
           updatedAt: result.updated_at,
-          snapshot: result.result_payload,
-          responseQuality: result.response_quality_payload,
+          snapshot: v2LiveResult.snapshot,
+          responseQuality: null,
           signals: [],
           contractVersion: 'package_contract_v2',
           liveRuntime: v2LiveResult,

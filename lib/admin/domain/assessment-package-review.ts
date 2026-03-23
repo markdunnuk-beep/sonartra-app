@@ -5,8 +5,8 @@ import {
   type SonartraAssessmentPackageQuestion,
   type SonartraAssessmentPackageV1,
 } from '@/lib/admin/domain/assessment-package'
-import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
+import { evaluatePackageV2LiveRuntimeSupport } from '@/lib/package-contract-v2-live-runtime'
 import type {
   AdminAssessmentReleaseCheck,
   AdminAssessmentReleaseCheckStatus,
@@ -349,7 +349,7 @@ export function getAdminAssessmentVersionReadiness(
   const packageInfo = normalizePackageInfoRuntime(version.packageInfo)
   const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
   const pkgV2 = packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 ? parseStoredValidatedAssessmentPackageV2(version.storedDefinitionPayload ?? version.normalizedPackage) : null
-  const v2Compiled = pkgV2 ? compileAssessmentPackageV2(pkgV2) : null
+  const v2RuntimeSupport = evaluatePackageV2LiveRuntimeSupport(pkgV2)
   const checks: AdminAssessmentReadinessChecklistItem[] = []
   const blockingIssues: string[] = []
   const warnings = [...getPackageWarningMessages(packageInfo)]
@@ -388,18 +388,18 @@ export function getAdminAssessmentVersionReadiness(
     structurallyValid
       ? 'The latest package validated and produced a normalized executable payload.'
       : isImportedV2Package
-        ? (v2Compiled?.ok && v2Compiled.executablePackage ? 'Package Contract v2 validated and compiled into an executable live runtime package.' : 'Package Contract v2 imported successfully, but the executable live runtime package could not be compiled.')
+        ? (v2RuntimeSupport.supported ? 'Package Contract v2 validated into a live runtime-supported package.' : (v2RuntimeSupport.issues[0]?.message ?? 'Package Contract v2 imported successfully, but the executable live runtime package could not be prepared.'))
         : 'The latest package is missing, invalid, or has no normalized payload.',
   )
 
   addCheck(
     'runtime_execution_path',
     'Current runtime can execute this contract version',
-    isImportedV2Package && !(v2Compiled?.ok && v2Compiled.executablePackage) ? 'fail' : 'pass',
+    isImportedV2Package && !v2RuntimeSupport.supported ? 'fail' : 'pass',
     isImportedV2Package
-      ? (v2Compiled?.ok && v2Compiled.executablePackage
+      ? (v2RuntimeSupport.supported
           ? 'Current runtime execution path is compatible with Package Contract v2 for live execution.'
-          : 'Package Contract v2 is importable and structurally valid, but publish stays blocked until the live runtime can compile and execute it.')
+          : `Package Contract v2 is importable and structurally valid, but publish stays blocked until the live runtime supports the full execution path. ${v2RuntimeSupport.issues[0]?.message ?? ''}`.trim())
       : 'Current runtime execution path is compatible with the stored package contract.',
   )
 
@@ -407,7 +407,7 @@ export function getAdminAssessmentVersionReadiness(
     const status: AdminAssessmentReleaseReadinessStatus = blockingIssues.length > 0 ? 'not_ready' : warnings.length > 0 ? 'ready_with_warnings' : 'ready'
     const verdict: AdminAssessmentPublishReadinessVerdict = status === 'not_ready' ? 'blocked' : status
     const summaryText = isImportedV2Package
-      ? (v2Compiled?.ok && v2Compiled.executablePackage
+      ? (v2RuntimeSupport.supported
           ? 'Package Contract v2 is ready for publish review through the live execution path.'
           : 'Publish is blocked because this version uses Package Contract v2 and the live execution path is not ready for it yet.')
       : status === 'not_ready'
