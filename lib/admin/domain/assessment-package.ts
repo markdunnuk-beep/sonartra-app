@@ -4,6 +4,7 @@ export const SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1 = 'sonartra-assessment-packag
 
 export type AssessmentPackageImportSourceType = 'manual_import'
 export type AssessmentPackageStatus = 'missing' | 'valid' | 'valid_with_warnings' | 'invalid'
+export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contract_v2' | 'unknown'
 
 export interface SonartraAssessmentPackageMeta {
   schemaVersion: string
@@ -96,6 +97,14 @@ export interface SonartraAssessmentPackageSummary {
   normalizationRuleCount: number
   outputRuleCount: number
   localeCount: number
+  packageName?: string | null
+  versionLabel?: string | null
+  assessmentKey?: string | null
+  sectionCount?: number
+  derivedDimensionCount?: number
+  responseModelCount?: number
+  transformCount?: number
+  integrityRuleCount?: number
 }
 
 export interface SonartraAssessmentPackageValidationIssue {
@@ -115,6 +124,7 @@ export interface SonartraAssessmentPackageValidationResult {
 
 export interface AdminAssessmentVersionPackageInfo {
   status: AssessmentPackageStatus
+  detectedVersion?: AdminAssessmentPackageDetectedVersion | null
   schemaVersion: string | null
   sourceType: AssessmentPackageImportSourceType | null
   importedAt: string | null

@@ -1,4 +1,4 @@
-import type { AdminAssessmentVersionPackageInfo, SonartraAssessmentPackageV1 } from '@/lib/admin/domain/assessment-package'
+import type { AdminAssessmentPackageDetectedVersion, AdminAssessmentVersionPackageInfo, SonartraAssessmentPackageV1, SonartraAssessmentPackageSummary } from '@/lib/admin/domain/assessment-package'
 
 export type AdminAssessmentLifecycleStatus = 'draft' | 'published' | 'archived'
 export type AdminAssessmentVersionSourceType = 'manual' | 'import' | 'system'
@@ -242,6 +242,18 @@ export interface AdminAssessmentPackageImportState {
     packageFile?: string
   }
   validationResult?: {
+    success?: boolean
+    detectedVersion?: AdminAssessmentPackageDetectedVersion | null
+    schemaVersion?: string | null
+    packageName?: string | null
+    versionLabel?: string | null
+    summary?: SonartraAssessmentPackageSummary | null
+    readiness?: {
+      structurallyValid: boolean
+      importable: boolean
+      runtimeExecutable: boolean
+      publishable: boolean
+    }
     errors: Array<{ path: string; message: string }>
     warnings: Array<{ path: string; message: string }>
   }
@@ -275,6 +287,13 @@ export function normalizeAdminAssessmentPackageImportState(
   const packageFileError = normaliseSingleValue(state?.fieldErrors?.packageFile)
   const validationErrors = normaliseAssessmentIssueCollection(state?.validationResult?.errors)
   const validationWarnings = normaliseAssessmentIssueCollection(state?.validationResult?.warnings)
+  const summary = state?.validationResult?.summary ?? null
+  const readiness = state?.validationResult?.readiness
+  const detectedVersion = state?.validationResult?.detectedVersion === 'legacy_v1'
+    || state?.validationResult?.detectedVersion === 'package_contract_v2'
+    || state?.validationResult?.detectedVersion === 'unknown'
+    ? state.validationResult.detectedVersion
+    : null
 
   return {
     status: normalizedStatus,
@@ -286,7 +305,37 @@ export function normalizeAdminAssessmentPackageImportState(
         }
       : undefined,
     validationResult: validationErrors.length > 0 || validationWarnings.length > 0
-      ? { errors: validationErrors, warnings: validationWarnings }
+      || detectedVersion
+      || typeof state?.validationResult?.success === 'boolean'
+      || typeof state?.validationResult?.schemaVersion === 'string'
+      || typeof state?.validationResult?.packageName === 'string'
+      || typeof state?.validationResult?.versionLabel === 'string'
+      || Boolean(summary)
+      || Boolean(readiness)
+      ? {
+          success: typeof state?.validationResult?.success === 'boolean' ? state.validationResult.success : undefined,
+          detectedVersion,
+          schemaVersion: typeof state?.validationResult?.schemaVersion === 'string' && state.validationResult.schemaVersion.trim()
+            ? state.validationResult.schemaVersion.trim()
+            : null,
+          packageName: typeof state?.validationResult?.packageName === 'string' && state.validationResult.packageName.trim()
+            ? state.validationResult.packageName.trim()
+            : null,
+          versionLabel: typeof state?.validationResult?.versionLabel === 'string' && state.validationResult.versionLabel.trim()
+            ? state.validationResult.versionLabel.trim()
+            : null,
+          summary,
+          readiness: readiness && typeof readiness === 'object'
+            ? {
+                structurallyValid: Boolean(readiness.structurallyValid),
+                importable: Boolean(readiness.importable),
+                runtimeExecutable: Boolean(readiness.runtimeExecutable),
+                publishable: Boolean(readiness.publishable),
+              }
+            : undefined,
+          errors: validationErrors,
+          warnings: validationWarnings,
+        }
       : undefined,
   }
 }

@@ -64,6 +64,11 @@ function matchRuntimeSchemaQuery(sql: string, params: unknown[] = []) {
     return { rows: [{ table_exists: true }] }
   }
 
+  if (/from information_schema\.tables/i.test(sql) && /table_name = any\(\$1::text\[\]\)/i.test(sql)) {
+    const tableNames = Array.isArray(params[0]) ? params[0].map((value) => String(value)) : []
+    return { rows: tableNames.map((table_name) => ({ table_name })) }
+  }
+
   if (/from information_schema\.columns/i.test(sql) && /table_name = any\(\$1::text\[\]\)/i.test(sql)) {
     const tableNames = Array.isArray(params[0]) ? params[0].map((value) => String(value)) : []
     return {
