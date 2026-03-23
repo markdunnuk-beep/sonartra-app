@@ -24,6 +24,7 @@ interface AuthDependencies {
 interface UsersTableCapabilities {
   hasUsersTable: boolean
   usersSchema: string | null
+  qualifiedUsersTableName: string
   columns: Set<string>
 }
 
@@ -57,13 +58,29 @@ const defaultDependencies: AuthDependencies = {
   withTransaction,
 }
 
+function quoteIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll('"', '""')}"`
+}
+
+function qualifyTableName(schema: string, table: string): string {
+  return `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`
+}
+
 async function getUsersTableCapabilities(deps: Pick<AuthDependencies, 'queryDb'>): Promise<UsersTableCapabilities> {
   const tableResult = await deps.queryDb<{ users_schema: string | null }>(
-    `select (
-       select n.nspname
-       from pg_class c
-       inner join pg_namespace n on n.oid = c.relnamespace
-       where c.oid = to_regclass('users')
+    `select coalesce(
+       (
+         select n.nspname
+         from pg_class c
+         inner join pg_namespace n on n.oid = c.relnamespace
+         where c.oid = to_regclass('users')
+       ),
+       (
+         select n.nspname
+         from pg_class c
+         inner join pg_namespace n on n.oid = c.relnamespace
+         where c.oid = to_regclass('public.users')
+       )
      ) as users_schema`,
   )
 
@@ -72,6 +89,7 @@ async function getUsersTableCapabilities(deps: Pick<AuthDependencies, 'queryDb'>
     return {
       hasUsersTable: false,
       usersSchema: null,
+      qualifiedUsersTableName: 'users',
       columns: new Set<string>(),
     }
   }
@@ -87,6 +105,7 @@ async function getUsersTableCapabilities(deps: Pick<AuthDependencies, 'queryDb'>
   return {
     hasUsersTable: true,
     usersSchema,
+    qualifiedUsersTableName: qualifyTableName(usersSchema, 'users'),
     columns: new Set((columnResult.rows ?? []).flatMap((row) => row.column_name ? [row.column_name] : [])),
   }
 }
@@ -95,7 +114,7 @@ function buildUserSelectSql(usersTableCapabilities: UsersTableCapabilities, wher
   const hasExternalAuthId = usersTableCapabilities.columns.has('external_auth_id')
 
   return `SELECT id, ${hasExternalAuthId ? 'external_auth_id' : 'NULL::text AS external_auth_id'}, email
-       FROM users
+       FROM ${usersTableCapabilities.qualifiedUsersTableName}
        WHERE ${whereClause}
        LIMIT 1`
 }
@@ -112,7 +131,7 @@ function buildUserUpsertSql(
   const columns: string[] = []
   const params: unknown[] = []
   const placeholders: string[] = []
-  const updateAssignments: string[] = ['updated_at = NOW()']
+  const updateAssignments: string[] = []
 
   const pushColumnValue = (columnName: string, value: unknown, updateClause?: string) => {
     columns.push(columnName)
@@ -124,7 +143,7 @@ function buildUserUpsertSql(
     }
   }
 
-  pushColumnValue('email', values.emailAddress)
+  pushColumnValue('email', values.emailAddress, 'email = $value')
 
   if (usersTableCapabilities.columns.has('external_auth_id')) {
     pushColumnValue('external_auth_id', values.clerkUserId, 'external_auth_id = $value')
@@ -142,8 +161,12 @@ function buildUserUpsertSql(
     pushColumnValue('account_type', 'individual')
   }
 
+  if (usersTableCapabilities.columns.has('updated_at')) {
+    updateAssignments.push('updated_at = NOW()')
+  }
+
   return {
-    sql: `INSERT INTO users (${columns.join(', ')})
+    sql: `INSERT INTO ${usersTableCapabilities.qualifiedUsersTableName} (${columns.join(', ')})
          VALUES (${placeholders.join(', ')})
          ON CONFLICT (email)
          DO UPDATE SET
