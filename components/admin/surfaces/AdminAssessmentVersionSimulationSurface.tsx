@@ -76,7 +76,7 @@ export function AdminAssessmentVersionSimulationSurface({
         <div className="rounded-[1.25rem] border border-white/[0.08] bg-panel/60 p-4">
           <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Simulation scope</p>
           <p className="mt-3 text-lg font-semibold text-textPrimary">{version.normalizedPackage ? `${version.normalizedPackage.questions.length} questions` : 'No package'}</p>
-          <p className="mt-3 text-sm leading-6 text-textSecondary">{version.normalizedPackage ? `${version.normalizedPackage.dimensions.length} dimensions · ${version.normalizedPackage.outputs?.reportRules.length ?? 0} output rules · locale ${version.normalizedPackage.meta.defaultLocale}.` : 'Questions, dimensions, and output rules appear once the package validates.'}</p>
+          <p className="mt-3 text-sm leading-6 text-textSecondary">{version.normalizedPackage ? `${version.normalizedPackage.dimensions.length} dimensions · ${((version.normalizedPackage as { outputs?: { reportRules?: unknown[]; rules?: unknown[] } } | null)?.outputs?.reportRules?.length ?? (version.normalizedPackage as { outputs?: { reportRules?: unknown[]; rules?: unknown[] } } | null)?.outputs?.rules?.length ?? 0)} output rules · locale ${version.normalizedPackage.meta.defaultLocale}.` : 'Questions, dimensions, and output rules appear once the package validates.'}</p>
         </div>
       </div>
 

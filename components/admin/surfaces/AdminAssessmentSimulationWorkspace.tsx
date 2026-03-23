@@ -26,6 +26,27 @@ import {
   type AdminAssessmentSimulationInputMode,
   type AdminAssessmentSimulationRequest,
 } from '@/lib/admin/domain/assessment-simulation'
+import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 } from '@/lib/admin/domain/assessment-package-v2'
+
+
+function getPackageQuestionCount(version: AdminAssessmentVersionRecord) {
+  const pkg = version.normalizedPackage as unknown as { questions?: unknown[] } | null
+  return Array.isArray(pkg?.questions) ? pkg.questions.length : 0
+}
+
+function getPackageOutputRuleCount(version: AdminAssessmentVersionRecord) {
+  const pkg = version.normalizedPackage as unknown as { outputs?: { reportRules?: unknown[]; rules?: unknown[] }; questions?: unknown[]; meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null
+  return Array.isArray(pkg?.outputs?.reportRules)
+    ? pkg.outputs.reportRules.length
+    : Array.isArray(pkg?.outputs?.rules)
+      ? pkg.outputs.rules.length
+      : 0
+}
+
+function getPackageDefaultLocale(version: AdminAssessmentVersionRecord) {
+  const pkg = version.normalizedPackage as unknown as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null
+  return pkg?.meta?.defaultLocale ?? pkg?.metadata?.locales?.defaultLocale ?? 'n/a'
+}
 
 type FormMode = AdminAssessmentSimulationInputMode
 
@@ -87,7 +108,7 @@ function buildRequestFromAnswers(
       questionId: question.id,
       optionId: answers[question.id] ?? '',
     })).filter((answer) => answer.optionId) ?? [],
-    locale: version.normalizedPackage?.meta.defaultLocale ?? null,
+    locale: (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.meta?.defaultLocale ?? (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.metadata?.locales?.defaultLocale ?? null,
     source,
     scenarioKey,
   }
@@ -128,7 +149,8 @@ export function AdminAssessmentSimulationWorkspace({
   const scenarioOptions = getAdminAssessmentSimulationScenarioOptions(version.normalizedPackage)
   const initialScenario = scenarioOptions.find((scenario) => scenario.key === 'sensible_defaults')?.request
   const initialPayload = initialRequestPayload ?? (initialScenario ? buildAdminAssessmentSimulationPayloadText(initialScenario) : '{\n  "answers": []\n}')
-  const [mode, setMode] = React.useState<FormMode>('generated_form')
+  const isV2Package = version.packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
+  const [mode, setMode] = React.useState<FormMode>(isV2Package ? 'manual_json' : 'generated_form')
   const [answers, setAnswers] = React.useState<Record<string, string>>(() => Object.fromEntries(initialScenario?.answers.map((answer) => [answer.questionId, answer.optionId]) ?? []))
   const [payloadText, setPayloadText] = React.useState(initialPayload)
 
@@ -137,13 +159,13 @@ export function AdminAssessmentSimulationWorkspace({
   }, [initialPayload])
 
   React.useEffect(() => {
-    if (mode !== 'generated_form') {
+    if (mode !== 'generated_form' || isV2Package) {
       return
     }
 
     const generated = buildRequestFromAnswers(answers, version, 'generated_form')
     setPayloadText(buildAdminAssessmentSimulationPayloadText(generated))
-  }, [answers, mode, version])
+  }, [answers, isV2Package, mode, version])
 
   const applyScenario = React.useCallback((key: NonNullable<AdminAssessmentSimulationRequest['scenarioKey']>) => {
     const scenario = scenarioOptions.find((entry) => entry.key === key)?.request
@@ -158,8 +180,8 @@ export function AdminAssessmentSimulationWorkspace({
 
   const clearAnswers = React.useCallback(() => {
     setAnswers({})
-    setPayloadText(buildAdminAssessmentSimulationPayloadText({ answers: [], locale: version.normalizedPackage?.meta.defaultLocale ?? null, source: 'manual_json', scenarioKey: null }))
-  }, [version.normalizedPackage])
+    setPayloadText(buildAdminAssessmentSimulationPayloadText({ answers: [], responses: {}, locale: getPackageDefaultLocale(version), source: 'manual_json', scenarioKey: null }))
+  }, [version])
 
   if (!eligibility.canRunSimulation || !version.normalizedPackage) {
     return (
@@ -199,7 +221,7 @@ export function AdminAssessmentSimulationWorkspace({
               </button>
             </div>
 
-            {mode === 'generated_form' ? (
+            {mode === 'generated_form' && !isV2Package ? (
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => applyScenario('sensible_defaults')} className="rounded-xl border border-white/[0.08] bg-panel/50 px-3 py-2 text-xs uppercase tracking-[0.14em] text-textPrimary">Load defaults</button>
@@ -210,8 +232,9 @@ export function AdminAssessmentSimulationWorkspace({
                 </div>
 
                 <div className="space-y-3">
-                  {version.normalizedPackage.questions.map((question) => {
-                    const prompt = version.normalizedPackage?.language.locales.find((locale) => locale.locale === version.normalizedPackage?.meta.defaultLocale)?.text[question.promptKey] ?? question.promptKey
+                  {(version.normalizedPackage as { questions: Array<{ id: string; promptKey: string; reverseScored: boolean; options: Array<{ id: string; labelKey: string }> }>; language: { locales: Array<{ locale: string; text: Record<string, string> }> }; meta: { defaultLocale: string } }).questions.map((question) => {
+                    const legacyPackage = version.normalizedPackage as { language: { locales: Array<{ locale: string; text: Record<string, string> }> }; meta: { defaultLocale: string } }
+                    const prompt = legacyPackage.language.locales.find((locale) => locale.locale === legacyPackage.meta.defaultLocale)?.text[question.promptKey] ?? question.promptKey
 
                     return (
                       <label key={question.id} className="block rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
@@ -229,7 +252,7 @@ export function AdminAssessmentSimulationWorkspace({
                         >
                           <option value="">Select an option</option>
                           {question.options.map((option) => {
-                            const optionLabel = version.normalizedPackage?.language.locales.find((locale) => locale.locale === version.normalizedPackage?.meta.defaultLocale)?.text[option.labelKey] ?? option.labelKey
+                            const optionLabel = legacyPackage.language.locales.find((locale) => locale.locale === legacyPackage.meta.defaultLocale)?.text[option.labelKey] ?? option.labelKey
                             return <option key={option.id} value={option.id}>{optionLabel}</option>
                           })}
                         </select>
@@ -247,7 +270,7 @@ export function AdminAssessmentSimulationWorkspace({
                   rows={18}
                   className="min-h-[28rem] w-full rounded-2xl border border-border/90 bg-panel/70 px-4 py-3 text-sm leading-6 text-textPrimary outline-none ring-accent/40 focus:border-accent/50 focus:ring"
                 />
-                <p className="text-xs leading-5 text-textSecondary">Accepted shapes: {`{"answers":[{"questionId":"q1","optionId":"q1.a"}]}`} or a compact map such as {`{"q1":"q1.a"}`}. </p>
+                <p className="text-xs leading-5 text-textSecondary">Accepted shapes: {`{"answers":[{"questionId":"q1","optionId":"q1.a"}]}`} or {`{"responses":{"q1":"often"}}`} or a compact question-value map such as {`{"q1":"often"}`}. </p>
               </label>
             )}
 
@@ -279,9 +302,9 @@ export function AdminAssessmentSimulationWorkspace({
               items={[
                 { label: 'Simulation eligibility', value: eligibility.statusLabel },
                 { label: 'Package state', value: version.packageInfo.status },
-                { label: 'Questions in scope', value: String(version.normalizedPackage.questions.length) },
-                { label: 'Output rules in scope', value: String(version.normalizedPackage.outputs?.reportRules.length ?? 0) },
-                { label: 'Default locale', value: version.normalizedPackage.meta.defaultLocale },
+                { label: 'Questions in scope', value: String(getPackageQuestionCount(version)) },
+                { label: 'Output rules in scope', value: String(getPackageOutputRuleCount(version)) },
+                { label: 'Default locale', value: getPackageDefaultLocale(version) },
                 { label: 'Lifecycle', value: version.lifecycleStatus },
               ]}
             />
@@ -292,6 +315,7 @@ export function AdminAssessmentSimulationWorkspace({
                 <li>• {eligibility.summary}</li>
                 <li>• {getAdminAssessmentSimulationPackageStatusSummary(version.packageInfo.status)}</li>
                 <li>• Simulation does not persist respondent sessions or render final reports.</li>
+                <li>• Admin simulation support does not imply live runtime or publish readiness for Package Contract v2.</li>
                 <li>• Audit captures explicit run attempts only, never passive form edits or answer payload contents.</li>
               </ul>
             </div>

@@ -553,6 +553,23 @@ function validatePredicateExpression(
   return null
 }
 
+export function parseStoredValidatedAssessmentPackageV2(input: unknown): SonartraAssessmentPackageV2ValidatedImport | null {
+  if (!input) {
+    return null
+  }
+
+  const parsed = typeof input === 'string' ? (() => {
+    try {
+      return JSON.parse(input)
+    } catch {
+      return null
+    }
+  })() : input
+
+  const validation = validateSonartraAssessmentPackageV2(parsed)
+  return validation.ok ? validation.normalizedPackage : null
+}
+
 export function validateSonartraAssessmentPackageV2(input: unknown): SonartraAssessmentPackageV2ValidationResult {
   const errors: SonartraAssessmentPackageV2ValidationIssue[] = []
   const warnings: SonartraAssessmentPackageV2ValidationIssue[] = []
