@@ -8,7 +8,7 @@ import {
   executeAdminAssessmentSimulation,
   getAdminAssessmentSimulationWorkspaceStatus,
   parseAdminAssessmentSimulationPayload,
-} from '../lib/admin/domain/assessment-simulation'
+} from '../lib/admin/domain/assessment-simulation-server'
 
 const basePackage: SonartraAssessmentPackageV1 = {
   meta: {

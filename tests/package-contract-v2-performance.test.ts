@@ -8,7 +8,7 @@ import {
   compiledRuntimeCache,
   createPackageRuntimeFingerprint,
   getOrCompileRuntime,
-} from '../lib/admin/domain/assessment-package-v2-performance'
+} from '../lib/admin/domain/assessment-package-v2-performance-server'
 import { compileAssessmentPackageV2 } from '../lib/admin/domain/assessment-package-v2-compiler'
 
 function getValidatedFixture() {

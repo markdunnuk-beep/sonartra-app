@@ -10,7 +10,7 @@ import {
   validateSonartraAssessmentPackageV2,
 } from '../lib/admin/domain/assessment-package-v2'
 import { getAdminAssessmentVersionReadiness } from '../lib/admin/domain/assessment-package-review'
-import { PACKAGE_CONTRACT_V2_RESULT_ARTIFACT_VERSION, getOrCompileRuntime } from '../lib/admin/domain/assessment-package-v2-performance'
+import { PACKAGE_CONTRACT_V2_RESULT_ARTIFACT_VERSION, getOrCompileRuntime } from '../lib/admin/domain/assessment-package-v2-performance-server'
 import { getQuestionsByAssessmentIdWithDependencies } from '../lib/question-bank'
 import { getAssessmentResultReadModel } from '../lib/server/assessment-result-read'
 import { resolveLiveSignalsPublishedVersionState } from '../lib/server/live-signals-runtime'

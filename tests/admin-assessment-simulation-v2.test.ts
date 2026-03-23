@@ -12,7 +12,7 @@ import {
   executeAdminAssessmentSimulationForPackage,
   getAdminAssessmentSimulationWorkspaceStatus,
   parseAdminAssessmentSimulationPayloadForPackage,
-} from '../lib/admin/domain/assessment-simulation'
+} from '../lib/admin/domain/assessment-simulation-server'
 
 function getValidatedFixture() {
   const validation = validateSonartraAssessmentPackageV2(examplePackage)
