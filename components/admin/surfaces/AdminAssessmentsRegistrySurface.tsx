@@ -121,10 +121,10 @@ function RegistryRows({ data }: { data: AdminAssessmentRegistryData }) {
           ? data.notice.detail
           : hasFilters
             ? 'Adjust the query, lifecycle, or category filters to widen the registry slice.'
-            : 'Create the first stable assessment record so future import packages have a governed destination.'}
+            : 'Import the first package to create a governed assessment automatically, or use the manual container fallback only when a package is not ready yet.'}
         action={data.notice
           ? <Button href="/admin/assessments" variant="secondary">Retry registry load</Button>
-          : <Button href="/admin/assessments/new" variant="secondary">Create assessment record</Button>}
+          : <Button href="/admin/assessments/import" variant="secondary">Import assessment package</Button>}
       />
     )
   }
@@ -156,7 +156,7 @@ function RegistryRows({ data }: { data: AdminAssessmentRegistryData }) {
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium text-textPrimary">{getAdminAssessmentCategoryLabel(entry.category)}</p>
-              <p className="text-xs text-textSecondary">Container category for future imported packages.</p>
+              <p className="text-xs text-textSecondary">Package-owned taxonomy shown in the registry after import review.</p>
             </div>
             <div>
               <StatusBadge status={entry.lifecycleStatus} />
@@ -190,13 +190,13 @@ export function AdminAssessmentsRegistrySurface({ data }: { data: AdminAssessmen
       <AdminPageHeader
         eyebrow="Assessments"
         title="Assessment registry"
-        description="Database-backed system of record for deployable Sonartra assessments, their stable keys, and their version lifecycle before import tooling arrives."
-        actions={<Button href="/admin/assessments/new" variant="secondary">Create assessment record</Button>}
+        description="Registry of assessment lines, stable library keys, and version history created from uploaded packages, with admin governance layered on top."
+        actions={<Button href="/admin/assessments/import" variant="secondary">Import assessment package</Button>}
       />
 
       <div className="grid gap-4 xl:grid-cols-4">
-        <MetricCard label="Assessments" value={String(data.pagination.totalCount).padStart(2, '0')} detail="Stable parent assessment records currently indexed in the admin registry." />
-        <MetricCard label="Draft containers" value={draftCount} detail="Assessment containers that do not currently point at a published version." />
+        <MetricCard label="Assessments" value={String(data.pagination.totalCount).padStart(2, '0')} detail="Assessment records matched or created from imported package identity metadata." />
+        <MetricCard label="Draft lines" value={draftCount} detail="Assessment lines that do not currently point at a published version." />
         <MetricCard label="Published lines" value={publishedCount} detail="Assessment lines with an active published version pointer on the parent record." />
         <MetricCard label="Versions on page" value={totalVersions} detail="Version lineage visible in the current registry slice without opening detail workspaces." />
       </div>
@@ -204,7 +204,8 @@ export function AdminAssessmentsRegistrySurface({ data }: { data: AdminAssessmen
       <SurfaceSection
         title="Assessment registry workspace"
         eyebrow="Operational registry"
-        description="Server-rendered list view with URL-driven filters, bounded pagination, and direct drill-in to each assessment workspace."
+        description="Server-rendered registry view with URL-driven filters, package-first import entry, bounded pagination, and direct drill-in to each assessment workspace."
+        actions={<div className="flex flex-wrap gap-2"><Button href="/admin/assessments/import" variant="secondary">Upload package</Button><Button href="/admin/assessments/new" variant="ghost">Manual container fallback</Button></div>}
       >
         <div className="space-y-4">
           <RegistryNotice data={data} />

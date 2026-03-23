@@ -159,7 +159,7 @@ export function AdminAssessmentVersionDetailSurface({
         eyebrow="Assessment version"
         title={`${detailData.assessment.name} · v${safeVersion.versionLabel}`}
         description={mode === 'import'
-          ? 'Attach a structured Sonartra assessment package to this draft version, validate it, and persist the canonical payload used for later publish.'
+          ? 'Transitional draft-version import workspace. The preferred path now starts from package import, which creates or matches the assessment automatically before landing in version governance.'
           : 'Operational review workspace for package preview, comparison evidence, and publish-readiness before release.'}
         actions={(
           <div className="flex flex-wrap gap-2">
@@ -297,8 +297,8 @@ export function AdminAssessmentVersionDetailSurface({
       {mode === 'import' ? (
         <SurfaceSection
           title="Import assessment package"
-          eyebrow="Draft-only workflow"
-          description="Paste or upload a package spec v1 JSON payload. Validation runs before the normalized payload is attached to the draft version."
+          eyebrow="Draft-only transitional workflow"
+          description="Use this when a draft version already exists. In the primary workflow, start from the registry package import surface so library-key matching can create or attach automatically."
         >
           {safeVersion.lifecycleStatus === 'draft'
             ? <AdminAssessmentVersionPackageImportForm assessmentId={detailData.assessment.id} version={safeVersion} />

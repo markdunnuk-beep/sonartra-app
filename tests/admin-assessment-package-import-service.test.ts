@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import examplePackage from './fixtures/package-contract-v2-example.json'
 import { normalizeAdminAssessmentPackageImportState } from '../lib/admin/domain/assessment-management'
-import { importAssessmentPackagePayload, detectAssessmentPackageVersion } from '../lib/admin/server/assessment-package-import'
+import { extractAssessmentPackageIdentity, importAssessmentPackagePayload, detectAssessmentPackageVersion } from '../lib/admin/server/assessment-package-import'
 
 test('v2 package detection identifies Package Contract v2 payloads', () => {
   const detected = detectAssessmentPackageVersion(examplePackage)
@@ -76,4 +76,30 @@ test('client-facing import payload normalization remains safe when optional meta
   assert.equal(state.validationResult?.versionLabel, null)
   assert.deepEqual(state.validationResult?.errors, [{ path: 'questions', message: 'At least one question is required.' }])
   assert.deepEqual(state.validationResult?.warnings, [])
+})
+
+test('package identity extraction derives stable package-first metadata safely for legacy compatibility', () => {
+  const extracted = extractAssessmentPackageIdentity(examplePackage)
+
+  assert.equal(extracted.identity?.libraryKey, 'adaptive-workstyle')
+  assert.equal(extracted.identity?.assessmentName, 'Adaptive Workstyle Sample')
+  assert.equal(extracted.identity?.slug, 'adaptive-workstyle')
+  assert.equal(extracted.identity?.category, 'sample')
+  assert.ok(extracted.conflicts.some((conflict) => conflict.severity === 'warning' && conflict.field === 'slug'))
+})
+
+test('package identity extraction reports missing required identity metadata clearly', () => {
+  const extracted = extractAssessmentPackageIdentity({
+    schemaVersion: 'sonartra-assessment-package/v2',
+    packageVersion: '2',
+    metadata: {
+      assessmentName: '',
+      locales: { defaultLocale: 'en', supportedLocales: ['en'] },
+      authoring: {},
+      compatibility: { packageSemver: '1.0.0', contractVersion: '2' },
+    },
+  })
+
+  assert.equal(extracted.identity, null)
+  assert.ok(extracted.conflicts.some((conflict) => conflict.code === 'missing_identity_metadata' && conflict.field === 'libraryKey'))
 })

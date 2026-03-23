@@ -17,7 +17,7 @@ function SubmitButton() {
 
   return (
     <Button type="submit" variant="primary" disabled={pending}>
-      {pending ? 'Creating…' : 'Create assessment'}
+      {pending ? 'Creating…' : 'Create manual container'}
     </Button>
   )
 }
@@ -54,16 +54,16 @@ export function AdminAssessmentCreateForm() {
     <div className="space-y-6 lg:space-y-8">
       <AdminPageHeader
         eyebrow="Assessments"
-        title="Create assessment record"
-        description="Create the stable parent assessment container that future imports and versions will attach to. This flow intentionally captures metadata only."
+        title="Create manual assessment container"
+        description="Fallback workflow for creating a draft container before a package exists. Package import is now the preferred way to create assessment identity and attach versions."
         actions={<Button href="/admin/assessments" variant="ghost"><ArrowLeft className="mr-2 h-4 w-4" />Back to registry</Button>}
       />
 
       <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <SurfaceSection
-          title="Assessment identity"
-          eyebrow="Minimal create flow"
-          description="Capture the canonical name, stable library key, category, and optional internal summary. The parent record starts in draft lifecycle state."
+          title="Manual container metadata"
+          eyebrow="Fallback workflow"
+          description="Use this only when operators need an exceptional draft shell. In the primary workflow, uploaded packages supply the canonical name, library key, slug, and category."
         >
           <form action={action} className="space-y-5">
             {state.message ? (
@@ -73,13 +73,13 @@ export function AdminAssessmentCreateForm() {
             ) : null}
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <Field label="Assessment name" name="name" description="Operator-facing assessment title used throughout the admin registry and future import workflows." error={state.fieldErrors?.name} />
-              <Field label="Library key" name="key" description="Stable internal key for package targeting, system references, and long-term compatibility." error={state.fieldErrors?.key} />
-              <Field label="Slug" name="slug" description="URL-safe canonical slug. Leave aligned to the key unless you need a more readable route token." error={state.fieldErrors?.slug} />
+              <Field label="Assessment name" name="name" description="Fallback operator-entered title. In the preferred path, this comes from the uploaded package." error={state.fieldErrors?.name} />
+              <Field label="Library key" name="key" description="Fallback stable key for manual shells only. Package-first import now treats library key as the canonical matching anchor." error={state.fieldErrors?.key} />
+              <Field label="Slug" name="slug" description="URL-safe slug used until a package import updates mutable metadata under the same library key." error={state.fieldErrors?.slug} />
               <label className="block space-y-2">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Category</p>
-                  <p className="mt-1 text-xs leading-5 text-textSecondary">Broad assessment family used for registry filtering and future package validation rules.</p>
+                  <p className="mt-1 text-xs leading-5 text-textSecondary">Fallback taxonomy only. Package imports can later update this mutable category metadata.</p>
                 </div>
                 <select name="category" defaultValue="behavioural_intelligence" aria-invalid={state.fieldErrors?.category ? true : undefined} className="h-11 w-full rounded-xl border border-border/90 bg-bg/70 px-3.5 text-sm text-textPrimary outline-none ring-accent/40 focus:border-accent/50 focus:ring">
                   <option value="behavioural_intelligence">Behavioural intelligence</option>
@@ -96,7 +96,7 @@ export function AdminAssessmentCreateForm() {
             <label className="block space-y-2">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Internal summary</p>
-                <p className="mt-1 text-xs leading-5 text-textSecondary">Optional short note for operators. This is not the future authoring surface or deployment payload.</p>
+                <p className="mt-1 text-xs leading-5 text-textSecondary">Optional operator note. This is not the package definition and it does not replace package-owned identity metadata.</p>
               </div>
               <textarea
                 name="description"
@@ -110,6 +110,7 @@ export function AdminAssessmentCreateForm() {
 
             <div className="flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-4">
               <SubmitButton />
+              <Button href="/admin/assessments/import" variant="secondary">Prefer package import</Button>
               <Button href="/admin/assessments" variant="secondary">Cancel</Button>
               <Badge label="Initial lifecycle: Draft" tone="slate" />
             </div>
@@ -117,15 +118,15 @@ export function AdminAssessmentCreateForm() {
         </SurfaceSection>
 
         <Card className="px-6 py-5 sm:px-7 sm:py-6">
-          <p className="eyebrow">What this creates</p>
-          <h2 className="mt-2 text-[1.15rem] font-semibold tracking-tight text-textPrimary">Stable parent container</h2>
+          <p className="eyebrow">Transitional path</p>
+          <h2 className="mt-2 text-[1.15rem] font-semibold tracking-tight text-textPrimary">Manual draft container only</h2>
           <div className="mt-4 space-y-3 text-sm leading-6 text-textSecondary">
-            <p>The parent record is the long-lived assessment identity that future imported packages, manual drafts, and published versions will all land inside.</p>
-            <p>No upload, package validation, scoring definition editing, or runtime deployment payload is created here.</p>
-            <p>After creation you land on the assessment workspace, where the Versions tab can create the first draft version and manage publish/archive lifecycle controls.</p>
+            <p>The preferred route is to import a package first so the package supplies canonical identity metadata and the system can decide whether to create a new assessment or attach a new version.</p>
+            <p>This manual path creates only the governed parent shell. No package validation, assessment-definition payload, or runtime deployment payload is created here.</p>
+            <p>After creation you land on the assessment workspace, where draft versions can still be created and packages can be imported if you had to establish the shell record first.</p>
           </div>
           <div className="mt-5 rounded-2xl border border-white/[0.08] bg-bg/55 px-4 py-3 text-sm text-textSecondary">
-            Uniqueness for <span className="font-medium text-textPrimary">key</span> and <span className="font-medium text-textPrimary">slug</span> is enforced server-side so future imports can target a durable canonical container.
+            Uniqueness for <span className="font-medium text-textPrimary">key</span> and <span className="font-medium text-textPrimary">slug</span> is enforced server-side so later package imports can match or update the correct assessment line safely.
           </div>
         </Card>
       </div>

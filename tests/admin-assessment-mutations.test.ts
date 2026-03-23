@@ -4,6 +4,7 @@ import examplePackageV2 from './fixtures/package-contract-v2-example.json'
 import {
   archiveAdminAssessmentVersion,
   cloneAdminAssessmentSavedScenario,
+  createOrAttachAdminAssessmentPackage,
   createAdminAssessment,
   createAdminAssessmentDraftVersion,
   importAdminAssessmentPackage,
@@ -191,6 +192,31 @@ const validPackage = JSON.stringify({
       },
     ],
   },
+})
+
+const packageFirstCreatePayload = JSON.stringify({
+  packageVersion: '2',
+  schemaVersion: 'sonartra-assessment-package/v2',
+  metadata: {
+    assessmentKey: 'adaptive_workstyle',
+    assessmentName: 'Adaptive Workstyle',
+    slug: 'adaptive-workstyle',
+    category: 'leadership',
+    description: 'Package-first assessment import fixture.',
+    locales: { defaultLocale: 'en-US', supportedLocales: ['en-US'] },
+    authoring: { author: 'OpenAI', source: 'test-fixture' },
+    compatibility: { packageSemver: '1.0.0', contractVersion: '2' },
+    tags: ['leadership'],
+  },
+  responseModels: { models: [{ id: 'likert', type: 'likert', options: [{ id: 'a', label: 'A', value: 1 }] }] },
+  questions: [{ id: 'q1', code: 'AW-1', prompt: 'Prompt', responseModelId: 'likert', scoring: [{ dimensionId: 'adaptability' }] }],
+  sections: [{ id: 'core', title: 'Core', order: 1, completion: { kind: 'all_required' } }],
+  dimensions: [{ id: 'adaptability', label: 'Adaptability', scoringMethod: 'average', inputQuestionIds: ['q1'], minimumAnswered: 1, missingDataPolicy: 'skip' }],
+  scoring: { transforms: [], rules: [] },
+  normalization: { rules: [] },
+  integrity: { rules: [] },
+  outputs: { rules: [] },
+  report: { content: [] },
 })
 
 
@@ -442,6 +468,217 @@ test('create draft version succeeds for an existing assessment', async () => {
   assert.equal(auditEvents.length, 2)
 })
 
+test('package-first import auto-creates a new assessment and first version when the library key is new', async () => {
+  const inserts: string[] = []
+  const auditEvents: string[] = []
+
+  const result = await createOrAttachAdminAssessmentPackage({
+    packageText: packageFirstCreatePayload,
+    confirmation: 'confirm',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        if (/from assessment_definitions\s+where key = \$1/i.test(sql) || /from assessment_definitions\s+where slug = \$1/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/insert into assessment_definitions/i.test(sql) || /insert into assessment_versions/i.test(sql)) {
+          inserts.push(sql)
+          return { rows: [] }
+        }
+
+        if (/select id, key, slug, name, category, description\s+from assessment_definitions\s+where id = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-new', key: 'adaptive_workstyle', slug: 'adaptive-workstyle', name: 'Adaptive Workstyle', category: 'leadership', description: 'Package-first assessment import fixture.' }] }
+        }
+
+        if (/from assessment_versions av/i.test(sql)) {
+          return { rows: [makeManagedVersionRow({
+            id: 'version-new',
+            assessment_definition_id: 'assessment-new',
+            version_label: '1.0.0',
+            package_status: 'missing',
+            package_source_filename: null,
+            assessment_name: 'Adaptive Workstyle',
+          })] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions/i.test(sql) || /update assessment_definitions/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/insert into access_audit_events/i.test(sql)) {
+          auditEvents.push(String(params[1]))
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-23T00:00:00.000Z'),
+    createId: (() => {
+      const ids = ['assessment-new', 'audit-1', 'version-new', 'audit-2', 'audit-3', 'audit-4']
+      return () => ids.shift() ?? 'audit-fallback'
+    })(),
+  } as never)
+
+  assert.equal(result.ok, true)
+  assert.equal(result.code, 'imported')
+  assert.equal(result.assessmentId, 'assessment-new')
+  assert.equal(result.versionId, 'version-new')
+  assert.equal(result.versionLabel, '1.0.0')
+  assert.equal(inserts.length, 2)
+  assert.ok(auditEvents.includes('assessment_created'))
+  assert.ok(auditEvents.includes('assessment_version_created'))
+  assert.ok(auditEvents.includes('assessment_package_imported'))
+})
+
+test('package-first import attaches a new version when the library key already exists', async () => {
+  const auditEvents: string[] = []
+
+  const result = await createOrAttachAdminAssessmentPackage({
+    packageText: packageFirstCreatePayload,
+    confirmation: 'confirm',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        if (/from assessment_definitions\s+where key = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-1', key: 'adaptive_workstyle', slug: 'adaptive-workstyle', name: 'Adaptive Workstyle', category: 'leadership', description: 'Package-first assessment import fixture.' }] }
+        }
+
+        if (/from assessment_definitions\s+where slug = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-1', key: 'adaptive_workstyle', slug: 'adaptive-workstyle', name: 'Adaptive Workstyle', category: 'leadership', description: 'Package-first assessment import fixture.' }] }
+        }
+
+        if (/select id\s+from assessment_versions\s+where assessment_definition_id = \$1/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_definitions/i.test(sql) || /insert into assessment_versions/i.test(sql) || /update assessment_versions/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/select id, key, slug, name, category, description\s+from assessment_definitions\s+where id = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-1', key: 'adaptive_workstyle', slug: 'adaptive-workstyle', name: 'Adaptive Workstyle', category: 'leadership', description: 'Package-first assessment import fixture.' }] }
+        }
+
+        if (/from assessment_versions av/i.test(sql)) {
+          return { rows: [makeManagedVersionRow({
+            id: 'version-new',
+            assessment_definition_id: 'assessment-1',
+            version_label: '1.0.0',
+            package_status: 'missing',
+            assessment_name: 'Adaptive Workstyle',
+          })] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/insert into access_audit_events/i.test(sql)) {
+          auditEvents.push(String(params[1]))
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-23T00:00:00.000Z'),
+    createId: (() => {
+      const ids = ['version-new', 'audit-1', 'audit-2', 'audit-3', 'audit-4']
+      return () => ids.shift() ?? 'audit-fallback'
+    })(),
+  } as never)
+
+  assert.equal(result.ok, true)
+  assert.equal(result.assessmentId, 'assessment-1')
+  assert.equal(result.versionId, 'version-new')
+  assert.ok(auditEvents.includes('assessment_version_created'))
+  assert.ok(auditEvents.includes('assessment_package_imported'))
+})
+
+test('package-first import blocks slug collisions for different library keys with normalized conflict output', async () => {
+  const result = await createOrAttachAdminAssessmentPackage({
+    packageText: packageFirstCreatePayload,
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string) => {
+        if (/from assessment_definitions\s+where key = \$1/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/from assessment_definitions\s+where slug = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-2', key: 'different_key', slug: 'adaptive-workstyle', name: 'Different Assessment', category: 'other', description: null }] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'conflict')
+  assert.match(result.message, /slug adaptive-workstyle is already assigned/i)
+  assert.ok(result.review?.conflicts.some((conflict) => conflict.code === 'slug_collision'))
+})
+
+test('package-first review contract reports create-versus-attach decisions before persistence', async () => {
+  const createReview = await createOrAttachAdminAssessmentPackage({
+    packageText: packageFirstCreatePayload,
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string) => {
+        if (/from assessment_definitions\s+where key = \$1/i.test(sql) || /from assessment_definitions\s+where slug = \$1/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+  } as never)
+
+  const attachReview = await createOrAttachAdminAssessmentPackage({
+    packageText: packageFirstCreatePayload,
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string) => {
+        if (/from assessment_definitions\s+where key = \$1/i.test(sql) || /from assessment_definitions\s+where slug = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-1', key: 'adaptive_workstyle', slug: 'adaptive-workstyle', name: 'Adaptive Workstyle', category: 'leadership', description: null }] }
+        }
+
+        if (/select id\s+from assessment_versions\s+where assessment_definition_id = \$1/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+  } as never)
+
+  assert.equal(createReview.ok, false)
+  assert.equal(createReview.code, 'review_required')
+  assert.equal(createReview.review?.decision?.action, 'create_assessment')
+  assert.equal(attachReview.ok, false)
+  assert.equal(attachReview.code, 'review_required')
+  assert.equal(attachReview.review?.decision?.action, 'attach_version')
+})
+
 test('valid package import succeeds and records replacement audit metadata', async () => {
   const updates: unknown[][] = []
   const auditEvents: string[] = []
@@ -457,6 +694,10 @@ test('valid package import succeeds and records replacement audit metadata', asy
     getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
+        if (/select id, key, slug, name, category, description\s+from assessment_definitions\s+where id = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-1', key: 'sonartra_signals', slug: 'sonartra-signals', name: 'Sonartra Signals', category: 'behavioural_intelligence', description: null }] }
+        }
+
         if (/from assessment_versions av/i.test(sql)) {
           return { rows: [makeManagedVersionRow({ package_status: 'missing' })] }
         }
@@ -500,6 +741,50 @@ test('valid package import succeeds and records replacement audit metadata', asy
   assert.ok(auditEvents.includes('assessment_release_readiness_evaluated'))
 })
 
+test('version-scoped import blocks immutable library key mismatches clearly', async () => {
+  const mismatchPayload = JSON.stringify({
+    ...JSON.parse(validPackage),
+    meta: {
+      ...JSON.parse(validPackage).meta,
+      assessmentKey: 'different_library_key',
+    },
+  })
+
+  const result = await importAdminAssessmentPackage({
+    assessmentId: 'assessment-1',
+    versionId: 'version-2',
+    packageText: mismatchPayload,
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string) => {
+        if (/select id, key, slug, name, category, description\s+from assessment_definitions\s+where id = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-1', key: 'sonartra_signals', slug: 'sonartra-signals', name: 'Sonartra Signals', category: 'behavioural_intelligence', description: null }] }
+        }
+
+        if (/from assessment_definitions\s+where key = \$1/i.test(sql) || /from assessment_definitions\s+where slug = \$1/i.test(sql) || /select id\s+from assessment_versions\s+where assessment_definition_id = \$1/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/from assessment_versions av/i.test(sql)) {
+          return { rows: [makeManagedVersionRow({ package_status: 'missing' })] }
+        }
+
+        if (/update assessment_versions/i.test(sql) || /update assessment_definitions/i.test(sql) || /insert into access_audit_events/i.test(sql)) {
+          throw new Error(`Unexpected write for immutable mismatch: ${sql}`)
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'conflict')
+  assert.match(result.message, /library keys are immutable identity anchors/i)
+})
+
 test('package import skips governance metadata writes when release governance columns are unavailable', async () => {
   const versionUpdateSql: string[] = []
   const auditEvents: string[] = []
@@ -515,6 +800,10 @@ test('package import skips governance metadata writes when release governance co
     getAssessmentVersionSchemaCapabilities: async () => PACKAGE_ERA_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
+        if (/select id, key, slug, name, category, description\s+from assessment_definitions\s+where id = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-1', key: 'sonartra_signals', slug: 'sonartra-signals', name: 'Sonartra Signals', category: 'behavioural_intelligence', description: null }] }
+        }
+
         if (/from assessment_versions av/i.test(sql)) {
           return { rows: [makeManagedVersionRow({ package_status: 'missing' })] }
         }
@@ -568,9 +857,18 @@ test('package import fails fast when package metadata columns are unavailable', 
     packageText: validPackage,
   }, {
     resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
     getAssessmentVersionSchemaCapabilities: async () => LEGACY_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string) => {
+        if (/select id, key, slug, name, category, description\s+from assessment_definitions\s+where id = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-1', key: 'sonartra_signals', slug: 'sonartra-signals', name: 'Sonartra Signals', category: 'behavioural_intelligence', description: null }] }
+        }
+
+        if (/from assessment_versions av/i.test(sql)) {
+          return { rows: [makeManagedVersionRow({ package_status: 'missing' })] }
+        }
+
         if (/update assessment_versions/i.test(sql) || /update assessment_definitions/i.test(sql) || /insert into access_audit_events/i.test(sql)) {
           writeCount += 1
           return { rows: [] }
@@ -629,6 +927,10 @@ test('package import persists validation failure for missing sections and broken
     getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
+        if (/select id, key, slug, name, category, description\s+from assessment_definitions\s+where id = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-1', key: 'sonartra_signals', slug: 'sonartra-signals', name: 'Sonartra Signals', category: 'behavioural_intelligence', description: null }] }
+        }
+
         if (/from assessment_versions av/i.test(sql)) {
           return { rows: [makeManagedVersionRow({ package_status: 'missing' })] }
         }
@@ -679,6 +981,10 @@ test('valid Package Contract v2 import succeeds through the admin import path an
     getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
+        if (/select id, key, slug, name, category, description\s+from assessment_definitions\s+where id = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-1', key: 'adaptive-workstyle', slug: 'adaptive-workstyle', name: 'Adaptive Workstyle Sample', category: 'other', description: null }] }
+        }
+
         if (/from assessment_versions av/i.test(sql)) {
           return { rows: [makeManagedVersionRow({ package_status: 'missing' })] }
         }
