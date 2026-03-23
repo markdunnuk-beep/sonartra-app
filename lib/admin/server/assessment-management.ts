@@ -731,11 +731,11 @@ function validateAssessmentInput(input: AdminCreateAssessmentInput): AdminAssess
   }
 
   if (!key) {
-    fieldErrors.key = 'Library key is required.'
+    fieldErrors.key = 'Assessment key is required.'
   } else if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(key)) {
-    fieldErrors.key = 'Library key must use lowercase letters, numbers, hyphens, or underscores only.'
+    fieldErrors.key = 'Assessment key must use lowercase letters, numbers, hyphens, or underscores only.'
   } else if (key.length > 100) {
-    fieldErrors.key = 'Library key must be 100 characters or fewer.'
+    fieldErrors.key = 'Assessment key must be 100 characters or fewer.'
   }
 
   if (!slug) {
@@ -1037,9 +1037,17 @@ function findPublishStageFailure(error: unknown): { publishStage: string | null;
   let materializationMetadata: Record<string, unknown> = {}
 
   while (current && typeof current === 'object') {
-    if (current instanceof AssessmentPublishStageError && !publishStage) {
-      publishStage = current.stage
-      publishMetadata = current.metadata
+    if (!publishStage) {
+      if (current instanceof AssessmentPublishStageError) {
+        publishStage = current.stage
+        publishMetadata = current.metadata
+      } else if ((current as { name?: unknown }).name === 'AssessmentPublishStageError') {
+        const stageError = current as { stage?: unknown; metadata?: unknown }
+        publishStage = typeof stageError.stage === 'string' ? stageError.stage : null
+        publishMetadata = stageError.metadata && typeof stageError.metadata === 'object'
+          ? stageError.metadata as Record<string, unknown>
+          : {}
+      }
     }
 
     if (current instanceof Error && current.name === 'AssessmentRuntimeMaterializationStageError' && !materializationStage) {
@@ -1085,6 +1093,38 @@ async function runPublishStage<T>(
       ...metadata,
     })
     throw new AssessmentPublishStageError(stage, metadata, error)
+  }
+}
+
+interface PublishOptionalSideEffectResult {
+  stage: string
+  status: 'applied' | 'skipped'
+  reason?: 'schema_incompatible' | 'persistence_failure'
+}
+
+async function runOptionalPublishSideEffect(
+  stage: string,
+  metadata: Record<string, unknown>,
+  work: () => Promise<void>,
+): Promise<PublishOptionalSideEffectResult> {
+  try {
+    await work()
+    return { stage, status: 'applied' }
+  } catch (error) {
+    const details = extractDatabaseFailureDetails(error)
+    const reason = details.code === '42P01' || details.code === '42703' ? 'schema_incompatible' : 'persistence_failure'
+    console.warn('[admin-assessment-management] Optional publish side effect skipped.', {
+      stage,
+      reason,
+      postgresCode: details.code,
+      constraint: details.constraint,
+      table: details.table,
+      column: details.column,
+      detail: details.detail,
+      message: details.message,
+      ...metadata,
+    })
+    return { stage, status: 'skipped', reason }
   }
 }
 
@@ -1377,6 +1417,11 @@ function mapPublishDatabaseFailure(error: unknown): AdminAssessmentVersionMutati
     || publishStage === 'publish_version_update'
     || ['lifecycle_status', 'published_at', 'archived_at', 'assessment_versions'].some((token) => normalizedMessage.includes(token))
 
+  const touchesPublishStatementShape = code === '08P01'
+    || normalizedMessage.includes('bind message supplies')
+    || normalizedMessage.includes('prepared statement requires')
+    || normalizedMessage.includes('there is no parameter $')
+
   if ((code === '42P01' || code === '42703') && touchesRuntimeMaterialization) {
     return {
       ok: false,
@@ -1451,6 +1496,22 @@ function mapPublishDatabaseFailure(error: unknown): AdminAssessmentVersionMutati
     }
   }
 
+  if (touchesPublishStatementShape) {
+    return {
+      ok: false,
+      code: 'unknown_error',
+      message: 'Publish could not persist the version lifecycle transition. Review server logs for the failing publish stage and retry once the persistence issue is resolved.',
+    }
+  }
+
+  if (publishStage === 'publish_version_update') {
+    return {
+      ok: false,
+      code: 'unknown_error',
+      message: 'Publish could not persist the version lifecycle transition. Review server logs for the failing publish stage and retry once the persistence issue is resolved.',
+    }
+  }
+
   return null
 }
 
@@ -1482,13 +1543,13 @@ async function loadAssessmentIdentityById(client: PoolClient, assessmentId: stri
   return mapAssessmentIdentityRow(result.rows[0])
 }
 
-async function loadAssessmentIdentityByKey(client: PoolClient, libraryKey: string) {
+async function loadAssessmentIdentityByKey(client: PoolClient, assessmentKey: string) {
   const result = await client.query<AssessmentIdentityRow>(
     `select id, key, slug, name, category, description
      from assessment_definitions
      where key = $1
      limit 1`,
-    [libraryKey],
+    [assessmentKey],
   )
 
   return mapAssessmentIdentityRow(result.rows[0])
@@ -2085,8 +2146,8 @@ export async function createAdminAssessment(
     return {
       ok: false,
       code: 'duplicate_key',
-      message: 'This library key is already assigned to another assessment.',
-      fieldErrors: { key: 'This library key is already assigned to another assessment.' },
+      message: 'This assessment key is already assigned to another assessment.',
+      fieldErrors: { key: 'This assessment key is already assigned to another assessment.' },
     }
   }
 
@@ -2359,15 +2420,15 @@ async function reviewAssessmentPackageCreateOrAttach(
   let decision: AdminAssessmentImportReviewContract['decision'] = null
 
   if (identity) {
-    matchedAssessment = await loadAssessmentIdentityByKey(client, identity.libraryKey)
+    matchedAssessment = await loadAssessmentIdentityByKey(client, identity.assessmentKey)
 
     const slugOwner = await loadAssessmentIdentityBySlug(client, identity.slug)
-    if (slugOwner && slugOwner.key !== identity.libraryKey) {
+    if (slugOwner && slugOwner.key !== identity.assessmentKey) {
       conflicts.push({
         code: 'slug_collision',
         severity: 'error',
         field: 'slug',
-        message: `Slug ${identity.slug} is already assigned to ${slugOwner.name} (${slugOwner.key}) and cannot be claimed by a different library key.`,
+        message: `Slug ${identity.slug} is already assigned to ${slugOwner.name} (${slugOwner.key}) and cannot be claimed by a different assessment key.`,
       })
     }
 
@@ -2377,7 +2438,7 @@ async function reviewAssessmentPackageCreateOrAttach(
           code: 'identity_metadata_changed',
           severity: 'warning',
           field: 'assessmentName',
-          message: `Package name differs from the existing registry entry (${matchedAssessment.name} → ${identity.assessmentName}). The new package can update the mutable assessment name after confirmation.`,
+          message: `Package name differs from the existing registry entry (${matchedAssessment.name} → ${identity.assessmentName}). The package can update this package-owned display name after confirmation.`,
         })
       }
 
@@ -2386,7 +2447,7 @@ async function reviewAssessmentPackageCreateOrAttach(
           code: 'identity_metadata_changed',
           severity: 'warning',
           field: 'slug',
-          message: `Package slug differs from the existing registry entry (${matchedAssessment.slug} → ${identity.slug}). The new package can update the mutable slug after confirmation if it stays unique.`,
+          message: `Package slug differs from the existing registry entry (${matchedAssessment.slug} → ${identity.slug}). The package can update this package-owned slug after confirmation if it stays unique.`,
         })
       }
 
@@ -2395,7 +2456,7 @@ async function reviewAssessmentPackageCreateOrAttach(
           code: 'identity_metadata_changed',
           severity: 'warning',
           field: 'category',
-          message: `Package category differs from the existing registry entry (${matchedAssessment.category} → ${identity.category}). The package can update this mutable taxonomy field after confirmation.`,
+          message: `Package category differs from the existing registry entry (${matchedAssessment.category} → ${identity.category}). The package can update this package-owned taxonomy field after confirmation.`,
         })
       }
     }
@@ -2735,11 +2796,11 @@ export async function importAdminAssessmentPackage(
         }
       }
 
-      if (assessmentIdentity.key !== packageIdentity.libraryKey) {
+      if (assessmentIdentity.key !== packageIdentity.assessmentKey) {
         return {
           ok: false,
           code: 'conflict',
-          message: `This draft belongs to ${assessmentIdentity.key}, but the uploaded package declares ${packageIdentity.libraryKey}. Library keys are immutable identity anchors; use the package-first import flow instead.`,
+          message: `This draft belongs to ${assessmentIdentity.key}, but the uploaded package declares ${packageIdentity.assessmentKey}. Assessment keys are immutable identity anchors; use the package-first import flow instead.`,
           assessmentId: input.assessmentId,
           versionId: input.versionId,
           validationResult: importedPackage.validationSummary,
@@ -2867,7 +2928,7 @@ export async function createOrAttachAdminAssessmentPackage(
            values ($1, $2, $3, $4, $5, $6, 'draft', $7, $7, $8::timestamptz, $8::timestamptz)`,
           [
             assessmentId,
-            packageIdentity.libraryKey,
+            packageIdentity.assessmentKey,
             packageIdentity.slug,
             packageIdentity.assessmentName,
             packageIdentity.category,
@@ -2886,7 +2947,7 @@ export async function createOrAttachAdminAssessmentPackage(
           assessmentId,
           assessmentName: packageIdentity.assessmentName,
           metadata: {
-            key: packageIdentity.libraryKey,
+            key: packageIdentity.assessmentKey,
             slug: packageIdentity.slug,
             category: packageIdentity.category,
             lifecycleStatus: 'draft',
@@ -2926,12 +2987,12 @@ export async function createOrAttachAdminAssessmentPackage(
           actor,
           nowIso,
           eventType: 'assessment_package_imported',
-          summary: `Package import updated mutable identity metadata for ${packageIdentity.assessmentName} while keeping library key ${packageIdentity.libraryKey} stable.`,
+          summary: `Package import updated package-owned metadata for ${packageIdentity.assessmentName} while keeping assessment key ${packageIdentity.assessmentKey} stable.`,
           assessmentId: assessment.id,
           assessmentName: packageIdentity.assessmentName,
           metadata: {
             identityMutabilityRules: ADMIN_ASSESSMENT_IDENTITY_MUTABILITY_RULES,
-            libraryKey: packageIdentity.libraryKey,
+            assessmentKey: packageIdentity.assessmentKey,
             previousName: assessment.name,
             previousSlug: assessment.slug,
             previousCategory: assessment.category,
@@ -2987,7 +3048,7 @@ export async function createOrAttachAdminAssessmentPackage(
         metadata: {
           action: decision.action,
           source: 'package_import',
-          libraryKey: packageIdentity.libraryKey,
+          assessmentKey: packageIdentity.assessmentKey,
         },
       })
 
@@ -3730,6 +3791,7 @@ export async function publishAdminAssessmentVersion(
         nowIso,
         createId: deps.createId,
         reason: 'publish_attempt',
+        emitAudit: false,
         getAssessmentVersionSchemaCapabilities: deps.getAssessmentVersionSchemaCapabilities,
         onUnsupported: 'error',
       }))
@@ -3737,13 +3799,18 @@ export async function publishAdminAssessmentVersion(
       if (!evaluatedVersion) {
         return { ok: false, code: 'not_found', message: 'Version not found.' }
       }
+      const totalQuestions = evaluatedVersion.packageInfo.summary?.questionsCount ?? null
       const evaluatedSignOff = evaluatedVersion.releaseGovernance?.signOff ?? { status: 'unsigned' as const, signedOffBy: null, signedOffAt: null, isStale: false, staleReason: null }
       const publishReadiness = getAdminAssessmentVersionReadiness(evaluatedVersion)
 
       if (publishReadiness.status === 'not_ready') {
         const blockingSummary = publishReadiness.blockingIssues[0] ?? 'The attached package is missing or invalid.'
 
-        await writeAssessmentAuditEvent(client, {
+        await runOptionalPublishSideEffect('publish_blocked_audit', {
+          assessmentId: input.assessmentId,
+          versionId: input.versionId,
+          reason: 'readiness_gating',
+        }, () => writeAssessmentAuditEvent(client, {
           createId: deps.createId,
           actor,
           nowIso,
@@ -3758,7 +3825,7 @@ export async function publishAdminAssessmentVersion(
             blockingIssues: publishReadiness.blockingIssues,
             warnings: publishReadiness.warnings,
           },
-        })
+        }))
 
         return {
           ok: false,
@@ -3768,7 +3835,11 @@ export async function publishAdminAssessmentVersion(
       }
 
       if (publishReadiness.status === 'ready_with_warnings' && evaluatedSignOff.status !== 'signed_off') {
-        await writeAssessmentAuditEvent(client, {
+        await runOptionalPublishSideEffect('publish_blocked_audit', {
+          assessmentId: input.assessmentId,
+          versionId: input.versionId,
+          reason: 'sign_off_required',
+        }, () => writeAssessmentAuditEvent(client, {
           createId: deps.createId,
           actor,
           nowIso,
@@ -3783,7 +3854,7 @@ export async function publishAdminAssessmentVersion(
             warnings: publishReadiness.warnings,
             signOffStatus: evaluatedSignOff.status,
           },
-        })
+        }))
 
         return {
           ok: false,
@@ -3800,7 +3871,11 @@ export async function publishAdminAssessmentVersion(
           const blockingSummary = runtimeSupportV2.issues[0]?.message
             ?? 'The Package Contract v2 payload is not supported by the live runtime execution path.'
 
-          await writeAssessmentAuditEvent(client, {
+          await runOptionalPublishSideEffect('publish_blocked_audit', {
+            assessmentId: input.assessmentId,
+            versionId: input.versionId,
+            reason: 'v2_runtime_support',
+          }, () => writeAssessmentAuditEvent(client, {
             createId: deps.createId,
             actor,
             nowIso,
@@ -3815,7 +3890,7 @@ export async function publishAdminAssessmentVersion(
               contractVersion: 'package_contract_v2',
               runtimeSupportIssues: runtimeSupportV2.issues,
             },
-          })
+          }))
 
           return {
             ok: false,
@@ -3837,7 +3912,11 @@ export async function publishAdminAssessmentVersion(
         if (runtimeExecutableIssues.length > 0) {
           const blockingSummary = runtimeExecutableIssues[0]?.message ?? 'The package cannot run on the live runtime.'
 
-          await writeAssessmentAuditEvent(client, {
+          await runOptionalPublishSideEffect('publish_blocked_audit', {
+            assessmentId: input.assessmentId,
+            versionId: input.versionId,
+            reason: 'runtime_executable_gating',
+          }, () => writeAssessmentAuditEvent(client, {
             createId: deps.createId,
             actor,
             nowIso,
@@ -3851,7 +3930,7 @@ export async function publishAdminAssessmentVersion(
               readinessStatus: publishReadiness.status,
               runtimeExecutableIssues,
             },
-          })
+          }))
 
           return {
             ok: false,
@@ -3917,7 +3996,7 @@ export async function publishAdminAssessmentVersion(
          where id = $1
            and assessment_definition_id = $2
          returning id`,
-        [input.versionId, input.assessmentId, nowIso, actor?.id ?? null],
+        [input.versionId, input.assessmentId, nowIso, actor?.id ?? null, totalQuestions],
       ))
 
       if (!publishResult.rows[0]) {
@@ -3941,7 +4020,7 @@ export async function publishAdminAssessmentVersion(
         [input.assessmentId, input.versionId, nowIso, actor?.id ?? null],
       ))
 
-      await runPublishStage('audit_publish_event', {
+      await runOptionalPublishSideEffect('audit_publish_event', {
         assessmentId: input.assessmentId,
         versionId: input.versionId,
       }, () => writeAssessmentAuditEvent(client, {
@@ -3994,6 +4073,13 @@ export async function publishAdminAssessmentVersion(
         onceKey: `publish-runtime-schema-compatibility:${input.assessmentId}:${input.versionId}`,
       })
       return runtimeCompatibilityFailure
+    }
+    if (findPublishStageFailure(error).publishStage === 'publish_version_update') {
+      return {
+        ok: false,
+        code: 'unknown_error',
+        message: 'Publish could not persist the version lifecycle transition. Review server logs for the failing publish stage and retry once the persistence issue is resolved.',
+      }
     }
     const mappedDatabaseFailure = mapPublishDatabaseFailure(error)
     if (mappedDatabaseFailure) {

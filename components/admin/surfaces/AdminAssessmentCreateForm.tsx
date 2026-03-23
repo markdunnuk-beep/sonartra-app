@@ -17,7 +17,7 @@ function SubmitButton() {
 
   return (
     <Button type="submit" variant="primary" disabled={pending}>
-      {pending ? 'Creating…' : 'Create manual container'}
+      {pending ? 'Creating…' : 'Create manual draft container'}
     </Button>
   )
 }
@@ -63,7 +63,7 @@ export function AdminAssessmentCreateForm() {
         <SurfaceSection
           title="Manual container metadata"
           eyebrow="Fallback workflow"
-          description="Use this only when operators need an exceptional draft shell. In the primary workflow, uploaded packages supply the canonical name, library key, slug, and category."
+          description="Use this only when operators need an exceptional draft shell. In the primary workflow, uploaded packages supply the canonical name, assessment key, slug, and category."
         >
           <form action={action} className="space-y-5">
             {state.message ? (
@@ -74,8 +74,8 @@ export function AdminAssessmentCreateForm() {
 
             <div className="grid gap-4 lg:grid-cols-2">
               <Field label="Assessment name" name="name" description="Fallback operator-entered title. In the preferred path, this comes from the uploaded package." error={state.fieldErrors?.name} />
-              <Field label="Library key" name="key" description="Fallback stable key for manual shells only. Package-first import now treats library key as the canonical matching anchor." error={state.fieldErrors?.key} />
-              <Field label="Slug" name="slug" description="URL-safe slug used until a package import updates mutable metadata under the same library key." error={state.fieldErrors?.slug} />
+              <Field label="Assessment key" name="key" description="Fallback stable key for manual shells only. Package-first import now treats assessment key as the canonical matching anchor. Previously called library key." error={state.fieldErrors?.key} />
+              <Field label="Slug" name="slug" description="URL-safe slug used until a package import updates mutable metadata under the same assessment key." error={state.fieldErrors?.slug} />
               <label className="block space-y-2">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Category</p>

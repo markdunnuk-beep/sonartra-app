@@ -4,6 +4,8 @@
   "metadata": {
     "assessmentKey": "adaptive-workstyle",
     "assessmentName": "Adaptive Workstyle Sample",
+    "slug": "adaptive-workstyle",
+    "category": "leadership",
     "description": "Small example Package Contract v2 fixture for structural validation.",
     "locales": {
       "defaultLocale": "en-US",

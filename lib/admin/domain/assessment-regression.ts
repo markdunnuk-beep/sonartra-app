@@ -149,7 +149,7 @@ function describeBaseline(type: AdminAssessmentRegressionBaselineType, versionLa
     case 'source_version':
       return versionLabel ? `No stronger baseline exists, so scenario source version v${versionLabel} is used.` : 'No stronger baseline exists, so the scenario source version is used.'
     default:
-      return 'No baseline version is available yet; results are shown without comparison.'
+      return 'This is the first available version, so results are shown without a comparison baseline yet.'
   }
 }
 
@@ -338,7 +338,7 @@ export function compareAssessmentScenarioExecutions(
       comparison: {
         status: current.status === 'ok' ? 'changed_expected' : 'blocked',
         summary: current.status === 'ok'
-          ? 'No baseline exists yet, so this scenario result is recorded as current-version evidence only.'
+          ? 'This is the first available version, so this scenario result is recorded as current-version evidence only until a stronger baseline exists.'
           : current.message,
         changeSummary: {
           normalizedScoreChanges: [],

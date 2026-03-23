@@ -81,11 +81,11 @@ test('client-facing import payload normalization remains safe when optional meta
 test('package identity extraction derives stable package-first metadata safely for legacy compatibility', () => {
   const extracted = extractAssessmentPackageIdentity(examplePackage)
 
-  assert.equal(extracted.identity?.libraryKey, 'adaptive-workstyle')
+  assert.equal(extracted.identity?.assessmentKey, 'adaptive-workstyle')
   assert.equal(extracted.identity?.assessmentName, 'Adaptive Workstyle Sample')
   assert.equal(extracted.identity?.slug, 'adaptive-workstyle')
-  assert.equal(extracted.identity?.category, 'sample')
-  assert.ok(extracted.conflicts.some((conflict) => conflict.severity === 'warning' && conflict.field === 'slug'))
+  assert.equal(extracted.identity?.category, 'leadership')
+  assert.equal(extracted.conflicts.length, 0)
 })
 
 test('package identity extraction reports missing required identity metadata clearly', () => {
@@ -101,5 +101,20 @@ test('package identity extraction reports missing required identity metadata cle
   })
 
   assert.equal(extracted.identity, null)
-  assert.ok(extracted.conflicts.some((conflict) => conflict.code === 'missing_identity_metadata' && conflict.field === 'libraryKey'))
+  assert.ok(extracted.conflicts.some((conflict) => conflict.code === 'missing_identity_metadata' && conflict.field === 'assessmentKey'))
+})
+
+test('package identity extraction requires slug and category in the preferred v2 package-first path', () => {
+  const extracted = extractAssessmentPackageIdentity({
+    ...examplePackage,
+    metadata: {
+      ...examplePackage.metadata,
+      slug: '',
+      category: '',
+    },
+  })
+
+  assert.equal(extracted.identity, null)
+  assert.ok(extracted.conflicts.some((conflict) => conflict.code === 'missing_identity_metadata' && conflict.field === 'slug'))
+  assert.ok(extracted.conflicts.some((conflict) => conflict.code === 'missing_identity_metadata' && conflict.field === 'category'))
 })

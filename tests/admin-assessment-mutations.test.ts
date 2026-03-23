@@ -468,7 +468,7 @@ test('create draft version succeeds for an existing assessment', async () => {
   assert.equal(auditEvents.length, 2)
 })
 
-test('package-first import auto-creates a new assessment and first version when the library key is new', async () => {
+test('package-first import auto-creates a new assessment and first version when the assessment key is new', async () => {
   const inserts: string[] = []
   const auditEvents: string[] = []
 
@@ -539,7 +539,7 @@ test('package-first import auto-creates a new assessment and first version when 
   assert.ok(auditEvents.includes('assessment_package_imported'))
 })
 
-test('package-first import attaches a new version when the library key already exists', async () => {
+test('package-first import attaches a new version when the assessment key already exists', async () => {
   const auditEvents: string[] = []
 
   const result = await createOrAttachAdminAssessmentPackage({
@@ -607,7 +607,7 @@ test('package-first import attaches a new version when the library key already e
   assert.ok(auditEvents.includes('assessment_package_imported'))
 })
 
-test('package-first import blocks slug collisions for different library keys with normalized conflict output', async () => {
+test('package-first import blocks slug collisions for different assessment keys with normalized conflict output', async () => {
   const result = await createOrAttachAdminAssessmentPackage({
     packageText: packageFirstCreatePayload,
   }, {
@@ -741,7 +741,7 @@ test('valid package import succeeds and records replacement audit metadata', asy
   assert.ok(auditEvents.includes('assessment_release_readiness_evaluated'))
 })
 
-test('version-scoped import blocks immutable library key mismatches clearly', async () => {
+test('version-scoped import blocks immutable assessment key mismatches clearly', async () => {
   const mismatchPayload = JSON.stringify({
     ...JSON.parse(validPackage),
     meta: {
@@ -782,7 +782,7 @@ test('version-scoped import blocks immutable library key mismatches clearly', as
 
   assert.equal(result.ok, false)
   assert.equal(result.code, 'conflict')
-  assert.match(result.message, /library keys are immutable identity anchors/i)
+  assert.match(result.message, /assessment keys are immutable identity anchors/i)
 })
 
 test('package import skips governance metadata writes when release governance columns are unavailable', async () => {
@@ -1523,6 +1523,58 @@ test('publish version succeeds when a valid package is attached and enforces a s
   assert.ok(queries.some((sql) => /update assessment_versions\s+set lifecycle_status = 'published'[\s\S]*total_questions = \$5/i.test(sql)))
 })
 
+test('publish version still succeeds when optional publish audit writes are unavailable', async () => {
+  const result = await publishAdminAssessmentVersion({
+    assessmentId: 'assessment-1',
+    versionId: 'version-2',
+    expectedUpdatedAt: '2026-03-21T09:00:00.000Z',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params)
+        if (runtimeSchemaResult) {
+          return runtimeSchemaResult
+        }
+
+        if (/from assessment_versions av/i.test(sql)) {
+          return { rows: [makeManagedVersionRow({ sign_off_status: 'signed_off', sign_off_at: '2026-03-21T09:30:00.000Z', sign_off_by_name: 'Rina Patel', sign_off_material_updated_at: '2026-03-21T08:00:00.000Z' })] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/select key, name\s+from assessment_versions/i.test(sql)) {
+          return { rows: [{ key: 'signals-v1', name: 'Sonartra Signals' }] }
+        }
+
+        if (/insert into access_audit_events/i.test(sql)) {
+          const error = new Error('relation "access_audit_events" does not exist') as Error & { code?: string }
+          error.code = '42P01'
+          throw error
+        }
+
+        if (/insert into assessment_question_sets/i.test(sql) || /update assessment_question_sets/i.test(sql) || /insert into assessment_questions/i.test(sql) || /delete from assessment_questions/i.test(sql) || /insert into assessment_question_options/i.test(sql) || /delete from assessment_question_options/i.test(sql) || /insert into assessment_option_signal_mappings/i.test(sql) || /delete from assessment_option_signal_mappings/i.test(sql) || /update assessment_versions\s+set publish_readiness_status/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'archived'/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'published'/i.test(sql) || /update assessment_definitions/i.test(sql)) {
+          return { rows: /returning id/i.test(sql) ? [{ id: 'version-2' }] : [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-21T10:00:00.000Z'),
+    createId: (() => {
+      const ids = ['audit-1', 'audit-2']
+      return () => ids.shift() ?? 'audit-3'
+    })(),
+  } as never)
+
+  assert.equal(result.ok, true)
+  assert.equal(result.code, 'published')
+})
+
 test('publish version is blocked when no valid package exists', async () => {
   const auditEvents: string[] = []
   const result = await publishAdminAssessmentVersion({
@@ -1660,7 +1712,7 @@ test('publish version is blocked when the package is valid but not executable by
   assert.ok(auditEvents.includes('assessment_publish_blocked_release_governance'))
 })
 
-test('publish version is blocked when the imported package uses Package Contract v2 before runtime support is enabled', async () => {
+test('publish version succeeds for Package Contract v2 when live runtime support is available truthfully', async () => {
   const auditEvents: string[] = []
   const result = await publishAdminAssessmentVersion({
     assessmentId: 'assessment-1',
@@ -1724,8 +1776,12 @@ test('publish version is blocked when the imported package uses Package Contract
           return { rows: [] }
         }
 
-        if (/insert into assessment_question_sets/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'published'/i.test(sql)) {
+        if (/insert into assessment_question_sets/i.test(sql)) {
           throw new Error(`Unexpected live-runtime materialization write: ${sql}`)
+        }
+
+        if (/update assessment_versions\s+set lifecycle_status = 'archived'/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'published'/i.test(sql) || /update assessment_definitions/i.test(sql)) {
+          return { rows: /returning id/i.test(sql) ? [{ id: 'version-2' }] : [] }
         }
 
         throw new Error(`Unexpected transactional query: ${sql}`)
@@ -1738,10 +1794,9 @@ test('publish version is blocked when the imported package uses Package Contract
     })(),
   } as never)
 
-  assert.equal(result.ok, false)
-  assert.equal(result.code, 'invalid_transition')
-  assert.match(result.message, /v2|runtime supports v2 execution/i)
-  assert.ok(auditEvents.includes('assessment_publish_blocked_release_governance'))
+  assert.equal(result.ok, true)
+  assert.equal(result.code, 'published')
+  assert.ok(auditEvents.includes('assessment_version_published'))
 })
 
 test('publish fails fast with a schema compatibility error when runtime materialization tables are unavailable', async () => {
@@ -1931,6 +1986,65 @@ test('publish maps live-pointer update failures into a targeted admin-safe error
   } finally {
     console.error = originalConsoleError
   }
+})
+
+test('publish falls back to an operator-safe normalized message when a lifecycle persistence failure cannot be classified further', async () => {
+  const result = await publishAdminAssessmentVersion({
+    assessmentId: 'assessment-1',
+    versionId: 'version-2',
+    expectedUpdatedAt: '2026-03-21T09:00:00.000Z',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params)
+        if (runtimeSchemaResult) {
+          return runtimeSchemaResult
+        }
+
+        if (/from assessment_versions av/i.test(sql)) {
+          return { rows: [makeManagedVersionRow({ sign_off_status: 'signed_off', sign_off_at: '2026-03-21T09:30:00.000Z', sign_off_by_name: 'Rina Patel', sign_off_material_updated_at: '2026-03-21T08:00:00.000Z' })] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/select key, name\s+from assessment_versions/i.test(sql)) {
+          return { rows: [{ key: 'signals-v1', name: 'Sonartra Signals' }] }
+        }
+
+        if (/insert into assessment_question_sets/i.test(sql) || /update assessment_question_sets/i.test(sql) || /insert into assessment_questions/i.test(sql) || /delete from assessment_questions/i.test(sql) || /insert into assessment_question_options/i.test(sql) || /delete from assessment_question_options/i.test(sql) || /insert into assessment_option_signal_mappings/i.test(sql) || /delete from assessment_option_signal_mappings/i.test(sql) || /update assessment_versions\s+set publish_readiness_status/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'archived'/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions\s+set lifecycle_status = 'published'/i.test(sql)) {
+          const error = new Error('new row for relation "assessment_versions" violates check constraint "assessment_versions_lifecycle_status_check"') as Error & { code?: string; table?: string }
+          error.code = '23514'
+          error.table = 'assessment_versions'
+          throw error
+        }
+
+        if (/insert into access_audit_events/i.test(sql) || /update assessment_definitions/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-21T10:00:00.000Z'),
+    createId: (() => {
+      const ids = ['audit-1', 'audit-2']
+      return () => ids.shift() ?? 'audit-3'
+    })(),
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'unknown_error')
+  assert.equal(result.message, 'Database request failed due to a database error.')
+  assert.doesNotMatch(result.message, /assessment_versions_lifecycle_status_check|violates check constraint/i)
 })
 
 test('archive version succeeds and requires confirmation', async () => {

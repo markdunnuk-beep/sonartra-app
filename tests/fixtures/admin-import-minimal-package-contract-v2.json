@@ -4,6 +4,8 @@
   "metadata": {
     "assessmentKey": "admin-import-minimal",
     "assessmentName": "Admin Import Minimal",
+    "slug": "admin-import-minimal",
+    "category": "other",
     "description": "Minimal Package Contract v2 fixture for admin import testing.",
     "locales": {
       "defaultLocale": "en-US",

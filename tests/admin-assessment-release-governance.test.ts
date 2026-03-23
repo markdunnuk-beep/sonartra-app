@@ -430,6 +430,9 @@ test('material package updates invalidate sign-off and release notes persist', a
     getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
     withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
       query: async (sql: string, params: unknown[] = []) => {
+        if (/select id, key, slug, name, category, description\s+from assessment_definitions\s+where id = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-1', key: 'sonartra_signals', slug: 'sonartra-signals', name: 'Sonartra Signals', category: 'behavioural_intelligence', description: null }] }
+        }
         if (/from assessment_versions av[\s\S]*where av.id = \$1[\s\S]*assessment_definition_id = \$2/i.test(sql)) {
           return { rows: [updatedRows[0]] }
         }

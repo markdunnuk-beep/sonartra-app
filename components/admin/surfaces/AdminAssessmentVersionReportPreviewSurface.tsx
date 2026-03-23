@@ -121,13 +121,13 @@ export function AdminAssessmentVersionReportPreviewSurface({
       ) : (
         <SurfaceSection
           title="Report preview workspace"
-          eyebrow="Blocked"
-          description="The report-output preview layer is intentionally blocked until the attached package is valid enough to simulate truthfully."
+          eyebrow="Workflow step"
+          description="Report preview becomes available after the version can run a truthful admin simulation."
         >
           <EmptyState
-            title="Report-output preview is blocked"
-            detail={previewStatus.blockingReason ?? 'Attach and validate a normalized package before generating report output previews.'}
-            action={<Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/import`} variant="secondary">Open package import</Button>}
+            title="No report preview yet"
+            detail={previewStatus.blockingReason ?? 'Run a simulation-ready package import first, then generate a preview from a sample scenario.'}
+            action={<Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/simulate`} variant="secondary">Open simulation workspace</Button>}
           />
         </SurfaceSection>
       )}

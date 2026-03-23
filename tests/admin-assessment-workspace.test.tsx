@@ -428,7 +428,7 @@ test('assessment registry renders server-driven list rows and package-first prim
 
   assert.match(html, /Assessment registry/)
   assert.match(html, /Import assessment package/)
-  assert.match(html, /Manual container fallback/)
+  assert.match(html, /Manual draft fallback/)
   assert.match(html, /Sonartra Signals/)
   assert.match(html, /sonartra_signals/)
   assert.match(html, /No published version|v1.2.0/)
@@ -460,7 +460,7 @@ test('manual container and package-first import surfaces describe the transition
   assert.match(manualCreateSource, /Package import is now the preferred way/)
   assert.match(packageImportSource, /Package-first workflow/)
   assert.match(packageImportSource, /Package owns identity/)
-  assert.match(packageImportSource, /Open manual container flow/)
+  assert.match(packageImportSource, /Open manual draft fallback/)
 })
 
 test('assessment versions workspace surfaces package evidence and diff snippets', async () => {
@@ -572,7 +572,7 @@ test('assessment version detail surface renders clean no-package state', () => {
 
   assert.match(html, /No package attached/)
   assert.match(html, /Blocked/)
-  assert.match(html, /First version|No prior version exists yet/)
+  assert.match(html, /First version|no comparison baseline yet/i)
 })
 
 test('assessment version detail surface renders invalid-package state cleanly', () => {

@@ -44,6 +44,8 @@ export interface SonartraAssessmentPackageV2ValidatedImport extends SonartraAsse
 export interface SonartraAssessmentPackageV2Metadata {
   assessmentKey: string
   assessmentName: string
+  slug: string
+  category: string
   description?: string | null
   locales: {
     defaultLocale: string
@@ -1194,6 +1196,8 @@ export function validateSonartraAssessmentPackageV2(input: unknown): SonartraAss
     metadata: {
       assessmentKey: asTrimmedString(metadataInput?.assessmentKey) ?? '',
       assessmentName: asTrimmedString(metadataInput?.assessmentName) ?? '',
+      slug: asTrimmedString(metadataInput?.slug) ?? '',
+      category: asTrimmedString(metadataInput?.category) ?? '',
       description: asTrimmedString(metadataInput?.description),
       locales: {
         defaultLocale,
@@ -1242,6 +1246,12 @@ export function validateSonartraAssessmentPackageV2(input: unknown): SonartraAss
   }
   if (!normalizedPackage.metadata.assessmentName) {
     pushIssue(errors, 'metadata.assessmentName', 'assessmentName is required.')
+  }
+  if (!normalizedPackage.metadata.slug) {
+    pushIssue(errors, 'metadata.slug', 'slug is required.')
+  }
+  if (!normalizedPackage.metadata.category) {
+    pushIssue(errors, 'metadata.category', 'category is required.')
   }
   if (!normalizedPackage.metadata.compatibility.packageSemver) {
     pushIssue(errors, 'metadata.compatibility.packageSemver', 'packageSemver is required.')
