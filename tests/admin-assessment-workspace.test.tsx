@@ -519,26 +519,39 @@ test('assessment detail settings tab renders package-aware metadata and compiler
   assert.match(html, /Package normalization pipeline active/i)
 })
 
-test('assessment version detail surface renders package preview diff and readiness evidence', async () => {
-  const detailHtml = renderToStaticMarkup(<AdminAssessmentVersionDetailSurface detailData={detailData} version={detailData.versions[1]} />)
+test('assessment version detail surface renders simplified operator workflow and reduced activity', async () => {
+  const detailHtml = renderToStaticMarkup(<AdminAssessmentVersionDetailSurface detailData={detailData} version={detailData.versions[1]} mutation="package-imported" />)
+  const importHtml = renderToStaticMarkup(<AdminAssessmentVersionDetailSurface detailData={detailData} version={detailData.versions[1]} mode="import" />)
   const [versionSurfaceSource, importFormSource, simulationSurfaceSource] = await Promise.all([
     readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionDetailSurface.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../components/admin/surfaces/AdminAssessmentVersionPackageImportForm.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../components/admin/surfaces/AdminAssessmentSimulationWorkspace.tsx', import.meta.url), 'utf8'),
   ])
 
-  assert.match(detailHtml, /Package Preview/)
-  assert.match(detailHtml, /Publish Readiness/)
-  assert.match(detailHtml, /Diff/)
+  assert.match(detailHtml, /Review this version before publishing\./)
+  assert.match(detailHtml, /Assessment package uploaded successfully\./)
+  assert.match(detailHtml, /Status/)
+  assert.match(detailHtml, /Ready to publish/)
+  assert.match(detailHtml, /Version actions/)
+  assert.match(detailHtml, /Test assessment/)
+  assert.match(detailHtml, /Run test/)
+  assert.match(detailHtml, /Check readiness/)
+  assert.match(detailHtml, /Publish version/)
+  assert.match(detailHtml, /Package summary/)
   assert.match(detailHtml, /signals-v1\.3\.json/)
-  assert.match(detailHtml, /q2/)
-  assert.match(detailHtml, /Structured comparison against v1.2.0 found operational package changes\./)
-  assert.match(detailHtml, /Ready with warnings/)
-  assert.match(detailHtml, /Latest regression suite snapshot/)
-  assert.match(detailHtml, /1 \/ 1 \/ 0|1 \/ 1 \/ 0/)
-  assert.match(versionSurfaceSource, /Import assessment package/)
-  assert.match(versionSurfaceSource, /Latest regression suite snapshot/)
-  assert.match(versionSurfaceSource, /Assessment package imported successfully\./)
+  assert.match(detailHtml, /Recent activity/)
+  assert.match(detailHtml, /Publish blocked for Sonartra Signals v1\.3\.0/)
+  assert.doesNotMatch(detailHtml, /Import assessment package/)
+  assert.doesNotMatch(detailHtml, /Latest regression suite snapshot/)
+  assert.doesNotMatch(detailHtml, /Simulation workspace/)
+  assert.doesNotMatch(detailHtml, /Sign off version/)
+  assert.doesNotMatch(detailHtml, /Validation evidence/)
+  assert.doesNotMatch(detailHtml, /Diff/)
+  assert.match(importHtml, /Import assessment package/)
+  assert.match(versionSurfaceSource, /Assessment package uploaded successfully\./)
+  assert.match(versionSurfaceSource, /Review this version before publishing\./)
+  assert.match(versionSurfaceSource, /Package summary/)
+  assert.doesNotMatch(versionSurfaceSource, /Latest regression suite snapshot/)
   assert.match(importFormSource, /Validation results/)
   assert.match(simulationSurfaceSource, /Import scenarios from previous version/)
   assert.match(simulationSurfaceSource, /Clone an individual scenario/)
@@ -591,9 +604,10 @@ test('assessment version detail surface renders clean no-package state', () => {
     savedScenarios: [],
   }} />)
 
-  assert.match(html, /No package attached/)
-  assert.match(html, /Blocked/)
-  assert.match(html, /First version|no comparison baseline yet/i)
+  assert.match(html, /No package uploaded/)
+  assert.match(html, /Ready to publish/)
+  assert.match(html, /No/)
+  assert.match(html, /Issues/)
 })
 
 test('assessment version detail surface renders invalid-package state cleanly', () => {
@@ -616,9 +630,9 @@ test('assessment version detail surface renders invalid-package state cleanly', 
   }
   const html = renderToStaticMarkup(<AdminAssessmentVersionDetailSurface detailData={{ ...detailData, versions: [invalidVersion, detailData.versions[0]] }} version={invalidVersion} />)
 
-  assert.match(html, /Package preview unavailable/)
+  assert.match(html, /Issues/)
   assert.match(html, /Question references unknown dimension/)
-  assert.match(html, /Blocked/)
+  assert.match(html, /This version is not ready yet\./)
 })
 
 test('assessment route helpers normalise tabs and registry filters', () => {
@@ -732,7 +746,7 @@ test('assessment routes and actions wire server data loading, import workflow, a
   assert.match(versionRoute, /AdminAssessmentVersionDetailSurface/)
   assert.match(importRoute, /mode="import"/)
   assert.match(versionNotFoundSource, /Assessment version not found/)
-  assert.match(versionSurfaceSource, /Package Preview/)
-  assert.match(versionSurfaceSource, /Publish Readiness/)
+  assert.match(versionSurfaceSource, /Package summary/)
+  assert.match(versionSurfaceSource, /Version actions/)
   assert.match(importFormSource, /Validate \+ attach package/)
 })
