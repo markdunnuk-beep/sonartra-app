@@ -11,7 +11,9 @@
     "db:migrate": "node scripts/run-migrations.mjs",
     "db:seed:wplp80": "node scripts/seed-wplp80-question-bank.mjs",
     "bootstrap:admin-access-registry": "tsx scripts/bootstrap-admin-access-registry.ts --dry-run",
-    "db:audit:migrations": "node scripts/audit-migrations.mjs"
+    "db:audit:migrations": "node scripts/audit-migrations.mjs",
+    "db:align:mvp-baseline": "tsx scripts/align-mvp-baseline.ts",
+    "db:verify:mvp-baseline": "tsx scripts/verify-mvp-baseline.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.39.0",
