@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg'
 
 import { materializeAssessmentOutputsV2, type MaterializedAssessmentOutputsV2 } from '@/lib/admin/domain/assessment-package-v2-materialization'
+import type { V2PersistedEvaluationArtifact } from '@/lib/admin/domain/assessment-package-v2-performance'
 import type { AssessmentEvaluationResultV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
 import {
   SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
@@ -22,7 +23,7 @@ import {
   createPackageRuntimeFingerprint,
   decideEvaluationArtifactReuse,
   getOrCompileRuntime,
-} from '@/lib/admin/domain/assessment-package-v2-performance'
+} from '@/lib/admin/domain/assessment-package-v2-performance-server'
 
 export type LiveAssessmentContractVersion = 'legacy_v1' | 'package_contract_v2'
 export type RuntimeExecutionDiagnosticCode =
@@ -88,25 +89,6 @@ export interface V2LiveQuestionDeliveryContract {
     value: unknown
     updatedAt: string | null
   }>
-}
-
-export interface V2PersistedEvaluationArtifact {
-  contractVersion: 'package_contract_v2'
-  runtimeVersion: string
-  packageSchemaVersion: typeof SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
-  resultArtifactVersion: string
-  packageFingerprint: string
-  compiledAt: string
-  packageMetadata: {
-    assessmentKey: string
-    assessmentName: string
-    packageSemver: string
-  }
-  evaluation: AssessmentEvaluationResultV2
-  materializedOutputs: V2PersistedMaterializedOutputs
-  completedAt: string | null
-  scoredAt: string | null
-  generatedAt: string | null
 }
 
 export type V2PersistedMaterializedOutputs = MaterializedAssessmentOutputsV2

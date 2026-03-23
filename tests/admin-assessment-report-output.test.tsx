@@ -9,7 +9,7 @@ import { AdminAssessmentVersionReportPreviewSurface } from '../components/admin/
 import type { AdminAssessmentDetailData } from '../lib/admin/domain/assessment-management'
 import type { SonartraAssessmentPackageV1 } from '../lib/admin/domain/assessment-package'
 import { generateAdminAssessmentReportOutput, getAdminAssessmentReportPreviewWorkspaceStatus } from '../lib/admin/domain/assessment-report-output'
-import { buildAdminAssessmentSimulationScenario, executeAdminAssessmentSimulation } from '../lib/admin/domain/assessment-simulation'
+import { buildAdminAssessmentSimulationScenario, executeAdminAssessmentSimulation } from '../lib/admin/domain/assessment-simulation-server'
 
 const basePackage: SonartraAssessmentPackageV1 = {
   meta: {
