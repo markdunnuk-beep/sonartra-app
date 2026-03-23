@@ -329,7 +329,7 @@ export function AdminAssessmentSimulationWorkspace({
               <p className="mt-3 text-sm leading-6 text-textSecondary">
                 {state.result
                   ? `${state.result.responseSummary.answeredCount}/${state.result.responseSummary.totalQuestions} answers evaluated · ${state.result.outputs.filter((output) => output.triggered).length} outputs fired.`
-                  : 'Run a simulation to populate operational evidence for this draft or published version.'}
+                  : 'No simulation run yet. Run a simulation to populate operational evidence for this draft or published version.'}
               </p>
             </div>
           </div>
@@ -438,7 +438,7 @@ export function AdminAssessmentSimulationWorkspace({
             ) : null}
           </div>
         ) : (
-          <EmptyState title="No simulation result yet" detail="Run a simulation to inspect input coverage, raw scoring, normalization, output triggers, and trace evidence for this version." />
+          <EmptyState title="No simulation run yet" detail="Run a simulation to inspect input coverage, raw scoring, normalization, output triggers, and trace evidence for this version." />
         )}
       </SurfaceSection>
 

@@ -121,7 +121,7 @@ function RegistryRows({ data }: { data: AdminAssessmentRegistryData }) {
           ? data.notice.detail
           : hasFilters
             ? 'Adjust the query, lifecycle, or category filters to widen the registry slice.'
-            : 'Import the first package to create a governed assessment automatically, or use the manual container fallback only when a package is not ready yet.'}
+            : 'Import the first package to create a governed assessment automatically, or use the manual draft fallback only when a package is not ready yet.'}
         action={data.notice
           ? <Button href="/admin/assessments" variant="secondary">Retry registry load</Button>
           : <Button href="/admin/assessments/import" variant="secondary">Import assessment package</Button>}
@@ -190,7 +190,7 @@ export function AdminAssessmentsRegistrySurface({ data }: { data: AdminAssessmen
       <AdminPageHeader
         eyebrow="Assessments"
         title="Assessment registry"
-        description="Registry of assessment lines, stable library keys, and version history created from uploaded packages, with admin governance layered on top."
+        description="Registry of assessment lines, stable assessment keys, and version history created from uploaded packages, with admin governance layered on top."
         actions={<Button href="/admin/assessments/import" variant="secondary">Import assessment package</Button>}
       />
 
@@ -205,7 +205,7 @@ export function AdminAssessmentsRegistrySurface({ data }: { data: AdminAssessmen
         title="Assessment registry workspace"
         eyebrow="Operational registry"
         description="Server-rendered registry view with URL-driven filters, package-first import entry, bounded pagination, and direct drill-in to each assessment workspace."
-        actions={<div className="flex flex-wrap gap-2"><Button href="/admin/assessments/import" variant="secondary">Upload package</Button><Button href="/admin/assessments/new" variant="ghost">Manual container fallback</Button></div>}
+        actions={<div className="flex flex-wrap gap-2"><Button href="/admin/assessments/import" variant="secondary">Upload package</Button><Button href="/admin/assessments/new" variant="ghost">Manual draft fallback</Button></div>}
       >
         <div className="space-y-4">
           <RegistryNotice data={data} />

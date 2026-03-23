@@ -316,18 +316,18 @@ export function extractAssessmentPackageIdentity(
 
   if (imported.detectedVersion === 'legacy_v1') {
     const meta = isRecord(input.meta) ? input.meta : {}
-    const libraryKey = asTrimmedString(meta.assessmentKey)
+    const assessmentKey = asTrimmedString(meta.assessmentKey)
     const assessmentName = asTrimmedString(meta.assessmentTitle)
     const explicitSlug = normalizeSlug(asTrimmedString((meta as Record<string, unknown>).slug) ?? asTrimmedString(input.slug))
     const explicitCategory = normalizeCategory(asTrimmedString((meta as Record<string, unknown>).category) ?? asTrimmedString(input.category))
     const derivedFields: Array<'slug' | 'category'> = []
 
-    if (!libraryKey) {
+    if (!assessmentKey) {
       conflicts.push({
         code: 'missing_identity_metadata',
         severity: 'error',
-        field: 'libraryKey',
-        message: 'Package identity is missing the required library key.',
+        field: 'assessmentKey',
+        message: 'Package identity is missing the required assessment key.',
       })
     }
 
@@ -340,7 +340,7 @@ export function extractAssessmentPackageIdentity(
       })
     }
 
-    const slug = explicitSlug ?? normalizeSlug(libraryKey ?? assessmentName ?? null)
+    const slug = explicitSlug ?? normalizeSlug(assessmentKey ?? assessmentName ?? null)
     if (!explicitSlug && slug) {
       derivedFields.push('slug')
       conflicts.push({
@@ -362,7 +362,7 @@ export function extractAssessmentPackageIdentity(
       })
     }
 
-    if (!libraryKey || !assessmentName || !slug) {
+    if (!assessmentKey || !assessmentName || !slug) {
       return { identity: null, conflicts }
     }
 
@@ -373,8 +373,8 @@ export function extractAssessmentPackageIdentity(
 
     return {
       identity: {
+        assessmentKey,
         assessmentName,
-        libraryKey,
         slug,
         category,
         description: asTrimmedString(input.description),
@@ -397,21 +397,18 @@ export function extractAssessmentPackageIdentity(
     const locales = isRecord(metadata.locales) ? metadata.locales : {}
     const authoring = isRecord(metadata.authoring) ? metadata.authoring : {}
     const compatibility = isRecord(metadata.compatibility) ? metadata.compatibility : {}
-    const libraryKey = asTrimmedString(metadata.assessmentKey)
+    const assessmentKey = asTrimmedString(metadata.assessmentKey)
     const assessmentName = asTrimmedString(metadata.assessmentName)
     const explicitSlug = normalizeSlug(asTrimmedString((metadata as Record<string, unknown>).slug))
-    const explicitCategory = normalizeCategory(
-      asTrimmedString((metadata as Record<string, unknown>).category)
-      ?? (Array.isArray(metadata.tags) ? asTrimmedString(metadata.tags[0]) : null),
-    )
+    const explicitCategory = normalizeCategory(asTrimmedString((metadata as Record<string, unknown>).category))
     const derivedFields: Array<'slug' | 'category'> = []
 
-    if (!libraryKey) {
+    if (!assessmentKey) {
       conflicts.push({
         code: 'missing_identity_metadata',
         severity: 'error',
-        field: 'libraryKey',
-        message: 'Package identity is missing the required library key.',
+        field: 'assessmentKey',
+        message: 'Package identity is missing the required assessment key.',
       })
     }
 
@@ -424,36 +421,34 @@ export function extractAssessmentPackageIdentity(
       })
     }
 
-    const slug = explicitSlug ?? normalizeSlug(libraryKey ?? assessmentName ?? null)
-    if (!explicitSlug && slug) {
-      derivedFields.push('slug')
-      conflicts.push({
-        code: 'identity_metadata_changed',
-        severity: 'warning',
-        field: 'slug',
-        message: 'The package does not declare a slug, so the review generated one from the package identity for backward compatibility.',
-      })
-    }
+    const slug = explicitSlug
 
-    const category = explicitCategory ?? 'other'
-    if (!explicitCategory) {
-      derivedFields.push('category')
-      conflicts.push({
-        code: 'identity_metadata_changed',
-        severity: 'warning',
-        field: 'category',
-        message: 'The package does not declare a category, so the review defaulted the category to other for backward compatibility.',
-      })
-    }
+    const category = explicitCategory ?? null
 
-    if (!libraryKey || !assessmentName || !slug) {
+    if (!assessmentKey || !assessmentName || !slug || !category) {
+      if (!slug) {
+        conflicts.push({
+          code: 'missing_identity_metadata',
+          severity: 'error',
+          field: 'slug',
+          message: 'Package identity is missing the required slug for the package-first import path.',
+        })
+      }
+      if (!category) {
+        conflicts.push({
+          code: 'missing_identity_metadata',
+          severity: 'error',
+          field: 'category',
+          message: 'Package identity is missing the required category for the package-first import path.',
+        })
+      }
       return { identity: null, conflicts }
     }
 
     return {
       identity: {
+        assessmentKey,
         assessmentName,
-        libraryKey,
         slug,
         category,
         description: asTrimmedString(metadata.description),

@@ -265,8 +265,8 @@ export interface AdminAssessmentPackageImportState {
 }
 
 export interface AssessmentPackageIdentity {
+  assessmentKey: string
   assessmentName: string
-  libraryKey: string
   slug: string
   category: string
   description: string | null
@@ -282,14 +282,14 @@ export interface AssessmentPackageIdentity {
 }
 
 export interface AssessmentIdentityMutabilityRule {
-  field: 'libraryKey' | 'assessmentName' | 'slug' | 'category'
+  field: 'assessmentKey' | 'assessmentName' | 'slug' | 'category'
   mutability: 'immutable' | 'mutable_with_conflict_rules' | 'mutable'
   summary: string
 }
 
 export const ADMIN_ASSESSMENT_IDENTITY_MUTABILITY_RULES: AssessmentIdentityMutabilityRule[] = [
   {
-    field: 'libraryKey',
+    field: 'assessmentKey',
     mutability: 'immutable',
     summary: 'Stable assessment identity anchor used for import matching and create-or-attach decisions.',
   },
@@ -301,7 +301,7 @@ export const ADMIN_ASSESSMENT_IDENTITY_MUTABILITY_RULES: AssessmentIdentityMutab
   {
     field: 'slug',
     mutability: 'mutable_with_conflict_rules',
-    summary: 'Slug can evolve when it remains unique; collisions with a different library key must block import.',
+    summary: 'Slug can evolve when it remains unique; collisions with a different assessment key must block import.',
   },
   {
     field: 'category',
@@ -313,13 +313,13 @@ export const ADMIN_ASSESSMENT_IDENTITY_MUTABILITY_RULES: AssessmentIdentityMutab
 export interface AssessmentImportConflict {
   code:
     | 'missing_identity_metadata'
-    | 'immutable_library_key_mismatch'
+    | 'immutable_assessment_key_mismatch'
     | 'slug_collision'
     | 'duplicate_version_label'
     | 'package_validation_failed'
     | 'identity_metadata_changed'
   severity: 'error' | 'warning'
-  field?: 'libraryKey' | 'assessmentName' | 'slug' | 'category' | 'versionLabel'
+  field?: 'assessmentKey' | 'assessmentName' | 'slug' | 'category' | 'versionLabel'
   message: string
 }
 

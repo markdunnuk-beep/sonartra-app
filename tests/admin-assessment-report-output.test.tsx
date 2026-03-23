@@ -394,8 +394,8 @@ test('report preview workspace status and surface block invalid package states c
 
   const detailData = createDetailData(basePackage, 'invalid')
   const html = renderToStaticMarkup(<AdminAssessmentVersionReportPreviewSurface detailData={detailData} version={detailData.versions[0]!} />)
-  assert.match(html, /Report-output preview is blocked/)
-  assert.match(html, /Open package import/)
+  assert.match(html, /No report preview yet/)
+  assert.match(html, /Open simulation workspace/)
 })
 
 test('canonical report preview route uses version-level path and notFound handling', async () => {

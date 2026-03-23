@@ -82,6 +82,8 @@ test('Package Contract v2 rejects missing required structural blocks', () => {
     metadata: {
       assessmentKey: 'empty',
       assessmentName: 'Empty Assessment',
+      slug: 'empty-assessment',
+      category: 'other',
       locales: {
         defaultLocale: 'en-US',
         supportedLocales: [],

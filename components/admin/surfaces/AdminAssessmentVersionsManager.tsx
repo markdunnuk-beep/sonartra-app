@@ -161,7 +161,7 @@ export function AdminAssessmentVersionsManager({
                 </div>,
                 <div key={`${version.id}-evidence`} className="space-y-2">
                   <p className="text-sm leading-6 text-textPrimary">{controlTower.snippet}</p>
-                  <p className="text-xs text-textSecondary">{controlTower.diff.baseline ? `Compared with v${controlTower.diff.baseline.versionLabel}` : 'No baseline yet'}</p>
+                  <p className="text-xs text-textSecondary">{controlTower.diff.baseline ? `Compared with v${controlTower.diff.baseline.versionLabel}` : 'First version — no comparison baseline yet'}</p>
                   <p className="text-xs text-textSecondary">Simulation: {simulationStatus.statusLabel.toLowerCase()}.</p>
                   <p className="text-xs text-textSecondary">Report preview: {reportPreviewStatus.statusLabel.toLowerCase()}{reportPreviewStatus.canGeneratePreview ? ' after sample scenario.' : '.'}</p>
                 </div>,

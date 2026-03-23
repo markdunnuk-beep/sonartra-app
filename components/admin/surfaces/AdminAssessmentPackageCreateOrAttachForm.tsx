@@ -53,7 +53,7 @@ function ReviewPanel({ state }: { state: ReturnType<typeof normalizeAdminAssessm
       {identity ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-white/[0.08] bg-bg/35 p-3 text-sm text-textSecondary"><p className="text-[11px] uppercase tracking-[0.16em]">Assessment name</p><p className="mt-2 text-textPrimary">{identity.assessmentName}</p></div>
-          <div className="rounded-2xl border border-white/[0.08] bg-bg/35 p-3 text-sm text-textSecondary"><p className="text-[11px] uppercase tracking-[0.16em]">Library key</p><p className="mt-2 break-all text-textPrimary">{identity.libraryKey}</p></div>
+          <div className="rounded-2xl border border-white/[0.08] bg-bg/35 p-3 text-sm text-textSecondary"><p className="text-[11px] uppercase tracking-[0.16em]">Assessment key</p><p className="mt-2 break-all text-textPrimary">{identity.assessmentKey}</p><p className="mt-2 text-xs text-textSecondary">Canonical stable identity. Previously called library key.</p></div>
           <div className="rounded-2xl border border-white/[0.08] bg-bg/35 p-3 text-sm text-textSecondary"><p className="text-[11px] uppercase tracking-[0.16em]">Slug</p><p className="mt-2 break-all text-textPrimary">{identity.slug}</p></div>
           <div className="rounded-2xl border border-white/[0.08] bg-bg/35 p-3 text-sm text-textSecondary"><p className="text-[11px] uppercase tracking-[0.16em]">Category</p><p className="mt-2 text-textPrimary">{identity.category}</p></div>
         </div>
@@ -63,9 +63,9 @@ function ReviewPanel({ state }: { state: ReturnType<typeof normalizeAdminAssessm
         <p className="font-medium text-textPrimary">Import decision</p>
         <p className="mt-2">
           {decision?.action === 'create_assessment'
-            ? 'The library key is new, so confirmation will create a new parent assessment and import the package as its first version.'
+            ? 'The assessment key is new, so confirmation will create a new parent assessment and import the package as its first version.'
             : decision?.matchedAssessment
-              ? `The library key already exists, so confirmation will attach a new version to ${decision.matchedAssessment.name}.`
+              ? `The assessment key already exists, so confirmation will attach a new version to ${decision.matchedAssessment.name}.`
               : 'Review the package metadata before importing.'}
         </p>
         {decision?.matchedAssessment ? (
@@ -120,7 +120,7 @@ export function AdminAssessmentPackageCreateOrAttachForm() {
       <AdminPageHeader
         eyebrow="Assessments"
         title="Import assessment package"
-        description="Package-first workflow for parsing canonical identity metadata, matching by stable library key, and either creating a new assessment or attaching a new version."
+        description="Package-first workflow for parsing canonical identity metadata, matching by stable assessment key, and either creating a new assessment or attaching a new version."
         actions={<Button href="/admin/assessments" variant="ghost"><ArrowLeft className="mr-2 h-4 w-4" />Back to registry</Button>}
       />
 
@@ -128,7 +128,7 @@ export function AdminAssessmentPackageCreateOrAttachForm() {
         <SurfaceSection
           title="Upload package"
           eyebrow="Package-first import"
-          description="Upload or paste a JSON package, review the parsed identity, and confirm the create-versus-attach decision before the registry is mutated."
+          description="Upload or paste a JSON package, review what the package says, confirm the system decision, and inspect warnings or overrides before anything is persisted."
         >
           <form action={action} className="space-y-4">
             {state.message ? (
@@ -143,7 +143,7 @@ export function AdminAssessmentPackageCreateOrAttachForm() {
                 name="packageText"
                 rows={18}
                 defaultValue={state.packageText}
-                placeholder='Paste a Sonartra package JSON payload. The package is the source of truth for assessment name, library key, slug, category, and version metadata during import.'
+                placeholder='Paste a Sonartra package JSON payload. The package is the source of truth for assessment name, assessment key, slug, category, and version metadata during import.'
                 className="min-h-[28rem] w-full rounded-2xl border border-border/90 bg-panel/70 px-4 py-3 text-sm leading-6 text-textPrimary outline-none ring-accent/40 focus:border-accent/50 focus:ring"
               />
               {state.fieldErrors?.packageText ? <p className="text-sm text-rose-200">{state.fieldErrors.packageText}</p> : null}
@@ -179,8 +179,8 @@ export function AdminAssessmentPackageCreateOrAttachForm() {
             </div>
             <h2 className="mt-2 text-[1.15rem] font-semibold tracking-tight text-textPrimary">Package owns identity</h2>
             <div className="mt-4 space-y-3 text-sm leading-6 text-textSecondary">
-              <p>Assessment name, library key, slug, category, and package version now come from the uploaded package instead of being re-keyed by hand in admin.</p>
-              <p>The import review matches by stable library key, shows whether the system will create a new assessment or attach a new version, and surfaces conflicts before persistence.</p>
+              <p>Assessment name, assessment key, slug, category, and package version now come from the uploaded package instead of being re-keyed by hand in admin.</p>
+              <p>The import review matches by stable assessment key, shows whether the system will create a new assessment or attach a new version, and surfaces conflicts before persistence.</p>
               <p>Admin keeps control of governance fields such as publish status, release notes, runtime enablement, and availability after the package is imported.</p>
             </div>
           </Card>
@@ -205,10 +205,10 @@ export function AdminAssessmentPackageCreateOrAttachForm() {
 
           <Card className="px-6 py-5 sm:px-7 sm:py-6">
             <p className="eyebrow">Transitional fallback</p>
-            <h2 className="mt-2 text-[1.15rem] font-semibold tracking-tight text-textPrimary">Manual container creation still exists</h2>
-            <p className="mt-4 text-sm leading-6 text-textSecondary">Use the manual container flow only when you need an exceptional draft shell before a package exists. It is no longer the primary authoring path.</p>
+            <h2 className="mt-2 text-[1.15rem] font-semibold tracking-tight text-textPrimary">Manual draft container remains available</h2>
+            <p className="mt-4 text-sm leading-6 text-textSecondary">Use the manual draft fallback only when you need an exceptional draft shell before a package exists. It is an advanced fallback, not the primary authoring path.</p>
             <div className="mt-4">
-              <Button href="/admin/assessments/new" variant="secondary">Open manual container flow</Button>
+              <Button href="/admin/assessments/new" variant="secondary">Open manual draft fallback</Button>
             </div>
           </Card>
         </div>

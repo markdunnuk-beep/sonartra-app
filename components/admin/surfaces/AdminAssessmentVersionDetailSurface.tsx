@@ -189,7 +189,7 @@ export function AdminAssessmentVersionDetailSurface({
         <div className="rounded-[1.25rem] border border-white/[0.08] bg-panel/60 p-4">
           <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Comparison baseline</p>
           <div className="mt-3 flex items-center gap-2 text-lg font-semibold text-textPrimary"><GitCompareArrows className="h-4 w-4 text-textSecondary" />{diff.baseline ? `v${diff.baseline.versionLabel}` : 'First version'}</div>
-          <p className="mt-3 text-sm leading-6 text-textSecondary">{diff.baseline?.summary ?? 'No prior version exists yet, so this draft is reviewed on its own evidence only.'}</p>
+          <p className="mt-3 text-sm leading-6 text-textSecondary">{diff.baseline?.summary ?? 'This is the first imported version, so there is no comparison baseline yet. Future versions will compare against the strongest available baseline automatically.'}</p>
         </div>
         <div className="rounded-[1.25rem] border border-white/[0.08] bg-panel/60 p-4">
           <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Package stats</p>
@@ -413,7 +413,7 @@ export function AdminAssessmentVersionDetailSurface({
       <SurfaceSection title="Diff" eyebrow="Version comparison" description="Structured operational comparison against the strongest truthful baseline for this version.">
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge label={diff.baseline ? `Baseline v${diff.baseline.versionLabel}` : 'No baseline'} tone={diff.baseline ? 'sky' : 'slate'} />
+            <Badge label={diff.baseline ? `Baseline v${diff.baseline.versionLabel}` : 'First version'} tone={diff.baseline ? 'sky' : 'slate'} />
             <Badge label={diff.materiallyDifferent ? 'Materially different' : 'No material change'} tone={diff.materiallyDifferent ? 'violet' : 'slate'} />
             <p className="text-sm text-textSecondary">{diff.summary}</p>
           </div>

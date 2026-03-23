@@ -64,7 +64,7 @@ function OverviewTab({ detailData }: { detailData: AdminAssessmentDetailData }) 
           <MetaGrid
             items={[
               { label: 'Assessment name', value: assessment.name },
-              { label: 'Library key', value: assessment.key },
+              { label: 'Assessment key', value: assessment.key, hint: 'Previously referred to as library key.' },
               { label: 'Slug', value: assessment.slug },
               { label: 'Category', value: getAdminAssessmentCategoryLabel(assessment.category) },
               { label: 'Lifecycle', value: assessment.lifecycleStatus },
@@ -117,7 +117,7 @@ function SettingsTab({ detailData }: { detailData: AdminAssessmentDetailData }) 
       <MetaGrid
         items={[
           { label: 'Assessment ID', value: assessment.id },
-          { label: 'Library key', value: assessment.key },
+          { label: 'Assessment key', value: assessment.key, hint: 'Previously referred to as library key.' },
           { label: 'Slug', value: assessment.slug },
           { label: 'Category', value: getAdminAssessmentCategoryLabel(assessment.category) },
           { label: 'Parent lifecycle', value: assessment.lifecycleStatus },
