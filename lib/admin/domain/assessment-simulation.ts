@@ -11,7 +11,7 @@ import { resolveAssessmentPackageLocaleContext } from '@/lib/admin/domain/assess
 import type { AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
 import {
   buildAdminAssessmentSimulationScenarioV2,
-  executeAdminAssessmentSimulationV2,
+  getV2SimulationReadiness,
   parseAdminAssessmentSimulationPayloadV2,
   type AdminAssessmentSimulationRequestV2,
   type AssessmentSimulationResultV2,
@@ -214,7 +214,7 @@ function isPackageContractV2Version(version: Pick<AdminAssessmentVersionRecord, 
     && (version.packageInfo?.status === 'valid' || version.packageInfo?.status === 'valid_with_warnings')
 }
 
-function toLegacyCompatibleV2Result(
+export function toLegacyCompatibleV2Result(
   request: AdminAssessmentSimulationRequestV2,
   result: AssessmentSimulationResultV2,
 ): AdminAssessmentSimulationResult {
@@ -360,20 +360,15 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
   const pkgV2 = isImportedV2Package ? parseStoredValidatedAssessmentPackageV2(version.normalizedPackage as unknown) : null
 
   if (isImportedV2Package) {
-    const executable = pkgV2 ? executeAdminAssessmentSimulationV2(version.normalizedPackage as unknown, {
-      responses: {},
-      locale: pkgV2?.metadata.locales.defaultLocale ?? null,
-      source: 'manual_json',
-      scenarioKey: null,
-    }) : null
-    const readiness = executable?.result.readiness ?? buildSimulationReadinessFlags(false)
+    const readinessState = getV2SimulationReadiness(version.normalizedPackage as unknown)
+    const readiness = readinessState.readiness
 
     if (!pkgV2 || !readiness.simulatable) {
       return {
         eligibility: 'blocked',
         statusLabel: 'Blocked',
         summary: 'Package Contract v2 was imported, but admin simulation is unavailable until the stored package compiles cleanly for the v2 evaluator and materializer.',
-        blockingReason: executable?.result.errors[0]?.message ?? 'Package Contract v2 is not simulatable in admin yet because compilation/readiness is incomplete.',
+        blockingReason: readinessState.compileErrors[0]?.message ?? 'Package Contract v2 is not simulatable in admin yet because compilation/readiness is incomplete.',
         canRunSimulation: false,
       }
     }
@@ -596,45 +591,6 @@ export function parseAdminAssessmentSimulationPayloadForPackage(
   }
 
   return parseAdminAssessmentSimulationPayload(input)
-}
-
-export function executeAdminAssessmentSimulationForPackage(
-  storedPackage: unknown,
-  schemaVersion: string | null | undefined,
-  request: AdminAssessmentSimulationRequest,
-): AdminAssessmentSimulationExecutionResult {
-  if (schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
-    const simulation = executeAdminAssessmentSimulationV2(storedPackage, {
-      responses: request.responses ?? {},
-      locale: request.locale ?? null,
-      source: request.source,
-      scenarioKey: request.scenarioKey ?? null,
-    })
-
-    return {
-      ok: simulation.ok,
-      errors: simulation.result.errors,
-      warnings: simulation.result.warnings,
-      result: toLegacyCompatibleV2Result({
-        responses: request.responses ?? {},
-        locale: request.locale ?? null,
-        source: request.source,
-        scenarioKey: request.scenarioKey ?? null,
-      }, simulation.result),
-    }
-  }
-
-  const legacyPkg = parseStoredNormalizedAssessmentPackage(storedPackage)
-  if (!legacyPkg) {
-    return {
-      ok: false,
-      errors: [{ path: 'package', message: 'No valid normalized package is attached to this version yet.' }],
-      warnings: [],
-      result: null,
-    }
-  }
-
-  return executeAdminAssessmentSimulation(legacyPkg, request)
 }
 
 export function executeAdminAssessmentSimulation(

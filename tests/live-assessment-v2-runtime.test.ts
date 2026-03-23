@@ -10,6 +10,7 @@ import {
   validateSonartraAssessmentPackageV2,
 } from '../lib/admin/domain/assessment-package-v2'
 import { getAdminAssessmentVersionReadiness } from '../lib/admin/domain/assessment-package-review'
+import { PACKAGE_CONTRACT_V2_RESULT_ARTIFACT_VERSION, getOrCompileRuntime } from '../lib/admin/domain/assessment-package-v2-performance-server'
 import { getQuestionsByAssessmentIdWithDependencies } from '../lib/question-bank'
 import { getAssessmentResultReadModel } from '../lib/server/assessment-result-read'
 import { resolveLiveSignalsPublishedVersionState } from '../lib/server/live-signals-runtime'
@@ -324,6 +325,7 @@ test('evaluateCompletedV2Assessment treats duplicate submits during scoring hand
       },
     } as never)) as never,
     getLatestResultSnapshot: (async () => null) as never,
+    getAssessmentResultByAssessmentId: (async () => null) as never,
   })
 
   assert.equal(result.httpStatus, 200)
@@ -335,4 +337,186 @@ test('evaluateCompletedV2Assessment treats duplicate submits during scoring hand
     resultId: null,
   })
   assert.equal(persistCalls, 0)
+})
+
+
+test('evaluateCompletedV2Assessment reuses a valid persisted v2 evaluation artifact without reevaluating', async () => {
+  const pkg = await loadExamplePackage()
+  const compiled = getOrCompileRuntime(pkg, { assessmentVersionId: 'version-v2', bypassCache: true })
+  assert.equal(compiled.ok, true)
+  const evaluation = evaluateAssessmentPackageV2(compiled.executablePackage!, {
+    q1: 'always',
+    q2: 'rarely',
+    q3: 'always',
+    q4: 'often',
+  })
+  const materialized = materializeAssessmentOutputsV2(compiled.executablePackage!, evaluation)
+
+  let persistCalls = 0
+  const { evaluateCompletedV2Assessment } = await import('../lib/server/live-assessment-v2')
+  const existingResult: AssessmentResultRow = {
+    id: 'result-v2-existing',
+    assessment_id: 'assessment-v2',
+    assessment_version_id: 'version-v2',
+    version_key: 'signals-v2-live',
+    scoring_model_key: 'package-contract-v2-runtime',
+    snapshot_version: 1,
+    status: 'complete',
+    result_payload: {
+      contractVersion: 'package_contract_v2',
+      runtimeVersion: compiled.executablePackage!.runtimeVersion,
+      packageSchemaVersion: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+      resultArtifactVersion: PACKAGE_CONTRACT_V2_RESULT_ARTIFACT_VERSION,
+      packageFingerprint: compiled.cache.fingerprint.packageFingerprint,
+      compiledAt: compiled.cache.compiledAt,
+      packageMetadata: {
+        assessmentKey: compiled.executablePackage!.metadata.assessmentKey,
+        assessmentName: compiled.executablePackage!.metadata.assessmentName,
+        packageSemver: compiled.executablePackage!.metadata.compatibility.packageSemver,
+      },
+      evaluation,
+      materializedOutputs: materialized,
+      completedAt: '2026-03-23T12:05:00.000Z',
+      scoredAt: '2026-03-23T12:06:00.000Z',
+      generatedAt: '2026-03-23T12:06:00.000Z',
+    },
+    response_quality_payload: null,
+    completed_at: '2026-03-23T12:05:00.000Z',
+    scored_at: '2026-03-23T12:06:00.000Z',
+    created_at: '2026-03-23T12:06:00.000Z',
+    updated_at: '2026-03-23T12:06:00.000Z',
+  }
+
+  const result = await evaluateCompletedV2Assessment({
+    assessmentId: 'assessment-v2',
+    ownerUserId: 'user-1',
+    persistResult: async () => {
+      persistCalls += 1
+      return { assessmentResultId: 'should-not-run' }
+    },
+  }, {
+    withTransactionFn: (async <T>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        if (/FROM assessments a\s+INNER JOIN assessment_versions av/i.test(sql)) {
+          return {
+            rows: [{
+              assessment_id: 'assessment-v2',
+              assessment_version_id: 'version-v2',
+              assessment_version_key: 'signals-v2-live',
+              assessment_version_name: 'Signals v2 Live',
+              package_schema_version: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+              package_status: 'valid',
+              definition_payload: pkg,
+              assessment_status: 'completed',
+              total_questions: 4,
+              metadata_json: {
+                liveRuntimeV2: {
+                  responses: { q1: 'always', q2: 'rarely', q3: 'always', q4: 'often' },
+                  updatedAtByQuestionId: { q1: '2026-03-23T12:00:00.000Z' },
+                },
+              },
+              completed_at: '2026-03-23T12:05:00.000Z',
+              scoring_status: 'scored',
+            }],
+          }
+        }
+
+        if (/UPDATE assessments/i.test(sql)) {
+          throw new Error(`Valid persisted result should not mutate assessments: ${sql} :: ${JSON.stringify(params)}`)
+        }
+
+        throw new Error(`Unexpected query: ${sql}`)
+      },
+    } as never)) as never,
+    getLatestResultSnapshot: (async () => ({ id: existingResult.id, status: existingResult.status })) as never,
+    getAssessmentResultByAssessmentId: (async () => existingResult) as never,
+  })
+
+  assert.equal(result.httpStatus, 200)
+  assert.equal(result.body.resultId, existingResult.id)
+  assert.equal(result.body.resultStatus, 'succeeded')
+  assert.equal(persistCalls, 0)
+})
+
+test('evaluateCompletedV2Assessment invalidates stale evaluation artifacts deterministically and recomputes', async () => {
+  const pkg = await loadExamplePackage()
+  let persistCalls = 0
+  const { evaluateCompletedV2Assessment } = await import('../lib/server/live-assessment-v2')
+
+  const result = await evaluateCompletedV2Assessment({
+    assessmentId: 'assessment-v2',
+    ownerUserId: 'user-1',
+    persistResult: async () => {
+      persistCalls += 1
+      return { assessmentResultId: 'result-v2-new' }
+    },
+  }, {
+    withTransactionFn: (async <T>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string) => {
+        if (/FROM assessments a\s+INNER JOIN assessment_versions av/i.test(sql)) {
+          return {
+            rows: [{
+              assessment_id: 'assessment-v2',
+              assessment_version_id: 'version-v2',
+              assessment_version_key: 'signals-v2-live',
+              assessment_version_name: 'Signals v2 Live',
+              package_schema_version: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+              package_status: 'valid',
+              definition_payload: pkg,
+              assessment_status: 'completed',
+              total_questions: 4,
+              metadata_json: {
+                liveRuntimeV2: {
+                  responses: { q1: 'always', q2: 'rarely', q3: 'always', q4: 'often' },
+                  updatedAtByQuestionId: { q1: '2026-03-23T12:00:00.000Z' },
+                },
+              },
+              completed_at: '2026-03-23T12:05:00.000Z',
+              scoring_status: 'scored',
+            }],
+          }
+        }
+
+        if (/UPDATE assessments/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected query: ${sql}`)
+      },
+    } as never)) as never,
+    getLatestResultSnapshot: (async () => ({ id: 'stale-result', status: 'complete' })) as never,
+    getAssessmentResultByAssessmentId: (async () => ({
+      id: 'stale-result',
+      assessment_id: 'assessment-v2',
+      assessment_version_id: 'version-v2',
+      version_key: 'signals-v2-live',
+      scoring_model_key: 'package-contract-v2-runtime',
+      snapshot_version: 1,
+      status: 'complete',
+      result_payload: {
+        contractVersion: 'package_contract_v2',
+        runtimeVersion: 'package-contract-v2-runtime/1',
+        packageSchemaVersion: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+        resultArtifactVersion: 'package-contract-v2-result/old',
+        packageFingerprint: 'stale',
+        compiledAt: '2026-03-20T00:00:00.000Z',
+        packageMetadata: { assessmentKey: 'signals', assessmentName: 'Signals', packageSemver: '2.1.0' },
+        evaluation: {},
+        materializedOutputs: {},
+        completedAt: '2026-03-23T12:05:00.000Z',
+        scoredAt: '2026-03-23T12:06:00.000Z',
+        generatedAt: '2026-03-23T12:06:00.000Z',
+      },
+      response_quality_payload: null,
+      completed_at: '2026-03-23T12:05:00.000Z',
+      scored_at: '2026-03-23T12:06:00.000Z',
+      created_at: '2026-03-23T12:06:00.000Z',
+      updated_at: '2026-03-23T12:06:00.000Z',
+    })) as never,
+  })
+
+  assert.equal(result.httpStatus, 200)
+  assert.equal(result.body.resultStatus, 'succeeded')
+  assert.equal(result.body.resultId, 'result-v2-new')
+  assert.equal(persistCalls, 1)
 })

@@ -1,10 +1,10 @@
 import type { AdminAssessmentGeneratedReportOutput } from '@/lib/admin/domain/assessment-report-output'
 import { generateAdminAssessmentReportOutput } from '@/lib/admin/domain/assessment-report-output'
-import type { AdminAssessmentSimulationExecutionResult, AdminAssessmentSimulationIssue, AdminAssessmentSimulationRequest, AdminAssessmentSimulationResult } from '@/lib/admin/domain/assessment-simulation'
+import type { AdminAssessmentSimulationExecutionResult, AdminAssessmentSimulationIssue, AdminAssessmentSimulationRequest, AdminAssessmentSimulationResult } from '@/lib/admin/domain/assessment-simulation-server'
 import {
   executeAdminAssessmentSimulationForPackage,
   parseAdminAssessmentSimulationPayloadForPackage,
-} from '@/lib/admin/domain/assessment-simulation'
+} from '@/lib/admin/domain/assessment-simulation-server'
 import type { AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
 
 export type AdminAssessmentScenarioType = 'baseline' | 'edge_case' | 'regression' | 'stress' | 'custom'

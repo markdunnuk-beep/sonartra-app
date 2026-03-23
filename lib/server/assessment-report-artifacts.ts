@@ -1,5 +1,8 @@
+import { createHash } from 'node:crypto'
+
 import { queryDb } from '@/lib/db'
 import type { AssessmentResultRow } from '@/lib/assessment-types'
+import { PACKAGE_CONTRACT_V2_REPORT_ARTIFACT_VERSION } from '@/lib/admin/domain/assessment-package-v2-performance'
 import {
   assembleAssessmentReportDocumentV2,
   buildAvailableAssessmentReportArtifactRecord,
@@ -122,6 +125,31 @@ function buildViewModel(result: AssessmentResultRow, artifactRecord: AssessmentR
   }
 }
 
+
+function isReusableAvailableArtifact(artifactRecord: AssessmentReportArtifactRecord | null, input: { sourceHash: string }) {
+  if (!artifactRecord || artifactRecord.state !== 'available') {
+    return false
+  }
+
+  if (artifactRecord.reportArtifactVersion !== PACKAGE_CONTRACT_V2_REPORT_ARTIFACT_VERSION) {
+    return false
+  }
+
+  if (artifactRecord.sourceHash !== input.sourceHash) {
+    return false
+  }
+
+  if (artifactRecord.format !== 'html' || !artifactRecord.content || !artifactRecord.fileName) {
+    return false
+  }
+
+  if (!artifactRecord.contentHash || createHash('sha256').update(artifactRecord.content).digest('hex') !== artifactRecord.contentHash) {
+    return false
+  }
+
+  return true
+}
+
 export function getUserFacingAssessmentReportViewModel(result: AssessmentResultRow | null | undefined): UserFacingAssessmentReportViewModel {
   if (!result) {
     return {
@@ -170,22 +198,56 @@ export async function getAssessmentReportArtifactForUser(
   }
 
   try {
-    const rendered = renderAssessmentReportDocumentHtml(assembly.document)
     const existing = parseAssessmentReportArtifactRecord(result.report_artifact_json)
-    const artifactRecord = existing?.state === 'available'
-      && existing.sourceHash === assembly.sourceHash
-      && existing.rendererVersion === rendered.rendererVersion
-      && existing.format === rendered.format
-      ? {
-          ...existing,
-          lastAttemptedAt: new Date().toISOString(),
-        }
-      : buildAvailableAssessmentReportArtifactRecord({
-          sourceHash: assembly.sourceHash,
-          rendererVersion: rendered.rendererVersion,
-          format: rendered.format,
-          resultId: result.id,
-        })
+    if (isReusableAvailableArtifact(existing, { sourceHash: assembly.sourceHash })) {
+      const reusable = existing!
+      console.info('[assessment-report-artifacts]', { resultId: result.id, event: 'reuse' })
+      const artifactRecord: AssessmentReportArtifactRecord = {
+        contractVersion: reusable.contractVersion,
+        state: reusable.state,
+        format: reusable.format,
+        artifactKey: reusable.artifactKey,
+        reportArtifactVersion: reusable.reportArtifactVersion,
+        rendererVersion: reusable.rendererVersion,
+        sourceHash: reusable.sourceHash,
+        contentHash: reusable.contentHash,
+        generatedAt: reusable.generatedAt,
+        lastAttemptedAt: new Date().toISOString(),
+        lastErrorCode: reusable.lastErrorCode,
+        fileName: reusable.fileName,
+        content: reusable.content,
+      }
+      await deps.updateArtifactRecord(result.id, artifactRecord)
+      return {
+        kind: 'available',
+        body: artifactRecord.content!,
+        fileName: artifactRecord.fileName!,
+        mediaType: 'text/html; charset=utf-8',
+        view: buildViewModel(result, artifactRecord),
+      }
+    }
+
+    console.info('[assessment-report-artifacts]', {
+      resultId: result.id,
+      event: existing ? 'regenerate' : 'generate',
+      reason: existing?.reportArtifactVersion !== PACKAGE_CONTRACT_V2_REPORT_ARTIFACT_VERSION
+        ? 'report_version_mismatch'
+        : existing?.sourceHash !== assembly.sourceHash
+          ? 'source_hash_mismatch'
+          : existing?.content
+            ? 'renderer_or_format_mismatch'
+            : 'missing_content',
+    })
+
+    const rendered = renderAssessmentReportDocumentHtml(assembly.document)
+    const artifactRecord = buildAvailableAssessmentReportArtifactRecord({
+      sourceHash: assembly.sourceHash,
+      rendererVersion: rendered.rendererVersion,
+      format: rendered.format,
+      resultId: result.id,
+      fileName: rendered.fileName,
+      content: rendered.content,
+    })
 
     await deps.updateArtifactRecord(result.id, artifactRecord)
 

@@ -134,6 +134,7 @@ export interface OutputRuleEvaluationResult {
 export interface AssessmentEvaluationOptionsV2 {
   includeTrace?: boolean
   evaluationId?: string | null
+  maxPredicateEvaluations?: number
 }
 
 export interface AssessmentEvaluationResultV2 {
@@ -161,11 +162,16 @@ export interface AssessmentEvaluationResultV2 {
 
 type Primitive = string | number | boolean | null
 
+type PredicateBudget = {
+  remaining: number
+}
+
 type PredicateContext = {
   responses: Record<string, BoundResponseResult>
   rawDimensions: Record<string, RawDimensionEvaluationResult>
   derivedDimensions: Record<string, DerivedDimensionEvaluationResult>
   integrityFindingsByRuleId: Record<string, IntegrityFinding | undefined>
+  predicateBudget: PredicateBudget
 }
 
 function pushDiagnostic(
@@ -308,8 +314,9 @@ function createPredicateContext(
   rawDimensions: Record<string, RawDimensionEvaluationResult>,
   derivedDimensions: Record<string, DerivedDimensionEvaluationResult>,
   integrityFindingsByRuleId: Record<string, IntegrityFinding | undefined>,
+  predicateBudget: PredicateBudget,
 ): PredicateContext {
-  return { responses, rawDimensions, derivedDimensions, integrityFindingsByRuleId }
+  return { responses, rawDimensions, derivedDimensions, integrityFindingsByRuleId, predicateBudget }
 }
 
 function resolveOperandValue(operand: ExecutablePredicateOperand, context: PredicateContext): Primitive | Primitive[] | undefined {
@@ -360,6 +367,11 @@ export function evaluateExecutablePredicate(
   predicate: ExecutablePredicate,
   context: PredicateContext,
 ): boolean {
+  context.predicateBudget.remaining -= 1
+  if (context.predicateBudget.remaining < 0) {
+    throw new Error('predicate_evaluation_budget_exceeded')
+  }
+
   if (predicate.kind === 'comparison') {
     const left = resolveOperandValue(predicate.left, context)
     const right = Array.isArray(predicate.right)
@@ -685,6 +697,7 @@ export function evaluateAssessmentPackageV2(
   options: AssessmentEvaluationOptionsV2 = {},
 ): AssessmentEvaluationResultV2 {
   const diagnostics: AssessmentEvaluationDiagnostic[] = []
+  const predicateBudget: PredicateBudget = { remaining: options.maxPredicateEvaluations ?? 20_000 }
   const boundResponses = Object.fromEntries(
     executablePackage.executionPlan.questionIds.map((questionId) => [
       questionId,
@@ -696,10 +709,12 @@ export function evaluateAssessmentPackageV2(
   const rawDimensions: Record<string, RawDimensionEvaluationResult> = {}
   const derivedDimensions: Record<string, DerivedDimensionEvaluationResult> = {}
   const integrityFindingsByRuleId: Record<string, IntegrityFinding | undefined> = {}
+  const normalizedResults: NormalizedDimensionResult[] = []
+  const integrityFindings: IntegrityFinding[] = []
+  const outputRuleFindings: OutputRuleEvaluationResult[] = []
 
-  const basePredicateContext = createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId)
-
-  for (const dimensionId of executablePackage.executionPlan.rawDimensionIds) {
+  try {
+    for (const dimensionId of executablePackage.executionPlan.rawDimensionIds) {
     const dimension = executablePackage.dimensionsById[dimensionId]
     const dimensionItemResults = dimension.itemBindings.map((binding, bindingIndex) => {
       const response = boundResponses[binding.questionId]
@@ -727,7 +742,7 @@ export function evaluateAssessmentPackageV2(
         pushDiagnostic(diagnostics, 'warning', 'non_numeric_item_score', `dimensions.${dimensionId}.items.${binding.questionId}`, `Question "${binding.questionId}" could not be converted into a numeric score for dimension "${dimensionId}".`, 'question', binding.questionId)
       }
 
-      const predicateContext = createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId)
+      const predicateContext = createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId, predicateBudget)
       for (const transformId of binding.transformIds) {
         const transform = executablePackage.transformsById[transformId]
         const before = itemResult.effectiveScore
@@ -753,7 +768,7 @@ export function evaluateAssessmentPackageV2(
     let finalScore = aggregatedScore
     const dimensionTransformApplications: ItemContributionResult['transformApplications'] = []
     const dimensionRuleApplications: ItemContributionResult['ruleApplications'] = []
-    const predicateContext = createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId)
+    const predicateContext = createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId, predicateBudget)
 
     for (const transformId of dimension.transformIds) {
       const transform = executablePackage.transformsById[transformId]
@@ -816,18 +831,18 @@ export function evaluateAssessmentPackageV2(
     if (derived.computation.method === 'formula' && derived.computation.formula) {
       rawScore = evaluateFormula(derived.computation.formula, Object.fromEntries(dependencies.map((dependency) => [dependency.id, dependency.value ?? 0])))
     } else if (derived.computation.method === 'expression' && derived.computation.expression) {
-      rawScore = evaluateExecutablePredicate(derived.computation.expression, createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId)) ? 1 : 0
+      rawScore = evaluateExecutablePredicate(derived.computation.expression, createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId, predicateBudget)) ? 1 : 0
     } else if (derived.computation.method === 'rule_reference' && derived.computation.ruleId) {
       const rule = executablePackage.scoringRulesById[derived.computation.ruleId]
       rawScore = 0
       if (rule) {
-        rawScore = applyRuleToScore(rule, rawScore, createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId)).nextScore
+        rawScore = applyRuleToScore(rule, rawScore, createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId, predicateBudget)).nextScore
       }
     }
 
     const transformApplications: ItemContributionResult['transformApplications'] = []
     const ruleApplications: ItemContributionResult['ruleApplications'] = []
-    const predicateContext = createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId)
+    const predicateContext = createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId, predicateBudget)
     for (const transformId of derived.transformIds) {
       const transform = executablePackage.transformsById[transformId]
       const before = rawScore
@@ -857,7 +872,6 @@ export function evaluateAssessmentPackageV2(
     }
   }
 
-  const normalizedResults: NormalizedDimensionResult[] = []
   for (const ruleId of executablePackage.executionPlan.normalizationRuleIds) {
     const rule = executablePackage.normalizationRulesById[ruleId]
     for (const targetId of rule.appliesToDimensionIds) {
@@ -876,12 +890,11 @@ export function evaluateAssessmentPackageV2(
     }
   }
 
-  const integrityFindings: IntegrityFinding[] = []
   for (const ruleId of executablePackage.executionPlan.integrityRuleIds) {
     const rule = executablePackage.integrityRulesById[ruleId]
     let status: IntegrityFinding['status'] = 'not_triggered'
     try {
-      status = evaluateExecutablePredicate(rule.predicate, createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId)) ? 'triggered' : 'not_triggered'
+      status = evaluateExecutablePredicate(rule.predicate, createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId, predicateBudget)) ? 'triggered' : 'not_triggered'
     } catch {
       status = 'error'
       pushDiagnostic(diagnostics, 'error', 'integrity_rule_evaluation_failed', `integrity.${ruleId}`, `Integrity rule "${ruleId}" could not be evaluated.`, 'integrity_rule', ruleId)
@@ -900,12 +913,11 @@ export function evaluateAssessmentPackageV2(
     integrityFindingsByRuleId[ruleId] = finding
   }
 
-  const outputRuleFindings: OutputRuleEvaluationResult[] = []
   for (const ruleId of executablePackage.executionPlan.outputRuleIds) {
     const rule = executablePackage.outputRulesById[ruleId]
     let status: OutputRuleEvaluationResult['status'] = 'not_triggered'
     try {
-      status = evaluateExecutablePredicate(rule.predicate, createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId)) ? 'triggered' : 'not_triggered'
+      status = evaluateExecutablePredicate(rule.predicate, createPredicateContext(boundResponses, rawDimensions, derivedDimensions, integrityFindingsByRuleId, predicateBudget)) ? 'triggered' : 'not_triggered'
     } catch {
       status = 'error'
       pushDiagnostic(diagnostics, 'error', 'output_rule_evaluation_failed', `outputs.${ruleId}`, `Output rule "${ruleId}" could not be evaluated.`, 'output_rule', ruleId)
@@ -920,6 +932,15 @@ export function evaluateAssessmentPackageV2(
       targetReportKeys: rule.targetReportKeys,
       narrativeBindingKeys: rule.narrativeBindingKeys,
     })
+  }
+
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown_evaluation_error'
+    if (message === 'predicate_evaluation_budget_exceeded') {
+      pushDiagnostic(diagnostics, 'error', 'predicate_evaluation_budget_exceeded', 'evaluation', 'Predicate evaluation budget was exceeded and execution was stopped safely.', 'output_rule', null)
+    } else {
+      pushDiagnostic(diagnostics, 'error', 'evaluation_execution_failed', 'evaluation', 'Assessment evaluation could not complete safely.', 'output_rule', null)
+    }
   }
 
   const errors = diagnostics.filter((diagnostic) => diagnostic.severity === 'error')

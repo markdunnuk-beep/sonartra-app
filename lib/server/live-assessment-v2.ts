@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg'
 
-import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import { materializeAssessmentOutputsV2, type MaterializedAssessmentOutputsV2 } from '@/lib/admin/domain/assessment-package-v2-materialization'
+import type { V2PersistedEvaluationArtifact } from '@/lib/admin/domain/assessment-package-v2-performance'
 import type { AssessmentEvaluationResultV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
 import {
   SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
@@ -16,8 +16,14 @@ import {
   evaluatePackageV2LiveRuntimeSupport,
   normalizeV2LiveResponseValue,
 } from '@/lib/package-contract-v2-live-runtime'
-import { getLatestAssessmentResultSnapshot } from '@/lib/server/assessment-results'
+import { getAssessmentResultByAssessmentId, getLatestAssessmentResultSnapshot } from '@/lib/server/assessment-results'
 import { evaluateAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
+import {
+  PACKAGE_CONTRACT_V2_RESULT_ARTIFACT_VERSION,
+  createPackageRuntimeFingerprint,
+  decideEvaluationArtifactReuse,
+  getOrCompileRuntime,
+} from '@/lib/admin/domain/assessment-package-v2-performance-server'
 
 export type LiveAssessmentContractVersion = 'legacy_v1' | 'package_contract_v2'
 export type RuntimeExecutionDiagnosticCode =
@@ -83,21 +89,6 @@ export interface V2LiveQuestionDeliveryContract {
     value: unknown
     updatedAt: string | null
   }>
-}
-
-export interface V2PersistedEvaluationArtifact {
-  contractVersion: 'package_contract_v2'
-  runtimeVersion: string
-  packageSchemaVersion: typeof SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
-  packageMetadata: {
-    assessmentKey: string
-    assessmentName: string
-    packageSemver: string
-  }
-  evaluation: AssessmentEvaluationResultV2
-  materializedOutputs: V2PersistedMaterializedOutputs
-  completedAt: string | null
-  scoredAt: string | null
 }
 
 export type V2PersistedMaterializedOutputs = MaterializedAssessmentOutputsV2
@@ -438,6 +429,7 @@ export async function evaluateCompletedV2Assessment(input: {
 }, deps: {
   withTransactionFn?: typeof withTransaction
   getLatestResultSnapshot?: typeof getLatestAssessmentResultSnapshot
+  getAssessmentResultByAssessmentId?: typeof getAssessmentResultByAssessmentId
 } = {}): Promise<{
   httpStatus: number
   body: {
@@ -452,6 +444,7 @@ export async function evaluateCompletedV2Assessment(input: {
 }> {
   const runInTransaction = deps.withTransactionFn ?? withTransaction
   const getLatestResultSnapshot = deps.getLatestResultSnapshot ?? getLatestAssessmentResultSnapshot
+  const getResultByAssessmentId = deps.getAssessmentResultByAssessmentId ?? getAssessmentResultByAssessmentId
 
   const lifecycle = await runInTransaction(async (client) => {
     const row = await loadAssessmentVersionRuntimeRow(input.assessmentId, input.ownerUserId, client, { forUpdate: true })
@@ -482,16 +475,50 @@ export async function evaluateCompletedV2Assessment(input: {
     }
 
     const latestResult = await getLatestResultSnapshot(input.assessmentId, client)
-    if (row.assessment_status === 'completed' && latestResult && (latestResult.status === 'complete' || latestResult.status === 'failed')) {
+    const existingResult = row.assessment_status === 'completed' ? await getResultByAssessmentId(input.assessmentId, client) : null
+    const packageFingerprint = createPackageRuntimeFingerprint(pkg, {
+      assessmentVersionId: row.assessment_version_id,
+      schemaVersion: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+    })
+    const reuseDecision = decideEvaluationArtifactReuse({
+      result: existingResult,
+      packageFingerprint: packageFingerprint.packageFingerprint,
+      schemaVersion: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+    })
+
+    if (row.assessment_status === 'completed' && existingResult?.status === 'failed') {
       return {
         kind: 'existing' as const,
         assessmentVersionId: row.assessment_version_id,
         versionKey: row.assessment_version_key,
         assessment: row,
-        latestResult,
+        latestResult: existingResult,
         pkg,
         responses,
+        reuseDecision,
+        packageFingerprint,
       }
+    }
+
+    if (row.assessment_status === 'completed' && reuseDecision.reuse && existingResult) {
+      return {
+        kind: 'existing' as const,
+        assessmentVersionId: row.assessment_version_id,
+        versionKey: row.assessment_version_key,
+        assessment: row,
+        latestResult: existingResult,
+        pkg,
+        responses,
+        reuseDecision,
+        packageFingerprint,
+      }
+    }
+
+    if (row.assessment_status === 'completed' && latestResult && reuseDecision.reason !== 'missing_result' && reuseDecision.reason !== 'valid') {
+      console.info('[live-assessment-v2] evaluation artifact invalidated', {
+        assessmentId: input.assessmentId,
+        reason: reuseDecision.reason,
+      })
     }
 
     if (row.assessment_status === 'completed' && row.scoring_status === 'pending' && !latestResult) {
@@ -563,7 +590,11 @@ export async function evaluateCompletedV2Assessment(input: {
       throw new Error(runtimeSupport.issues[0]?.message ?? 'Package Contract v2 could not be executed safely on the live runtime.')
     }
 
-    const compiled = compileAssessmentPackageV2(lifecycle.pkg)
+    const compiled = getOrCompileRuntime(lifecycle.pkg, {
+      assessmentVersionId: lifecycle.assessment.assessment_version_id,
+      schemaVersion: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+      onDiagnostic: (diagnostic) => console.info('[live-assessment-v2]', diagnostic),
+    })
     if (!compiled.ok || !compiled.executablePackage) {
       throw new Error(compiled.diagnostics.find((entry) => entry.severity === 'error')?.message ?? 'Package Contract v2 could not be compiled for live execution.')
     }
@@ -579,6 +610,9 @@ export async function evaluateCompletedV2Assessment(input: {
       contractVersion: 'package_contract_v2',
       runtimeVersion: compiled.executablePackage.runtimeVersion,
       packageSchemaVersion: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+      resultArtifactVersion: PACKAGE_CONTRACT_V2_RESULT_ARTIFACT_VERSION,
+      packageFingerprint: compiled.cache.fingerprint.packageFingerprint,
+      compiledAt: compiled.cache.compiledAt ?? new Date().toISOString(),
       packageMetadata: {
         assessmentKey: compiled.executablePackage.metadata.assessmentKey,
         assessmentName: compiled.executablePackage.metadata.assessmentName,
@@ -588,6 +622,7 @@ export async function evaluateCompletedV2Assessment(input: {
       materializedOutputs,
       completedAt: lifecycle.assessment.completed_at,
       scoredAt,
+      generatedAt: scoredAt,
     }
 
     const persisted = await runInTransaction(async (client) => {

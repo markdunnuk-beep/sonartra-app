@@ -36,7 +36,7 @@ import {
   getAdminAssessmentSimulationWorkspaceStatus,
   parseAdminAssessmentSimulationPayloadForPackage,
   type AdminAssessmentSimulationActionState,
-} from '@/lib/admin/domain/assessment-simulation'
+} from '@/lib/admin/domain/assessment-simulation-server'
 import { queryDb, withTransaction, describeDatabaseError, logDatabaseError, logDatabaseSessionDiagnostics } from '@/lib/db'
 import { getScopedAdminAuditActivity, mapScopedAuditEventsToAssessmentActivity } from '@/lib/admin/server/audit-workspace'
 import {
