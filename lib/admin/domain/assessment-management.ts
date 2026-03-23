@@ -110,6 +110,7 @@ export interface AdminAssessmentVersionRecord {
   validationStatus: string | null
   packageInfo: AdminAssessmentVersionPackageInfo
   normalizedPackage: SonartraAssessmentPackageV1 | null
+  storedDefinitionPayload?: unknown | null
   createdAt: string
   updatedAt: string
   publishedAt: string | null

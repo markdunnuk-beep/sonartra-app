@@ -28,6 +28,8 @@ import {
   parseStoredNormalizedAssessmentPackage,
 } from '@/lib/admin/domain/assessment-package'
 import { importAssessmentPackagePayload, type AdminAssessmentPackageValidationSummary } from '@/lib/admin/server/assessment-package-import'
+import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
+import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
 import { getAdminAssessmentVersionReadiness } from '@/lib/admin/domain/assessment-package-review'
 import {
   executeAdminAssessmentSimulationForPackage,
@@ -834,6 +836,7 @@ function mapAssessmentVersionRowToDomain(
     validationStatus: normaliseNullableField(row.validation_status),
     packageInfo: mapPackageInfo(row),
     normalizedPackage: parseStoredNormalizedAssessmentPackage(row.definition_payload),
+    storedDefinitionPayload: row.definition_payload ?? null,
     createdAt,
     updatedAt,
     publishedAt: normaliseTimestamp(row.published_at),
@@ -3195,67 +3198,100 @@ export async function publishAdminAssessmentVersion(
         }
       }
 
-      const runtimePackage = evaluatedVersion.normalizedPackage
-      if (!runtimePackage) {
-        return {
-          ok: false,
-          code: 'invalid_transition',
-          message: 'Publish blocked: the attached package could not be normalized for the live runtime.',
+      if (evaluatedVersion.packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
+        const runtimePackageV2 = parseStoredValidatedAssessmentPackageV2(evaluatedVersion.storedDefinitionPayload ?? null)
+        const compiledV2 = runtimePackageV2 ? compileAssessmentPackageV2(runtimePackageV2) : null
+
+        if (!runtimePackageV2 || !compiledV2?.ok || !compiledV2.executablePackage) {
+          const blockingSummary = compiledV2?.diagnostics.find((entry) => entry.severity === 'error')?.message
+            ?? 'The Package Contract v2 payload cannot be compiled for live runtime execution.'
+
+          await writeAssessmentAuditEvent(client, {
+            createId: deps.createId,
+            actor,
+            nowIso,
+            eventType: 'assessment_publish_blocked_release_governance',
+            summary: `Publish blocked for ${assessmentName} v${evaluatedVersion.versionLabel}: ${blockingSummary}`,
+            assessmentId: input.assessmentId,
+            assessmentName,
+            versionId: input.versionId,
+            versionLabel: evaluatedVersion.versionLabel,
+            metadata: {
+              readinessStatus: publishReadiness.status,
+              contractVersion: 'package_contract_v2',
+              compileDiagnostics: compiledV2?.diagnostics ?? [],
+            },
+          })
+
+          return {
+            ok: false,
+            code: 'invalid_transition',
+            message: `Publish blocked: ${blockingSummary}`,
+          }
         }
-      }
+      } else {
+        const runtimePackage = evaluatedVersion.normalizedPackage
+        if (!runtimePackage) {
+          return {
+            ok: false,
+            code: 'invalid_transition',
+            message: 'Publish blocked: the attached package could not be normalized for the live runtime.',
+          }
+        }
 
-      const runtimeExecutableIssues = getAssessmentRuntimeExecutableIssues(runtimePackage)
-      if (runtimeExecutableIssues.length > 0) {
-        const blockingSummary = runtimeExecutableIssues[0]?.message ?? 'The package cannot run on the live runtime.'
+        const runtimeExecutableIssues = getAssessmentRuntimeExecutableIssues(runtimePackage)
+        if (runtimeExecutableIssues.length > 0) {
+          const blockingSummary = runtimeExecutableIssues[0]?.message ?? 'The package cannot run on the live runtime.'
 
-        await writeAssessmentAuditEvent(client, {
-          createId: deps.createId,
-          actor,
-          nowIso,
-          eventType: 'assessment_publish_blocked_release_governance',
-          summary: `Publish blocked for ${assessmentName} v${evaluatedVersion.versionLabel}: ${blockingSummary}`,
+          await writeAssessmentAuditEvent(client, {
+            createId: deps.createId,
+            actor,
+            nowIso,
+            eventType: 'assessment_publish_blocked_release_governance',
+            summary: `Publish blocked for ${assessmentName} v${evaluatedVersion.versionLabel}: ${blockingSummary}`,
+            assessmentId: input.assessmentId,
+            assessmentName,
+            versionId: input.versionId,
+            versionLabel: evaluatedVersion.versionLabel,
+            metadata: {
+              readinessStatus: publishReadiness.status,
+              runtimeExecutableIssues,
+            },
+          })
+
+          return {
+            ok: false,
+            code: 'invalid_transition',
+            message: `Publish blocked: ${blockingSummary}`,
+          }
+        }
+
+        const runtimeVersionResult = await runPublishStage('runtime_version_lookup', {
           assessmentId: input.assessmentId,
-          assessmentName,
           versionId: input.versionId,
-          versionLabel: evaluatedVersion.versionLabel,
-          metadata: {
-            readinessStatus: publishReadiness.status,
-            runtimeExecutableIssues,
-          },
-        })
-
-        return {
-          ok: false,
-          code: 'invalid_transition',
-          message: `Publish blocked: ${blockingSummary}`,
+        }, () => client.query<{ key: string; name: string }>(
+          `select key, name
+           from assessment_versions
+           where id = $1
+             and assessment_definition_id = $2
+           limit 1`,
+          [input.versionId, input.assessmentId],
+        ))
+        const runtimeVersion = runtimeVersionResult.rows[0]
+        if (!runtimeVersion) {
+          return { ok: false, code: 'not_found', message: 'Version not found.' }
         }
-      }
 
-      const runtimeVersionResult = await runPublishStage('runtime_version_lookup', {
-        assessmentId: input.assessmentId,
-        versionId: input.versionId,
-      }, () => client.query<{ key: string; name: string }>(
-        `select key, name
-         from assessment_versions
-         where id = $1
-           and assessment_definition_id = $2
-         limit 1`,
-        [input.versionId, input.assessmentId],
-      ))
-      const runtimeVersion = runtimeVersionResult.rows[0]
-      if (!runtimeVersion) {
-        return { ok: false, code: 'not_found', message: 'Version not found.' }
+        await runPublishStage('runtime_materialization', {
+          assessmentId: input.assessmentId,
+          versionId: input.versionId,
+        }, () => materializeAssessmentRuntimeFromPackage(client, {
+          assessmentVersionId: input.versionId,
+          assessmentVersionKey: runtimeVersion.key,
+          assessmentVersionName: runtimeVersion.name,
+          normalizedPackage: runtimePackage,
+        }))
       }
-
-      await runPublishStage('runtime_materialization', {
-        assessmentId: input.assessmentId,
-        versionId: input.versionId,
-      }, () => materializeAssessmentRuntimeFromPackage(client, {
-        assessmentVersionId: input.versionId,
-        assessmentVersionKey: runtimeVersion.key,
-        assessmentVersionName: runtimeVersion.name,
-        normalizedPackage: runtimePackage,
-      }))
 
       await runPublishStage('archive_existing_published_versions', {
         assessmentId: input.assessmentId,
@@ -3287,7 +3323,7 @@ export async function publishAdminAssessmentVersion(
          where id = $1
            and assessment_definition_id = $2
          returning id`,
-        [input.versionId, input.assessmentId, nowIso, actor?.id ?? null, runtimePackage.questions.length],
+        [input.versionId, input.assessmentId, nowIso, actor?.id ?? null],
       ))
 
       if (!publishResult.rows[0]) {

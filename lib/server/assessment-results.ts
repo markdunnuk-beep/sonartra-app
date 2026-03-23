@@ -228,6 +228,55 @@ export async function persistFailedAssessmentResult(
   return withTransaction(execute);
 }
 
+
+export async function persistStructuredAssessmentResult(
+  input: {
+    assessmentId: string;
+    assessmentVersionId: string;
+    versionKey: string;
+    scoringModelKey: string;
+    snapshotVersion: number;
+    status: ResultStatus;
+    resultPayload: Record<string, unknown> | null;
+    responseQualityPayload: Record<string, unknown> | null;
+    completedAt: string | null;
+    scoredAt: string | null;
+  },
+  client?: PoolClient
+): Promise<{ assessmentResultId: string }> {
+  const execute = async (dbClient: PoolClient) => {
+    const parent = await upsertAssessmentResultParent(
+      {
+        assessmentId: input.assessmentId,
+        assessmentVersionId: input.assessmentVersionId,
+        versionKey: input.versionKey,
+        scoringModelKey: input.scoringModelKey,
+        snapshotVersion: input.snapshotVersion,
+        status: input.status,
+        resultPayload: input.resultPayload,
+        responseQualityPayload: input.responseQualityPayload,
+        completedAt: input.completedAt,
+        scoredAt: input.scoredAt,
+      },
+      dbClient
+    );
+
+    if (!parent?.id) {
+      throw new Error('Failed to persist structured assessment result row.');
+    }
+
+    await dbClient.query('DELETE FROM assessment_result_signals WHERE assessment_result_id = $1', [parent.id]);
+
+    return { assessmentResultId: parent.id };
+  };
+
+  if (client) {
+    return execute(client);
+  }
+
+  return withTransaction(execute);
+}
+
 export async function getLatestAssessmentResultSnapshot(assessmentId: string, client?: PoolClient) {
   const dbClient = client ?? null;
   const query = `SELECT id, status

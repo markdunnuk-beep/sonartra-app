@@ -44,6 +44,7 @@ test('resolveLiveSignalsPublishedVersion returns the canonical published Signals
     assessmentVersionName: 'Sonartra Signals v2',
     totalQuestions: 80,
     isActive: true,
+    contractVersion: 'legacy_v1',
   })
 })
 

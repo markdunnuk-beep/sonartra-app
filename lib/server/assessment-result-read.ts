@@ -37,6 +37,10 @@ const defaultDependencies: AssessmentResultReadDependencies = {
   getSignalsByResultId: getAssessmentResultSignalsByResultId,
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
 function parseSnapshot(payload: Record<string, unknown> | null): AssessmentResultSnapshotPayload | null {
   if (!payload || typeof payload !== 'object') return null;
 
@@ -78,6 +82,26 @@ function sortSignals(signals: AssessmentResultSignalRow[]): PersistedAssessmentR
       isPrimary: signal.is_primary,
       isSecondary: signal.is_secondary,
     }));
+}
+
+function parseV2LiveResult(payload: Record<string, unknown> | null) {
+  if (!isRecord(payload) || payload.contractVersion !== 'package_contract_v2') {
+    return null
+  }
+
+  return {
+    webSummaryOutputs: Array.isArray(payload.materializedOutputs && isRecord(payload.materializedOutputs) ? payload.materializedOutputs.webSummaryOutputs : null)
+      ? (payload.materializedOutputs as { webSummaryOutputs: unknown[] }).webSummaryOutputs
+      : [],
+    integrityNotices: Array.isArray(payload.materializedOutputs && isRecord(payload.materializedOutputs) ? payload.materializedOutputs.integrityNotices : null)
+      ? (payload.materializedOutputs as { integrityNotices: unknown[] }).integrityNotices
+      : [],
+    technicalDiagnostics: Array.isArray(payload.materializedOutputs && isRecord(payload.materializedOutputs) ? payload.materializedOutputs.technicalDiagnostics : null)
+      ? (payload.materializedOutputs as { technicalDiagnostics: unknown[] }).technicalDiagnostics
+      : [],
+    evaluation: isRecord(payload.evaluation) ? payload.evaluation : null,
+    packageMetadata: isRecord(payload.packageMetadata) ? payload.packageMetadata : null,
+  }
 }
 
 export async function getAssessmentResultReadModel(
@@ -149,9 +173,41 @@ export async function getAssessmentResultReadModel(
           updatedAt: result.updated_at,
           failure: parseFailure(result.result_payload),
           signals: [],
+          contractVersion: isRecord(result.result_payload) && result.result_payload.contractVersion === 'package_contract_v2' ? 'package_contract_v2' : 'legacy_v1',
         },
       },
-    };
+    } as const;
+  }
+
+  const v2LiveResult = parseV2LiveResult(result.result_payload)
+  if (v2LiveResult) {
+    return {
+      kind: 'ok',
+      body: {
+        ok: true,
+        assessmentId,
+        assessmentStatus: assessment.status,
+        scoringStatus: assessment.scoring_status,
+        result: {
+          availability: 'available',
+          status: 'complete',
+          id: result.id,
+          assessmentVersionId: result.assessment_version_id,
+          versionKey: result.version_key,
+          scoringModelKey: result.scoring_model_key,
+          snapshotVersion: result.snapshot_version,
+          completedAt: result.completed_at,
+          scoredAt: result.scored_at,
+          createdAt: result.created_at,
+          updatedAt: result.updated_at,
+          snapshot: result.result_payload,
+          responseQuality: result.response_quality_payload,
+          signals: [],
+          contractVersion: 'package_contract_v2',
+          liveRuntime: v2LiveResult,
+        },
+      },
+    } as const;
   }
 
   const signalRows = await dependencies.getSignalsByResultId(result.id);
@@ -175,10 +231,11 @@ export async function getAssessmentResultReadModel(
         scoredAt: result.scored_at,
         createdAt: result.created_at,
         updatedAt: result.updated_at,
-        snapshot: parseSnapshot(result.result_payload),
-        responseQuality: parseResponseQuality(result.response_quality_payload),
+        snapshot: parseSnapshot(result.result_payload) as unknown as Record<string, unknown> | null,
+        responseQuality: parseResponseQuality(result.response_quality_payload) as unknown as Record<string, unknown> | null,
         signals: sortSignals(signalRows),
+        contractVersion: 'legacy_v1',
       },
     },
-  };
+  } as const;
 }

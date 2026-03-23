@@ -157,9 +157,17 @@ export interface PersistedSuccessfulAssessmentResult {
   scoredAt: string | null;
   createdAt: string;
   updatedAt: string;
-  snapshot: AssessmentResultSnapshotPayload | null;
-  responseQuality: ResponseQualityMetadata | null;
+  snapshot: Record<string, unknown> | null;
+  responseQuality: Record<string, unknown> | null;
   signals: PersistedAssessmentResultSignal[];
+  contractVersion?: 'legacy_v1' | 'package_contract_v2';
+  liveRuntime?: {
+    webSummaryOutputs: unknown[];
+    integrityNotices: unknown[];
+    technicalDiagnostics: unknown[];
+    evaluation: Record<string, unknown> | null;
+    packageMetadata: Record<string, unknown> | null;
+  };
 }
 
 export interface PersistedFailedAssessmentResult {
@@ -176,6 +184,7 @@ export interface PersistedFailedAssessmentResult {
   updatedAt: string;
   failure: ResultFailureMetadata | null;
   signals: [];
+  contractVersion?: 'legacy_v1' | 'package_contract_v2';
 }
 
 export interface UnavailableAssessmentResult {
