@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { getAdminAssessmentVersionSchemaCapabilities } from '../lib/admin/server/assessment-version-schema-capabilities.ts'
+import { getAdminAssessmentVersionSchemaCapabilities } from '../lib/admin/server/assessment-version-schema-capabilities'
 
 test('assessment version capabilities inspect the schema resolved by search_path', async () => {
   const calls: Array<{ sql: string; params?: unknown[] }> = []
