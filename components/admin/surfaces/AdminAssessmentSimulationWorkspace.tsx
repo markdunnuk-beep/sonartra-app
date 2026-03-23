@@ -57,6 +57,8 @@ interface AdminAssessmentSimulationWorkspaceCopy {
   resultsTitle?: string
   resultsEyebrow?: string
   resultsDescription?: string
+  emptyResultsTitle?: string
+  emptyResultsDetail?: string
 }
 
 const INITIAL_STATE: AdminAssessmentSimulationActionState = { status: 'idle' }
@@ -140,6 +142,8 @@ export function AdminAssessmentSimulationWorkspace({
     resultsTitle: workspaceCopy?.resultsTitle ?? 'Simulation results',
     resultsEyebrow: workspaceCopy?.resultsEyebrow ?? 'Scoring, normalization, and output trace',
     resultsDescription: workspaceCopy?.resultsDescription ?? 'Compact admin evidence for whether the attached package behaves as expected with the supplied sample responses.',
+    emptyResultsTitle: workspaceCopy?.emptyResultsTitle ?? 'No simulation run yet',
+    emptyResultsDetail: workspaceCopy?.emptyResultsDetail ?? 'Run a simulation to inspect input coverage, raw scoring, normalization, output triggers, and trace evidence for this version.',
   }
   const eligibility = getAdminAssessmentSimulationWorkspaceStatus(version)
   const priorVersions = relatedVersions.filter((entry) => entry.id !== version.id && entry.savedScenarios.some((scenario) => scenario.status === 'active'))
@@ -329,7 +333,9 @@ export function AdminAssessmentSimulationWorkspace({
               <p className="mt-3 text-sm leading-6 text-textSecondary">
                 {state.result
                   ? `${state.result.responseSummary.answeredCount}/${state.result.responseSummary.totalQuestions} answers evaluated · ${state.result.outputs.filter((output) => output.triggered).length} outputs fired.`
-                  : 'No simulation run yet. Run a simulation to populate operational evidence for this draft or published version.'}
+                  : postResultsVariant === 'report_preview'
+                    ? 'No simulation run yet for this version. Run a simulation to generate report preview evidence for the current normalized package.'
+                    : 'No simulation run yet. Run a simulation to populate operational evidence for this draft or published version.'}
               </p>
             </div>
           </div>
@@ -438,7 +444,7 @@ export function AdminAssessmentSimulationWorkspace({
             ) : null}
           </div>
         ) : (
-          <EmptyState title="No simulation run yet" detail="Run a simulation to inspect input coverage, raw scoring, normalization, output triggers, and trace evidence for this version." />
+          <EmptyState title={copy.emptyResultsTitle} detail={copy.emptyResultsDetail} />
         )}
       </SurfaceSection>
 

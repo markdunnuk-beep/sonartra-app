@@ -163,7 +163,7 @@ export function AdminAssessmentVersionsManager({
                   <p className="text-sm leading-6 text-textPrimary">{controlTower.snippet}</p>
                   <p className="text-xs text-textSecondary">{controlTower.diff.baseline ? `Compared with v${controlTower.diff.baseline.versionLabel}` : 'First version — no comparison baseline yet'}</p>
                   <p className="text-xs text-textSecondary">Simulation: {simulationStatus.statusLabel.toLowerCase()}.</p>
-                  <p className="text-xs text-textSecondary">Report preview: {reportPreviewStatus.statusLabel.toLowerCase()}{reportPreviewStatus.canGeneratePreview ? ' after sample scenario.' : '.'}</p>
+                  <p className="text-xs text-textSecondary">Report preview: {reportPreviewStatus.canGeneratePreview ? 'ready after simulation.' : reportPreviewStatus.statusLabel.toLowerCase() + '.'}</p>
                 </div>,
                 <div key={`${version.id}-updated`} className="space-y-1">
                   <p className="text-sm font-medium text-textPrimary">{formatAdminRelativeTime(version.updatedAt)}</p>

@@ -355,6 +355,9 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
   const status = version.packageInfo?.status === 'valid' || version.packageInfo?.status === 'valid_with_warnings' || version.packageInfo?.status === 'invalid' || version.packageInfo?.status === 'missing'
     ? version.packageInfo.status
     : 'missing'
+  const rawQuestionCount = Array.isArray((version.normalizedPackage as { questions?: unknown[] } | null)?.questions)
+    ? ((version.normalizedPackage as { questions?: unknown[] } | null)?.questions?.length ?? 0)
+    : null
   const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
   const isImportedV2Package = isPackageContractV2Version(version)
   const pkgV2 = isImportedV2Package ? parseStoredValidatedAssessmentPackageV2(version.normalizedPackage as unknown) : null
@@ -372,7 +375,7 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
       return {
         eligibility: 'blocked',
         statusLabel: 'Blocked',
-        summary: 'Package Contract v2 was imported, but admin simulation is unavailable until the stored package compiles cleanly for the v2 evaluator and materializer.',
+        summary: 'Package Contract v2 is stored for this version, but admin simulation becomes available only after the current package compiles cleanly for the v2 evaluator and materializer.',
         blockingReason: executable?.result.errors[0]?.message ?? 'Package Contract v2 is not simulatable in admin yet because compilation/readiness is incomplete.',
         canRunSimulation: false,
       }
@@ -387,12 +390,12 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
     }
   }
 
-  if (!pkg || status === 'missing') {
+  if ((!pkg && rawQuestionCount !== 0) || status === 'missing') {
     return {
       eligibility: 'blocked',
       statusLabel: 'Blocked',
-      summary: 'Simulation is unavailable until a valid normalized package is attached to the version.',
-      blockingReason: 'No valid package is attached to this version yet.',
+      summary: 'No simulation run yet for this version because a valid normalized package has not been attached.',
+      blockingReason: 'Import and validate a package to make simulation available for this version.',
       canRunSimulation: false,
     }
   }
@@ -401,18 +404,18 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
     return {
       eligibility: 'blocked',
       statusLabel: 'Blocked',
-      summary: 'The latest package import is invalid, so scoring and output execution cannot be trusted for simulation.',
-      blockingReason: 'Resolve the package validation errors before running simulation.',
+      summary: 'Simulation is not yet available for the current package state because the latest import is invalid.',
+      blockingReason: 'Resolve the package validation errors, then run simulation from this workspace.',
       canRunSimulation: false,
     }
   }
 
-  if (pkg.questions.length === 0) {
+  if ((pkg && pkg.questions.length === 0) || rawQuestionCount === 0) {
     return {
       eligibility: 'blocked',
       statusLabel: 'Blocked',
-      summary: 'A normalized package exists, but it does not contain questions that can be answered in simulation.',
-      blockingReason: 'At least one normalized question is required for simulation.',
+      summary: 'Simulation is not supported for the current normalized package because it does not contain answerable questions.',
+      blockingReason: 'At least one normalized question is required before you can run simulation.',
       canRunSimulation: false,
     }
   }
@@ -421,8 +424,8 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
     eligibility: 'eligible',
     statusLabel: status === 'valid_with_warnings' ? 'Eligible with warnings' : 'Eligible',
     summary: status === 'valid_with_warnings'
-      ? 'Simulation can run, but the package still carries warning-level evidence gaps worth reviewing before publish.'
-      : 'Simulation is available for deterministic score, normalization, and output-rule verification.',
+      ? 'Simulation is ready to run, but the package still carries warning-level evidence gaps worth reviewing before publish.'
+      : 'Simulation is ready to run for deterministic score, normalization, and output-rule verification.',
     blockingReason: null,
     canRunSimulation: true,
   }

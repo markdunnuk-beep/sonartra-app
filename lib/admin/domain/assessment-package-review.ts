@@ -636,8 +636,11 @@ export function getAdminAssessmentVersionDiff(
       hasBaseline: true,
       baseline,
       materiallyDifferent: false,
-      summary: 'A comparison target exists, but one side lacks a normalized package for structured diffing.',
-      summaryLines: ['Structured diff is unavailable because one version has no normalized package.'],
+      summary: 'Structured diff is unavailable because one version in this comparison was stored without normalized package evidence.',
+      summaryLines: [
+        'Structured diff is unavailable because an earlier version was imported before normalized package evidence was stored.',
+        'Diff becomes available when both compared versions include normalized package evidence.',
+      ],
       metadataChanges: [],
       dimensions: { added: [], removed: [], changed: [] },
       questions: { added: [], removed: [], changed: [] },

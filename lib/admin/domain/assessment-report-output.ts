@@ -500,8 +500,8 @@ export function getAdminAssessmentReportPreviewWorkspaceStatus(version: Pick<Adm
   if (!simulationStatus.canRunSimulation) {
     return {
       availability: 'blocked',
-      statusLabel: 'Blocked',
-      summary: 'Report-output preview is unavailable until simulation can run against a valid normalized package.',
+      statusLabel: 'Unavailable',
+      summary: 'Report preview is unavailable for the current package state because it depends on a simulation that can run truthfully against the normalized package.',
       blockingReason: simulationStatus.blockingReason,
       canGeneratePreview: false,
     }
@@ -509,8 +509,8 @@ export function getAdminAssessmentReportPreviewWorkspaceStatus(version: Pick<Adm
 
   return {
     availability: 'available',
-    statusLabel: 'Available',
-    summary: 'Report-output preview can be generated after running a sample scenario in this workspace. Nothing is persisted as an end-user report in v1.',
+    statusLabel: 'Ready after simulation',
+    summary: 'No simulation run yet for this version. Run a simulation to generate report preview evidence from the normalized package. Nothing is persisted as an end-user report in v1.',
     blockingReason: null,
     canGeneratePreview: true,
   }

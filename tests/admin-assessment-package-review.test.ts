@@ -239,6 +239,26 @@ test('package preview summarises normalized dimensions, questions, and coverage'
   assert.equal(preview.questions[1]?.id, 'q2')
 })
 
+
+test('structured diff unavailable copy uses workflow history wording when baseline lacks normalized evidence', () => {
+  const legacyVersion = {
+    ...publishedVersion,
+    id: 'version-legacy',
+    versionLabel: '0.9.0',
+    updatedAt: '2026-03-19T00:00:00.000Z',
+    normalizedPackage: null,
+  }
+
+  const diff = getAdminAssessmentVersionDiff(draftVersion, [legacyVersion, draftVersion])
+  const controlTower = getAdminAssessmentVersionControlTowerSummary(draftVersion, [legacyVersion, draftVersion])
+
+  assert.equal(diff.hasBaseline, true)
+  assert.match(diff.summary, /stored without normalized package evidence/i)
+  assert.match(diff.summaryLines[0] ?? '', /earlier version was imported before normalized package evidence was stored/i)
+  assert.match(diff.summaryLines[1] ?? '', /both compared versions include normalized package evidence/i)
+  assert.doesNotMatch(controlTower.snippet, /blocked|failed/i)
+})
+
 test('readiness returns ready_with_warnings and blocked states truthfully', () => {
   const withWarnings = getAdminAssessmentVersionReadiness(draftVersion)
   const blocked = getAdminAssessmentVersionReadiness({
@@ -307,7 +327,7 @@ test('diff reports a clean first-version state when no baseline exists', () => {
   const diff = getAdminAssessmentVersionDiff(draftVersion, [draftVersion], null)
 
   assert.equal(diff.hasBaseline, false)
-  assert.match(diff.summary, /first-version package/i)
+  assert.match(diff.summary, /first imported version|no comparison baseline yet/i)
 })
 
 test('control-tower summary combines readiness and diff evidence into one snippet', () => {

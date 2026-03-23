@@ -16,6 +16,22 @@ function getTone(status: 'available' | 'blocked') {
   return status === 'available' ? 'sky' as const : 'rose' as const
 }
 
+function getPreviewUnavailableTitle(blockingReason: string | null) {
+  if (blockingReason && /At least one normalized question is required/i.test(blockingReason)) {
+    return 'Report preview unsupported for this package state'
+  }
+
+  return 'Report preview not ready yet'
+}
+
+function getPreviewUnavailableActionLabel(blockingReason: string | null) {
+  if (blockingReason && /run simulation/i.test(blockingReason)) {
+    return 'Run simulation'
+  }
+
+  return 'Open simulation workspace'
+}
+
 function getReadinessTone(verdict: 'ready' | 'ready_with_warnings' | 'blocked') {
   switch (verdict) {
     case 'ready':
@@ -64,6 +80,7 @@ export function AdminAssessmentVersionReportPreviewSurface({
             <FileText className="h-4 w-4 text-textSecondary" />
           </div>
           <p className="mt-3 text-sm leading-6 text-textSecondary">{previewStatus.summary}</p>
+          {previewStatus.blockingReason ? <p className="mt-2 text-xs leading-5 text-textSecondary">{previewStatus.blockingReason}</p> : null}
         </div>
         <div className="rounded-[1.25rem] border border-white/[0.08] bg-panel/60 p-4">
           <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Package state</p>
@@ -114,6 +131,8 @@ export function AdminAssessmentVersionReportPreviewSurface({
             resultsTitle: 'Generated report-output preview',
             resultsEyebrow: 'Structured web + PDF-ready model',
             resultsDescription: 'After the sample scenario runs, this section shows the structured summary model, PDF-ready content blocks, traceability, warnings, and output-quality evidence.',
+            emptyResultsTitle: 'No report preview yet for this version',
+            emptyResultsDetail: 'Run simulation to generate report preview evidence. Report preview becomes available after a successful simulation using the normalized package.',
           }}
           postResultsVariant="report_preview"
           initialRequestPayload={selectedScenarioPayload}
@@ -125,9 +144,9 @@ export function AdminAssessmentVersionReportPreviewSurface({
           description="Report preview becomes available after the version can run a truthful admin simulation."
         >
           <EmptyState
-            title="No report preview yet"
+            title={getPreviewUnavailableTitle(previewStatus.blockingReason)}
             detail={previewStatus.blockingReason ?? 'Run a simulation-ready package import first, then generate a preview from a sample scenario.'}
-            action={<Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/simulate`} variant="secondary">Open simulation workspace</Button>}
+            action={<Button href={`/admin/assessments/${detailData.assessment.id}/versions/${version.versionLabel}/simulate`} variant="secondary">{getPreviewUnavailableActionLabel(previewStatus.blockingReason)}</Button>}
           />
         </SurfaceSection>
       )}
