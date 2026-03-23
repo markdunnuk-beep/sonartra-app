@@ -66,7 +66,7 @@ test('non-simulatable v2 package returns a normalized not-ready response without
   assert.ok((simulation.result?.errors?.length ?? 0) > 0)
 })
 
-test('output materializer produces stable web summary outputs and report-oriented structures from evaluation results', () => {
+test('output materializer produces stable domain outputs without admin-only debug fields', () => {
   const validated = getValidatedFixture()
   const compiled = compileAssessmentPackageV2(validated)
   assert.equal(compiled.ok, true)
@@ -83,9 +83,11 @@ test('output materializer produces stable web summary outputs and report-oriente
   assert.ok(materialized.webSummaryOutputs.some((entry) => entry.id === 'output:adaptive-balance-summary'))
   assert.ok(materialized.reportDocument.sections.some((entry) => entry.key === 'triggered-outputs'))
   assert.ok(materialized.reportDocument.sections.some((entry) => entry.key === 'integrity'))
+  assert.ok(!('adminDebug' in materialized))
+  assert.ok(!materialized.webSummaryOutputs.some((entry) => 'narrativeBindingKey' in entry.explanation || 'reportBindingKey' in entry.explanation))
 })
 
-test('integrity findings and missing-data limitations materialize into visible notices and safe admin payloads', () => {
+test('integrity findings and technical diagnostics remain separated in materialized outputs', () => {
   const validated = getValidatedFixture()
   const compiled = compileAssessmentPackageV2(validated)
   assert.equal(compiled.ok, true)
@@ -98,6 +100,7 @@ test('integrity findings and missing-data limitations materialize into visible n
   })
   const warningMaterialized = materializeAssessmentOutputsV2(compiled.executablePackage!, warningEvaluation)
   assert.ok(warningMaterialized.integrityNotices.some((entry) => /inconsistent/i.test(entry.message)))
+  assert.equal(warningMaterialized.technicalDiagnostics.length, 0)
 
   const limitedEvaluation = evaluateAssessmentPackageV2(compiled.executablePackage!, {
     q1: 'often',
@@ -106,6 +109,8 @@ test('integrity findings and missing-data limitations materialize into visible n
   })
   const limitedMaterialized = materializeAssessmentOutputsV2(compiled.executablePackage!, limitedEvaluation)
   assert.ok(limitedMaterialized.reportDocument.sections.find((entry) => entry.key === 'limitations')?.blocks[0]?.items.some((item) => /Insufficient data/i.test(item)))
+  assert.ok(limitedMaterialized.technicalDiagnostics.some((entry) => entry.stage === 'evaluation' && /minimum answer threshold/i.test(entry.message)))
+  assert.equal(limitedMaterialized.integrityNotices.some((entry) => /minimum answer threshold/i.test(entry.message)), false)
 })
 
 test('invalid simulation inputs for v2 return useful diagnostics safely', () => {
@@ -138,4 +143,51 @@ test('readiness state reflects simulatable in admin versus live runtime-enabled 
   assert.equal(imported.readiness.simulatable, true)
   assert.equal(imported.readiness.liveRuntimeEnabled, false)
   assert.equal(imported.readiness.publishable, false)
+})
+
+test('manual and persisted v2 scenario payload validation use the same normalization rules', () => {
+  const imported = importAssessmentPackagePayload(examplePackage)
+  const payload = JSON.stringify({ responses: { q1: 'often', q2: 'rarely' }, locale: 'en-US', source: 'manual_json', scenarioKey: 'balanced' })
+
+  const parsed = parseAdminAssessmentSimulationPayloadForPackage(imported.definitionPayload, imported.schemaVersion, payload)
+  assert.equal(parsed.ok, true)
+
+  const simulation = executeAdminAssessmentSimulationForPackage(imported.definitionPayload, imported.schemaVersion, parsed.normalizedRequest!)
+  assert.equal(simulation.ok, true)
+  assert.deepEqual(simulation.result?.debug.responsePayload, { q1: 'often', q2: 'rarely' })
+  assert.equal(simulation.result?.request.locale, 'en-US')
+  assert.equal(simulation.result?.request.source, 'manual_json')
+})
+
+test('admin v2 view-model adapters retain debug details outside the materialized domain contract', () => {
+  const imported = importAssessmentPackagePayload(examplePackage)
+  const scenario = buildAdminAssessmentSimulationScenarioForPackage(imported.definitionPayload, 'balanced')
+  const simulation = executeAdminAssessmentSimulationForPackage(imported.definitionPayload, imported.schemaVersion, scenario!)
+
+  assert.equal(simulation.ok, true)
+  assert.ok((simulation.result?.viewModel?.materializationDebug.triggeredOutputKeys.length ?? 0) >= 0)
+  assert.equal((simulation.result?.materializedOutputs as Record<string, unknown>)?.adminDebug, undefined)
+  assert.deepEqual(
+    simulation.result?.viewModel?.materializedReportSections,
+    simulation.result?.materializedOutputs?.reportDocument.sections,
+  )
+})
+
+test('report document contract stays renderer-agnostic and avoids preview-specific copy', () => {
+  const validated = getValidatedFixture()
+  const compiled = compileAssessmentPackageV2(validated)
+  assert.equal(compiled.ok, true)
+  const evaluation = evaluateAssessmentPackageV2(compiled.executablePackage!, {
+    q1: 'often',
+    q2: 'rarely',
+    q3: 'often',
+    q4: 'often',
+  })
+
+  const materialized = materializeAssessmentOutputsV2(compiled.executablePackage!, evaluation)
+  const limitationText = materialized.reportDocument.sections.find((entry) => entry.key === 'limitations')?.blocks[0]?.text ?? ''
+
+  assert.doesNotMatch(JSON.stringify(materialized.reportDocument), /admin preview/i)
+  assert.doesNotMatch(JSON.stringify(materialized.reportDocument), /renderer readiness/i)
+  assert.doesNotMatch(limitationText, /overclaim live readiness/i)
 })

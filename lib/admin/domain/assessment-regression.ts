@@ -1,7 +1,10 @@
 import type { AdminAssessmentGeneratedReportOutput } from '@/lib/admin/domain/assessment-report-output'
 import { generateAdminAssessmentReportOutput } from '@/lib/admin/domain/assessment-report-output'
 import type { AdminAssessmentSimulationExecutionResult, AdminAssessmentSimulationIssue, AdminAssessmentSimulationRequest, AdminAssessmentSimulationResult } from '@/lib/admin/domain/assessment-simulation'
-import { executeAdminAssessmentSimulation, parseAdminAssessmentSimulationPayload } from '@/lib/admin/domain/assessment-simulation'
+import {
+  executeAdminAssessmentSimulationForPackage,
+  parseAdminAssessmentSimulationPayloadForPackage,
+} from '@/lib/admin/domain/assessment-simulation'
 import type { AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
 
 export type AdminAssessmentScenarioType = 'baseline' | 'edge_case' | 'regression' | 'stress' | 'custom'
@@ -154,7 +157,11 @@ export function validateSavedAssessmentScenarioPayload(
   payloadText: string,
   version: Pick<AdminAssessmentVersionRecord, 'normalizedPackage' | 'packageInfo'>,
 ): AdminAssessmentScenarioValidationResult {
-  const parsed = parseAdminAssessmentSimulationPayload(payloadText, 'manual_json')
+  const parsed = parseAdminAssessmentSimulationPayloadForPackage(
+    version.normalizedPackage,
+    version.packageInfo.schemaVersion,
+    payloadText,
+  )
 
   if (!parsed.ok || !parsed.normalizedRequest) {
     return {
@@ -174,7 +181,11 @@ export function validateSavedAssessmentScenarioPayload(
     }
   }
 
-  const execution = executeAdminAssessmentSimulation(version.normalizedPackage, parsed.normalizedRequest)
+  const execution = executeAdminAssessmentSimulationForPackage(
+    version.normalizedPackage,
+    version.packageInfo.schemaVersion,
+    parsed.normalizedRequest,
+  )
   return {
     ok: execution.ok,
     issues: execution.errors,
@@ -284,7 +295,7 @@ export function executeAssessmentScenarioForVersion(
     }
   }
 
-  const execution: AdminAssessmentSimulationExecutionResult = executeAdminAssessmentSimulation(version.normalizedPackage, validation.normalizedRequest)
+  const execution: AdminAssessmentSimulationExecutionResult = executeAdminAssessmentSimulationForPackage(version.normalizedPackage, version.packageInfo.schemaVersion, validation.normalizedRequest)
   if (!execution.ok || !execution.result) {
     return {
       versionId: version.id,
@@ -308,7 +319,7 @@ export function executeAssessmentScenarioForVersion(
       : 'Scenario executed successfully.',
     simulation: execution.result,
     simulationWarnings: execution.warnings,
-    reportOutput: generateAdminAssessmentReportOutput(version.normalizedPackage, execution.result),
+    reportOutput: execution.result.contractVersion === 'package_contract_v2' ? null : generateAdminAssessmentReportOutput(version.normalizedPackage, execution.result),
   }
 }
 
