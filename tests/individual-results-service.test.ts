@@ -247,3 +247,108 @@ test('returns completed-processing state when ready snapshot metadata exists but
   assert.equal(response.ok, true);
   assert.equal(response.state, 'completed_processing');
 });
+
+
+test('returns ready_v2 when the latest ready snapshot is a product-safe v2 result', async () => {
+  const v2Result = {
+    ...completeResult,
+    version_key: 'signals-v2',
+    result_payload: {
+      contractVersion: 'package_contract_v2',
+      packageMetadata: {
+        assessmentName: 'Adaptive Balance',
+        packageSemver: '2.1.0',
+      },
+      materializedOutputs: {
+        webSummaryOutputs: [
+          {
+            id: 'summary:1',
+            key: 'adaptive-balance',
+            title: 'Adaptive Balance',
+            label: 'Adaptive Balance',
+            status: 'available',
+            severity: null,
+            band: 'Balanced',
+            value: { score: 74, rawScore: 12, percentile: 81, descriptor: 'Strongly balanced' },
+            explanation: { text: 'Consistent balance across adaptive dimensions.' },
+            visibleInProduct: true,
+          },
+        ],
+        integrityNotices: [
+          {
+            id: 'integrity:1',
+            severity: 'warning',
+            title: 'response consistency',
+            message: 'A small number of answers were inconsistent.',
+            source: 'integrity_rule',
+            affectedIds: ['q-1'],
+          },
+        ],
+      },
+    },
+  }
+
+  const response = await getLatestIndividualResultForUser({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext, version_key: 'signals-v2' }),
+    getLatestResultForAssessment: async () => v2Result,
+    getResultById: async () => v2Result,
+    getLatestReadyResultForUser: async () => ({ ...readyResultForUser, version_key: 'signals-v2', result_payload: v2Result.result_payload }),
+    getSignalsByResultId: async () => [],
+  })
+
+  assert.equal(response.ok, true)
+  assert.equal(response.state, 'ready_v2')
+  if (response.state === 'ready_v2') {
+    assert.equal(response.data.assessmentMeta.title, 'Adaptive Balance')
+    assert.equal(response.data.summaryCards.length, 1)
+    assert.equal(response.data.notices.length, 1)
+  }
+})
+
+test('returns results_unavailable when a v2 result completes without product summary outputs', async () => {
+  const response = await getLatestIndividualResultForUser({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext, version_key: 'signals-v2' }),
+    getLatestResultForAssessment: async () => ({
+      ...completeResult,
+      version_key: 'signals-v2',
+      result_payload: {
+        contractVersion: 'package_contract_v2',
+        packageMetadata: { assessmentName: 'Adaptive Balance' },
+        materializedOutputs: {
+          webSummaryOutputs: [],
+          integrityNotices: [],
+        },
+      },
+    }),
+    getResultById: async () => ({
+      ...completeResult,
+      version_key: 'signals-v2',
+      result_payload: {
+        contractVersion: 'package_contract_v2',
+        packageMetadata: { assessmentName: 'Adaptive Balance' },
+        materializedOutputs: {
+          webSummaryOutputs: [],
+          integrityNotices: [],
+        },
+      },
+    }),
+    getLatestReadyResultForUser: async () => ({
+      ...readyResultForUser,
+      version_key: 'signals-v2',
+      result_payload: {
+        contractVersion: 'package_contract_v2',
+        packageMetadata: { assessmentName: 'Adaptive Balance' },
+        materializedOutputs: {
+          webSummaryOutputs: [],
+          integrityNotices: [],
+        },
+      },
+    }),
+    getSignalsByResultId: async () => [],
+  })
+
+  assert.equal(response.ok, true)
+  assert.equal(response.state, 'results_unavailable')
+})

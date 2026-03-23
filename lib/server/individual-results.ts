@@ -3,8 +3,21 @@ import { queryDb } from '@/lib/db';
 import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants';
 import { resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
+import {
+  buildLiveAssessmentUserResultContract,
+  isPackageContractV2Result,
+  type LiveAssessmentUserResultContract,
+} from '@/lib/server/live-assessment-user-result';
 
-export type IndividualResultsState = 'unauthenticated' | 'empty' | 'in_progress' | 'completed_processing' | 'ready' | 'error';
+export type IndividualResultsState =
+  | 'unauthenticated'
+  | 'empty'
+  | 'in_progress'
+  | 'completed_processing'
+  | 'results_unavailable'
+  | 'ready'
+  | 'ready_v2'
+  | 'error';
 
 export interface IndividualResultAssessmentMetadata {
   assessmentId: string;
@@ -56,11 +69,13 @@ export type IndividualResultApiResponse =
   | { ok: true; state: 'empty'; message: string }
   | {
       ok: true;
-      state: 'in_progress' | 'completed_processing';
+      state: 'in_progress' | 'completed_processing' | 'results_unavailable';
       message: string;
       data?: Partial<IndividualResultReadyData>;
+      userResult?: LiveAssessmentUserResultContract;
     }
   | { ok: true; state: 'ready'; data: IndividualResultReadyData }
+  | { ok: true; state: 'ready_v2'; data: LiveAssessmentUserResultContract }
   | { ok: false; state: 'error'; message: string };
 
 interface AssessmentContextRow extends AssessmentRow {
@@ -142,8 +157,11 @@ const defaultDependencies: IndividualResultsDependencies = {
        WHERE a.user_id = $1
          AND a.organisation_id IS NULL
          AND ar.status = 'complete'
-         AND EXISTS (
-           SELECT 1 FROM assessment_result_signals ars WHERE ars.assessment_result_id = ar.id
+         AND (
+           EXISTS (
+             SELECT 1 FROM assessment_result_signals ars WHERE ars.assessment_result_id = ar.id
+           )
+           OR COALESCE(ar.result_payload->>'contractVersion', '') = 'package_contract_v2'
          )
        ORDER BY a.completed_at DESC NULLS LAST, ar.created_at DESC
        LIMIT 1`,
@@ -219,6 +237,22 @@ function buildLayerSummaries(signals: IndividualResultSignalSummary[]): Individu
     });
 }
 
+function toAssessmentMetadata(
+  readySnapshot: {
+    versionKey: string | null
+    assessmentStartedAt: string | null
+    assessmentCompletedAt: string | null
+  } | null,
+  snapshot: AssessmentResultRow,
+): IndividualResultAssessmentMetadata {
+  return {
+    assessmentId: snapshot.assessment_id,
+    versionKey: readySnapshot?.versionKey ?? snapshot.version_key,
+    startedAt: readySnapshot?.assessmentStartedAt ?? null,
+    completedAt: readySnapshot?.assessmentCompletedAt ?? snapshot.completed_at,
+  };
+}
+
 export async function getLatestIndividualResultForUser(
   dependencies: Partial<IndividualResultsDependencies> = {},
 ): Promise<IndividualResultApiResponse> {
@@ -271,6 +305,41 @@ export async function getLatestIndividualResultForUser(
       return { ok: false, state: 'error', message: 'Ready result metadata could not be loaded.' };
     }
 
+    if (isPackageContractV2Result(snapshot)) {
+      const contract = buildLiveAssessmentUserResultContract({
+        assessment: {
+          id: readySnapshot.assessmentId,
+          user_id: lifecycle.userId,
+          organisation_id: null,
+          assessment_version_id: snapshot.assessment_version_id,
+          status: 'completed',
+          started_at: readySnapshot.assessmentStartedAt,
+          completed_at: readySnapshot.assessmentCompletedAt,
+          last_activity_at: readySnapshot.assessmentCompletedAt,
+          progress_count: 0,
+          progress_percent: '100',
+          current_question_index: 0,
+          scoring_status: 'scored',
+          source: 'web',
+          metadata_json: null,
+          created_at: snapshot.created_at,
+          updated_at: snapshot.updated_at,
+        },
+        result: snapshot,
+      });
+
+      if (contract.status === 'completed') {
+        return { ok: true, state: 'ready_v2', data: contract };
+      }
+
+      return {
+        ok: true,
+        state: contract.status === 'pending' ? 'completed_processing' : 'results_unavailable',
+        message: contract.statusMessage,
+        userResult: contract,
+      };
+    }
+
     const orderedSignals = sortSignals(await resolvedDependencies.getSignalsByResultId(snapshot.id));
     if (orderedSignals.length === 0) {
       return {
@@ -278,12 +347,7 @@ export async function getLatestIndividualResultForUser(
         state: 'completed_processing',
         message: 'Result snapshot exists but no signal rows are available yet.',
         data: {
-          assessment: {
-            assessmentId: snapshot.assessment_id,
-            versionKey: readySnapshot.versionKey ?? snapshot.version_key,
-            startedAt: readySnapshot.assessmentStartedAt,
-            completedAt: readySnapshot.assessmentCompletedAt,
-          },
+          assessment: toAssessmentMetadata(readySnapshot, snapshot),
           snapshot: {
             resultId: snapshot.id,
             status: snapshot.status,
@@ -314,12 +378,7 @@ export async function getLatestIndividualResultForUser(
       ok: true,
       state: 'ready',
       data: {
-        assessment: {
-          assessmentId: snapshot.assessment_id,
-          versionKey: readySnapshot.versionKey ?? snapshot.version_key,
-          startedAt: readySnapshot.assessmentStartedAt,
-          completedAt: readySnapshot.assessmentCompletedAt,
-        },
+        assessment: toAssessmentMetadata(readySnapshot, snapshot),
         snapshot: {
           resultId: snapshot.id,
           status: snapshot.status,

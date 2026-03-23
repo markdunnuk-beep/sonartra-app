@@ -148,3 +148,67 @@ test('latest in-progress attempt still resolves ready when older ready result ex
     assert.equal(state.lifecycle.latestReadyResult?.assessmentId, 'assessment-1')
   }
 })
+
+
+test('completed v2 snapshot with user-facing summary resolves ready without signal rows', async () => {
+  const state = await resolveIndividualLifecycleState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessmentForUser: async () => completedAssessment,
+    getLatestResultForAssessment: async () => ({
+      ...completeSnapshot,
+      version_key: 'signals-v2',
+      result_payload: {
+        contractVersion: 'package_contract_v2',
+        packageMetadata: { assessmentName: 'Signals v2' },
+        materializedOutputs: {
+          webSummaryOutputs: [
+            {
+              id: 'summary:1',
+              key: 'adaptive-balance',
+              title: 'Adaptive Balance',
+              label: 'Adaptive Balance',
+              status: 'available',
+              severity: null,
+              band: 'Balanced',
+              value: { score: 70, rawScore: 10, percentile: null, descriptor: 'Balanced' },
+              explanation: { text: 'ready' },
+              visibleInProduct: true,
+            },
+          ],
+          integrityNotices: [],
+        },
+      },
+    }),
+    getSignalCountByResultId: async () => 0,
+    getLatestReadyResultForUser: async () => ({
+      ...completeSnapshot,
+      version_key: 'signals-v2',
+      result_payload: {
+        contractVersion: 'package_contract_v2',
+        packageMetadata: { assessmentName: 'Signals v2' },
+        materializedOutputs: {
+          webSummaryOutputs: [
+            {
+              id: 'summary:1',
+              key: 'adaptive-balance',
+              title: 'Adaptive Balance',
+              label: 'Adaptive Balance',
+              status: 'available',
+              severity: null,
+              band: 'Balanced',
+              value: { score: 70, rawScore: 10, percentile: null, descriptor: 'Balanced' },
+              explanation: { text: 'ready' },
+              visibleInProduct: true,
+            },
+          ],
+          integrityNotices: [],
+        },
+      },
+      assessment_started_at: completedAssessment.started_at,
+      assessment_completed_at: completedAssessment.completed_at,
+      assessment_version_key: 'signals-v2',
+    }),
+  })
+
+  if (state.authState === 'authenticated') assert.equal(state.lifecycle.state, 'ready')
+})

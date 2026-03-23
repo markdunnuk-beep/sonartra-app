@@ -216,3 +216,29 @@ test('database failure during authenticated user resolution falls back to a safe
   assert.equal(state.assessment.status, 'error')
   assert.equal(state.assessment.progressPercent, 0)
 })
+
+
+test('ready lifecycle preserves results-ready dashboard state when only a v2 product result exists', async () => {
+  const state = await getAuthenticatedDashboardState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessment: async () => ({ ...inProgressAssessment, status: 'completed', progress_percent: '100', progress_count: 80, completed_at: '2026-01-01T10:10:00.000Z' }),
+    resolveLifecycle: async () => ({
+      authState: 'authenticated',
+      userId: 'user-1',
+      lifecycle: {
+        state: 'ready',
+        latestAssessment: null,
+        latestAssessmentResult: null,
+        latestReadyResult: null,
+        message: 'ready',
+      },
+    }),
+    getResult: async () => {
+      throw new Error('legacy v1 result unavailable')
+    },
+  })
+
+  assert.equal(state.hasCompletedResult, true)
+  assert.equal(state.assessment.status, 'ready')
+  assert.equal(state.result, null)
+})

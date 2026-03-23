@@ -11,6 +11,7 @@ import {
   type IndividualResultsPresentationModel,
 } from '@/lib/results/individual-results-presentation'
 import { IndividualResultsExperience } from '@/components/results/IndividualResultsExperience'
+import { UserFacingAssessmentResultView } from '@/components/results/UserFacingAssessmentResultView'
 
 type ViewModel = IndividualResultApiResponse | { state: string; message?: string }
 
@@ -56,6 +57,10 @@ export function IndividualIntelligenceResultView({ model, firstName }: { model: 
     return renderReady(model.data, model.state, firstName)
   }
 
+  if (model.state === 'ready_v2' && 'data' in model) {
+    return <UserFacingAssessmentResultView result={model.data} />
+  }
+
   if (model.state === 'empty') {
     return (
       <ResultsWorkspaceShell title={RESULT_TITLE} subtitle={RESULT_SUBTITLE} statusLabel="No Result Yet">
@@ -98,6 +103,21 @@ export function IndividualIntelligenceResultView({ model, firstName }: { model: 
             description={model.message ?? 'Your latest assessment has been submitted successfully. Results will appear here once processing completes.'}
             ctaLabel="Back to assessment workspace"
             ctaHref="/assessment"
+          />,
+        )}
+      </ResultsWorkspaceShell>
+    )
+  }
+
+
+  if (model.state === 'results_unavailable') {
+    return (
+      <ResultsWorkspaceShell title={RESULT_TITLE} subtitle={RESULT_SUBTITLE} statusLabel="Results unavailable">
+        {withDevelopmentDiagnostic(
+          model.state,
+          <ResultFailedStatePanel
+            title="Your completed assessment is not yet available to view"
+            description={model.message ?? 'Your assessment completed successfully, but a user-facing result is not available yet.'}
           />,
         )}
       </ResultsWorkspaceShell>
