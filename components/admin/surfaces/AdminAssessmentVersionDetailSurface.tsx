@@ -93,9 +93,65 @@ function formatActivityLabel(summary: string) {
   if (normalized.includes('package imported')) return 'Package uploaded'
   if (normalized.includes('readiness')) return 'Readiness checked'
   if (normalized.includes('published')) return 'Version published'
-  if (normalized.includes('release notes')) return 'Release notes updated'
+  if (normalized.includes('release notes')) return 'Notes updated'
 
   return summary
+}
+
+function formatIssuePath(path: string) {
+  if (!path) {
+    return ''
+  }
+
+  const trimmed = path.trim()
+
+  if (/^questions\[(\d+)\]/i.test(trimmed)) {
+    const match = trimmed.match(/^questions\[(\d+)\](?:\.(.+))?$/i)
+    const questionNumber = match ? Number.parseInt(match[1] ?? '0', 10) + 1 : null
+    const field = match?.[2]
+      ?.replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/\./g, ' · ')
+      .replace(/id\b/gi, 'ID')
+
+    return questionNumber
+      ? `Question ${questionNumber}${field ? ` · ${field}` : ''}`
+      : trimmed
+  }
+
+  return trimmed
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\./g, ' · ')
+    .replace(/id\b/gi, 'ID')
+}
+
+function formatOperatorIssueText(message: string) {
+  return message
+    .replace(/normalized package/gi, 'package')
+    .replace(/package contract v2/gi, 'package')
+    .replace(/package contract/gi, 'package')
+    .replace(/live runtime/gi, 'live version')
+    .replace(/execution path/gi, 'publish flow')
+    .replace(/release-governance/gi, 'publish')
+    .replace(/governance checks/gi, 'checks')
+    .replace(/validation evidence/gi, 'package checks')
+    .replace(/publish gating conditions/gi, 'publish checks')
+    .replace(/readiness evidence/gi, 'readiness details')
+    .replace(/simulation/gi, 'test')
+    .replace(/regression/gi, 'saved test')
+    .replace(/sign-off/gi, 'approval')
+}
+
+function formatOperatorIssue(item: string) {
+  const parts = item.split(' · ')
+  if (parts.length < 2) {
+    return formatOperatorIssueText(item)
+  }
+
+  const [path, ...rest] = parts
+  const formattedPath = formatIssuePath(path)
+  const formattedMessage = formatOperatorIssueText(rest.join(' · '))
+
+  return formattedPath ? `${formattedPath} — ${formattedMessage}` : formattedMessage
 }
 
 const AdminAssessmentVersionReleaseControls = dynamic(() => import('@/components/admin/surfaces/AdminAssessmentVersionReleaseControls').then((module) => module.AdminAssessmentVersionReleaseControls), { ssr: false })
@@ -135,18 +191,11 @@ export function AdminAssessmentVersionDetailSurface({
   const packageInfo = safeVersion.packageInfo
   const preview = getAdminAssessmentPackagePreviewSummary(safeVersion)
   const readiness = getAdminAssessmentVersionReadiness(safeVersion)
-  const releaseGovernance = safeVersion.releaseGovernance ?? {
-    readinessStatus: readiness.status,
-    readinessSummary: null,
-    lastReadinessEvaluatedAt: null,
-    signOff: { status: 'unsigned' as const, signedOffBy: null, signedOffAt: null, isStale: false, staleReason: null },
-    releaseNotes: null,
-  }
   const issues = [
     ...readiness.blockingIssues,
     ...packageInfo.errors.map((issue) => `${issue.path} · ${issue.message}`),
     ...packageInfo.warnings.map((issue) => `${issue.path} · ${issue.message}`),
-  ]
+  ].map(formatOperatorIssue)
   const summaryItems = [
     { label: 'Status', value: formatLifecycleStatus(safeVersion.lifecycleStatus) },
     { label: 'Ready to publish', value: getReadyToPublishLabel(readiness.status) },
@@ -168,13 +217,18 @@ export function AdminAssessmentVersionDetailSurface({
         actions={(
           <div className="flex flex-wrap gap-2">
             <Button href={`/admin/assessments/${detailData.assessment.id}?tab=versions`} variant="ghost">← Back to versions</Button>
-            <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/simulate`} variant="secondary"><FlaskConical className="mr-2 h-4 w-4" />Run test</Button>
+            <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/simulate`} variant="primary"><FlaskConical className="mr-2 h-4 w-4" />Run test</Button>
             <Button href={buildAdminAuditHref({ entityType: 'assessment_version', entityId: safeVersion.id })} variant="ghost"><Activity className="mr-2 h-4 w-4" />View audit</Button>
           </div>
         )}
       />
 
-      {flashMessage ? <div className="rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.08] px-4 py-3 text-sm text-emerald-100">{flashMessage}</div> : null}
+      {flashMessage ? (
+        <div className="rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.08] px-4 py-3">
+          <p className="text-sm font-medium text-emerald-100">{flashMessage}</p>
+          <p className="mt-1 text-sm text-emerald-50/90">Next, run a test to preview the output for this version.</p>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {summaryItems.map((item) => (
@@ -187,45 +241,35 @@ export function AdminAssessmentVersionDetailSurface({
 
       <SurfaceSection
         title="Version actions"
-        description="Use these steps to test, check, and publish this version."
+        description="Work through these steps before publishing this version."
       >
         <div className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-3">
-            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
-              <p className="text-base font-semibold text-textPrimary">Test assessment</p>
-              <p className="mt-2 text-sm leading-6 text-textSecondary">Try sample responses and preview the results.</p>
-            </div>
-            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-base font-semibold text-textPrimary">Check readiness</p>
-                <Badge label={readiness.status === 'not_ready' ? 'Not ready' : readiness.status === 'ready_with_warnings' ? 'Ready with notes' : 'Ready'} tone={getReadinessTone(readiness.status)} />
-              </div>
-              <p className="mt-2 text-sm leading-6 text-textSecondary">Confirm this version is ready to go live.</p>
-              <p className="mt-3 text-sm leading-6 text-textPrimary">{readiness.status === 'not_ready' ? 'This version is not ready yet.' : readiness.status === 'ready_with_warnings' ? 'This version is ready, with a few items to review.' : 'This version is ready to publish.'}</p>
-              {readiness.blockingIssues.length ? (
-                <div className="mt-3 space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-200">Issues to fix before publishing</p>
-                  <EvidenceList items={readiness.blockingIssues} tone="rose" />
-                </div>
-              ) : null}
-              {!readiness.blockingIssues.length && readiness.warnings.length ? (
-                <div className="mt-3 space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-200">Items to review</p>
-                  <EvidenceList items={readiness.warnings} tone="amber" />
-                </div>
-              ) : null}
-            </div>
-            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
-              <p className="text-base font-semibold text-textPrimary">Publish version</p>
-              <p className="mt-2 text-sm leading-6 text-textSecondary">Make this version live for users.</p>
-              <p className="mt-3 text-sm leading-6 text-textPrimary">
-                {readiness.status === 'not_ready'
-                  ? 'Publishing stays blocked until the issues above are fixed.'
-                  : releaseGovernance.signOff.status === 'signed_off'
-                    ? 'This version can be published with the current approval on file.'
-                    : 'Publishing will use the current readiness rules.'}
+          <div className="rounded-2xl border border-white/[0.08] bg-panel/45 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-base font-semibold text-textPrimary">
+                {readiness.status === 'not_ready' ? 'This version is not ready to publish yet.' : readiness.status === 'ready_with_warnings' ? 'This version is almost ready to publish.' : 'This version is ready to publish.'}
               </p>
+              <Badge label={readiness.status === 'not_ready' ? 'Issues to fix' : readiness.status === 'ready_with_warnings' ? 'Ready with notes' : 'Ready to publish'} tone={getReadinessTone(readiness.status)} />
             </div>
+            <p className="mt-2 text-sm leading-6 text-textSecondary">
+              {readiness.status === 'not_ready'
+                ? 'Complete the steps below before publishing.'
+                : readiness.status === 'ready_with_warnings'
+                  ? 'Run a final test, check readiness, and review the notes below before publishing.'
+                  : 'Run a final test, then publish when you are ready.'}
+            </p>
+            {readiness.blockingIssues.length ? (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-200">Issues to fix:</p>
+                <EvidenceList items={readiness.blockingIssues.map(formatOperatorIssue)} tone="rose" />
+              </div>
+            ) : null}
+            {!readiness.blockingIssues.length && readiness.warnings.length ? (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-200">Items to review</p>
+                <EvidenceList items={readiness.warnings.map(formatOperatorIssue)} tone="amber" />
+              </div>
+            ) : null}
           </div>
 
           <AdminAssessmentVersionReleaseControls assessmentId={detailData.assessment.id} version={safeVersion} />
@@ -242,23 +286,23 @@ export function AdminAssessmentVersionDetailSurface({
           <MetaGrid
             columns={2}
             items={[
+              { label: 'Status', value: packageInfo.status === 'valid' ? 'Uploaded' : packageInfo.status === 'valid_with_warnings' ? 'Uploaded with notes' : packageInfo.status === 'invalid' ? 'Needs fixes' : 'Missing' },
               { label: 'Questions', value: String(preview.metrics.questionsCount) },
               { label: 'Dimensions', value: String(preview.metrics.dimensionsCount) },
               { label: 'Imported by', value: packageInfo.importedByName ?? 'Unknown' },
               { label: 'Imported on', value: formatAdminTimestamp(packageInfo.importedAt) },
-              ...(packageInfo.sourceFilename ? [{ label: 'Filename', value: packageInfo.sourceFilename }] : []),
             ]}
           />
         )}
       </SurfaceSection>
 
       {issues.length ? (
-        <SurfaceSection title="Issues" description="These items need attention before publishing.">
+        <SurfaceSection title="Issues to fix" description="Complete these steps before publishing.">
           <div className="space-y-4">
-            {readiness.blockingIssues.length ? <EvidenceList items={readiness.blockingIssues} tone="rose" /> : null}
-            {packageInfo.errors.length ? <EvidenceList items={packageInfo.errors.map((issue) => `${issue.path} · ${issue.message}`)} tone="rose" /> : null}
+            {readiness.blockingIssues.length ? <EvidenceList items={readiness.blockingIssues.map(formatOperatorIssue)} tone="rose" /> : null}
+            {packageInfo.errors.length ? <EvidenceList items={packageInfo.errors.map((issue) => formatOperatorIssue(`${issue.path} · ${issue.message}`))} tone="rose" /> : null}
             {readiness.warnings.length || packageInfo.warnings.length ? (
-              <EvidenceList items={[...readiness.warnings, ...packageInfo.warnings.map((issue) => `${issue.path} · ${issue.message}`)]} tone="amber" />
+              <EvidenceList items={[...readiness.warnings, ...packageInfo.warnings.map((issue) => `${issue.path} · ${issue.message}`)].map(formatOperatorIssue)} tone="amber" />
             ) : null}
           </div>
         </SurfaceSection>
