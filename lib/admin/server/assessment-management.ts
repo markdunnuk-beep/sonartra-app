@@ -1687,6 +1687,7 @@ function buildPackageValidationReport(input: {
     structurallyValid: boolean
     importable: boolean
     compilable: boolean
+    evaluatable: boolean
     runtimeExecutable: boolean
     publishable: boolean
   }
@@ -2207,6 +2208,7 @@ export async function importAdminAssessmentPackage(
           structurallyValid: false,
           importable: false,
           compilable: false,
+          evaluatable: false,
           runtimeExecutable: false,
           publishable: false,
         },
@@ -2401,6 +2403,7 @@ export async function importAdminAssessmentPackage(
           detectedVersion: importedPackage.detectedVersion,
           schemaVersion: importedPackage.schemaVersion,
           runtimeExecutable: importedPackage.readiness.runtimeExecutable,
+          evaluatable: importedPackage.readiness.evaluatable,
           publishable: importedPackage.readiness.publishable,
           warnings: importedPackage.warnings.length,
           sourceFilename: normaliseNullableField(input.sourceFilename),
@@ -2413,6 +2416,7 @@ export async function importAdminAssessmentPackage(
         detectedVersion: importedPackage.detectedVersion,
         schemaVersion: importedPackage.schemaVersion,
         runtimeExecutable: importedPackage.readiness.runtimeExecutable,
+        evaluatable: importedPackage.readiness.evaluatable,
         publishable: importedPackage.readiness.publishable,
       })
 

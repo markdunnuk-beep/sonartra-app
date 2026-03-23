@@ -726,8 +726,32 @@ export function compileAssessmentPackageV2(
           ruleIds: binding.ruleIds ?? [],
         })))
 
-    const itemBindings = (bindingsFromWeighted.length > 0 ? bindingsFromWeighted : bindingsFromInputs.length > 0 ? bindingsFromInputs : bindingsFromQuestionScoring)
-      .filter((binding, bindingIndex, collection) => collection.findIndex((candidate) => candidate.questionId === binding.questionId) === bindingIndex)
+    const bindingCandidates = bindingsFromWeighted.length > 0
+      ? [...bindingsFromWeighted, ...bindingsFromQuestionScoring]
+      : bindingsFromInputs.length > 0
+        ? [...bindingsFromInputs, ...bindingsFromQuestionScoring]
+        : bindingsFromQuestionScoring
+
+    const itemBindings = Array.from(
+      bindingCandidates.reduce((collection, binding) => {
+        const existing = collection.get(binding.questionId)
+        if (!existing) {
+          collection.set(binding.questionId, {
+            questionId: binding.questionId,
+            weight: binding.weight,
+            transformIds: [...binding.transformIds],
+            ruleIds: [...binding.ruleIds],
+          })
+          return collection
+        }
+
+        existing.weight = binding.weight !== 1 || existing.weight === 1 ? binding.weight : existing.weight
+        existing.transformIds = [...new Set([...existing.transformIds, ...binding.transformIds])]
+        existing.ruleIds = [...new Set([...existing.ruleIds, ...binding.ruleIds])]
+        return collection
+      }, new Map<string, ExecutableDimensionItemBinding>()),
+      ([, binding]) => binding,
+    )
 
     if (itemBindings.length === 0) {
       pushDiagnostic(diagnostics, 'warning', 'dimension_without_items', path, `Dimension "${dimension.id}" has no executable question bindings.`)

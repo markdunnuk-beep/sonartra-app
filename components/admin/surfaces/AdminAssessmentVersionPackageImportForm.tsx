@@ -112,6 +112,7 @@ function ValidationResults({ state }: { state: AdminAssessmentPackageImportState
         <div className="rounded-xl border border-white/[0.08] bg-bg/30 px-3 py-3 text-xs text-textSecondary">
           <p className="font-semibold uppercase tracking-[0.14em] text-textPrimary">Readiness</p>
           <p className="mt-2">Structurally valid: {readiness.structurallyValid ? 'Yes' : 'No'} · Importable: {readiness.importable ? 'Yes' : 'No'}</p>
+          <p className="mt-1">Compilable: {readiness.compilable ? 'Yes' : 'No'} · Evaluatable: {readiness.evaluatable ? 'Yes' : 'No'}</p>
           <p className="mt-1">Runtime executable: {readiness.runtimeExecutable ? 'Yes' : 'No'} · Publishable: {readiness.publishable ? 'Yes' : 'No'}</p>
         </div>
       ) : null}

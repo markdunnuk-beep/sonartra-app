@@ -8,6 +8,7 @@ export interface AdminAssessmentPackageReadinessFlags {
   structurallyValid: boolean
   importable: boolean
   compilable: boolean
+  evaluatable: boolean
   runtimeExecutable: boolean
   publishable: boolean
 }
@@ -156,6 +157,7 @@ export function importAssessmentPackagePayload(input: unknown): ImportedAssessme
         structurallyValid: validation.ok,
         importable: validation.ok,
         compilable: validation.ok,
+        evaluatable: validation.ok,
         runtimeExecutable: validation.ok,
         publishable: validation.ok,
       }
@@ -186,6 +188,7 @@ export function importAssessmentPackagePayload(input: unknown): ImportedAssessme
         structurallyValid: validation.ok,
         importable: validation.ok,
         compilable: Boolean(compileResult?.ok),
+        evaluatable: Boolean(compileResult?.ok),
         runtimeExecutable: false,
         publishable: false,
       }
@@ -241,6 +244,7 @@ export function importAssessmentPackagePayload(input: unknown): ImportedAssessme
           structurallyValid: false,
           importable: false,
           compilable: false,
+          evaluatable: false,
           runtimeExecutable: false,
           publishable: false,
         },
