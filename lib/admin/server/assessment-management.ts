@@ -20,13 +20,14 @@ import {
 } from '@/lib/admin/domain/assessment-management'
 import {
   SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1,
+  type AdminAssessmentPackageDetectedVersion,
   type AdminAssessmentVersionPackageInfo,
   type AssessmentPackageStatus,
   type SonartraAssessmentPackageSummary,
   type SonartraAssessmentPackageValidationIssue,
   parseStoredNormalizedAssessmentPackage,
-  validateSonartraAssessmentPackage,
 } from '@/lib/admin/domain/assessment-package'
+import { importAssessmentPackagePayload, type AdminAssessmentPackageValidationSummary } from '@/lib/admin/server/assessment-package-import'
 import { getAdminAssessmentVersionReadiness } from '@/lib/admin/domain/assessment-package-review'
 import {
   executeAdminAssessmentSimulation,
@@ -233,10 +234,7 @@ export interface AdminAssessmentPackageImportResult {
   message: string
   assessmentId?: string
   versionId?: string
-  validationResult?: {
-    errors: SonartraAssessmentPackageValidationIssue[]
-    warnings: SonartraAssessmentPackageValidationIssue[]
-  }
+  validationResult?: AdminAssessmentPackageValidationSummary
   fieldErrors?: {
     packageText?: string
     packageFile?: string
@@ -443,7 +441,21 @@ function normalisePackageSummary(value: unknown): SonartraAssessmentPackageSumma
     normalizationRuleCount: normaliseCount((summary as Record<string, unknown>).normalizationRuleCount as number | string | null | undefined),
     outputRuleCount: normaliseCount((summary as Record<string, unknown>).outputRuleCount as number | string | null | undefined),
     localeCount: normaliseCount((summary as Record<string, unknown>).localeCount as number | string | null | undefined),
+    packageName: normaliseNullableField((summary as Record<string, unknown>).packageName as string | null | undefined),
+    versionLabel: normaliseNullableField((summary as Record<string, unknown>).versionLabel as string | null | undefined),
+    assessmentKey: normaliseNullableField((summary as Record<string, unknown>).assessmentKey as string | null | undefined),
+    sectionCount: normaliseCount((summary as Record<string, unknown>).sectionCount as number | string | null | undefined),
+    derivedDimensionCount: normaliseCount((summary as Record<string, unknown>).derivedDimensionCount as number | string | null | undefined),
+    responseModelCount: normaliseCount((summary as Record<string, unknown>).responseModelCount as number | string | null | undefined),
+    transformCount: normaliseCount((summary as Record<string, unknown>).transformCount as number | string | null | undefined),
+    integrityRuleCount: normaliseCount((summary as Record<string, unknown>).integrityRuleCount as number | string | null | undefined),
   }
+}
+
+function normaliseDetectedPackageVersion(value: unknown): AdminAssessmentPackageDetectedVersion | null {
+  return value === 'legacy_v1' || value === 'package_contract_v2' || value === 'unknown'
+    ? value
+    : null
 }
 
 function normalisePackageIssues(value: unknown, key: 'errors' | 'warnings'): SonartraAssessmentPackageValidationIssue[] {
@@ -471,8 +483,10 @@ function normalisePackageIssues(value: unknown, key: 'errors' | 'warnings'): Son
 }
 
 function mapPackageInfo(row: AssessmentVersionRow): AdminAssessmentVersionPackageInfo {
+  const validationReport = parseJsonObject<Record<string, unknown>>(row.package_validation_report_json)
   return {
     status: isPackageStatus(row.package_status) ? row.package_status : 'missing',
+    detectedVersion: normaliseDetectedPackageVersion(validationReport?.detectedVersion),
     schemaVersion: normaliseNullableField(row.package_schema_version),
     sourceType: row.package_source_type === 'manual_import' ? 'manual_import' : null,
     importedAt: normaliseTimestamp(row.package_imported_at),
@@ -1664,11 +1678,28 @@ async function writeAssessmentAuditEvent(
 }
 
 function buildPackageValidationReport(input: {
-  summary: SonartraAssessmentPackageSummary
+  detectedVersion?: AdminAssessmentPackageDetectedVersion | null
+  success?: boolean
+  schemaVersion?: string | null
+  packageName?: string | null
+  versionLabel?: string | null
+  readiness?: {
+    structurallyValid: boolean
+    importable: boolean
+    runtimeExecutable: boolean
+    publishable: boolean
+  }
+  summary: SonartraAssessmentPackageSummary | null
   errors: SonartraAssessmentPackageValidationIssue[]
   warnings: SonartraAssessmentPackageValidationIssue[]
 }) {
   return {
+    detectedVersion: input.detectedVersion ?? null,
+    success: typeof input.success === 'boolean' ? input.success : input.errors.length === 0,
+    schemaVersion: input.schemaVersion ?? null,
+    packageName: input.packageName ?? null,
+    versionLabel: input.versionLabel ?? null,
+    readiness: input.readiness ?? null,
     summary: input.summary,
     errors: input.errors,
     warnings: input.warnings,
@@ -2165,15 +2196,37 @@ export async function importAdminAssessmentPackage(
       message: 'Package JSON could not be parsed.',
       fieldErrors: { packageText: 'Malformed JSON. Fix the payload and try again.' },
       validationResult: {
+        success: false,
+        detectedVersion: 'unknown',
+        schemaVersion: null,
+        packageName: null,
+        versionLabel: null,
+        summary: null,
+        readiness: {
+          structurallyValid: false,
+          importable: false,
+          runtimeExecutable: false,
+          publishable: false,
+        },
         errors: [{ path: '$', message: 'Malformed JSON.' }],
         warnings: [],
       },
     }
   }
 
-  const validation = validateSonartraAssessmentPackage(parsedPayload)
-  const validationReport = buildPackageValidationReport(validation)
-  const validationStatus = validation.status === 'valid_with_warnings' ? 'valid_with_warnings' : validation.status
+  const importedPackage = importAssessmentPackagePayload(parsedPayload)
+  const validationReport = buildPackageValidationReport({
+    detectedVersion: importedPackage.detectedVersion,
+    success: importedPackage.validationSummary.success,
+    schemaVersion: importedPackage.schemaVersion,
+    packageName: importedPackage.packageName,
+    versionLabel: importedPackage.versionLabel,
+    readiness: importedPackage.readiness,
+    summary: importedPackage.summary,
+    errors: importedPackage.errors,
+    warnings: importedPackage.warnings,
+  })
+  const validationStatus = importedPackage.validationStatus === 'valid_with_warnings' ? 'valid_with_warnings' : importedPackage.validationStatus
 
   try {
     return await deps.withTransaction(async (client) => {
@@ -2219,7 +2272,7 @@ export async function importAdminAssessmentPackage(
 
       const actor = await deps.getActorIdentity(client)
       const nowIso = deps.now().toISOString()
-      const packageStatus = validation.status
+      const packageStatus = importedPackage.packageStatus
       const includeMaterialUpdatedAt = writePolicy.releaseSignOff.mode === 'supported'
 
       if (writePolicy.releaseSignOff.mode === 'partial') {
@@ -2248,16 +2301,16 @@ export async function importAdminAssessmentPackage(
         [
           input.versionId,
           input.assessmentId,
-          validation.normalizedPackage ? JSON.stringify(validation.normalizedPackage) : null,
+          importedPackage.definitionPayload ? JSON.stringify(importedPackage.definitionPayload) : null,
           JSON.stringify(parsedPayload),
-          validation.schemaVersion ?? SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1,
+          importedPackage.schemaVersion ?? SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1,
           packageStatus,
           normaliseNullableField(input.sourceFilename),
           nowIso,
           actor?.id ?? null,
           JSON.stringify(validationReport),
           validationStatus,
-          validation.normalizedPackage?.questions.length ?? null,
+          importedPackage.summary?.questionsCount ?? null,
         ],
       )
 
@@ -2293,18 +2346,32 @@ export async function importAdminAssessmentPackage(
         onUnsupported: 'skip',
       })
 
-      if (!validation.ok) {
+      if (!importedPackage.validationSummary.success) {
+        console.warn('[admin-assessment-import] Package validation failed.', {
+          assessmentId: input.assessmentId,
+          versionId: input.versionId,
+          detectedVersion: importedPackage.detectedVersion,
+          schemaVersion: importedPackage.schemaVersion,
+          errorCount: importedPackage.errors.length,
+          warningCount: importedPackage.warnings.length,
+        })
         await writeAssessmentAuditEvent(client, {
           createId: deps.createId,
           actor,
           nowIso,
           eventType: 'assessment_package_validation_failed',
-          summary: `Assessment package import failed validation for ${assessmentName} v${version.version_label} with ${validation.errors.length} blocking issue(s) and ${validation.warnings.length} warning(s).`,
+          summary: `Assessment package import failed validation for ${assessmentName} v${version.version_label} with ${importedPackage.errors.length} blocking issue(s) and ${importedPackage.warnings.length} warning(s).`,
           assessmentId: input.assessmentId,
           assessmentName,
           versionId: input.versionId,
           versionLabel: version.version_label,
-          metadata: { packageStatus, errors: validation.errors.length, warnings: validation.warnings.length },
+          metadata: {
+            packageStatus,
+            detectedVersion: importedPackage.detectedVersion,
+            schemaVersion: importedPackage.schemaVersion,
+            errors: importedPackage.errors.length,
+            warnings: importedPackage.warnings.length,
+          },
         })
 
         return {
@@ -2313,7 +2380,7 @@ export async function importAdminAssessmentPackage(
           message: 'Package validation failed. Review the validation results and re-import.',
           assessmentId: input.assessmentId,
           versionId: input.versionId,
-          validationResult: { errors: validation.errors, warnings: validation.warnings },
+          validationResult: importedPackage.validationSummary,
         }
       }
 
@@ -2322,28 +2389,44 @@ export async function importAdminAssessmentPackage(
         actor,
         nowIso,
         eventType: version.package_status && version.package_status !== 'missing' ? 'assessment_package_replaced' : 'assessment_package_imported',
-        summary: `${version.package_status && version.package_status !== 'missing' ? 'Assessment package replaced' : 'Assessment package imported'} for ${assessmentName} v${version.version_label} · ${validation.summary.questionsCount} questions · ${validation.summary.dimensionsCount} dimensions · ${validation.warnings.length} warning(s).`,
+        summary: `${version.package_status && version.package_status !== 'missing' ? 'Assessment package replaced' : 'Assessment package imported'} for ${assessmentName} v${version.version_label} · ${importedPackage.summary?.questionsCount ?? 0} questions · ${importedPackage.summary?.dimensionsCount ?? 0} dimensions · ${importedPackage.warnings.length} warning(s).`,
         assessmentId: input.assessmentId,
         assessmentName,
         versionId: input.versionId,
         versionLabel: version.version_label,
         metadata: {
           packageStatus,
-          schemaVersion: validation.schemaVersion,
-          warnings: validation.warnings.length,
+          detectedVersion: importedPackage.detectedVersion,
+          schemaVersion: importedPackage.schemaVersion,
+          runtimeExecutable: importedPackage.readiness.runtimeExecutable,
+          publishable: importedPackage.readiness.publishable,
+          warnings: importedPackage.warnings.length,
           sourceFilename: normaliseNullableField(input.sourceFilename),
         },
+      })
+
+      console.info('[admin-assessment-import] Package import persisted successfully.', {
+        assessmentId: input.assessmentId,
+        versionId: input.versionId,
+        detectedVersion: importedPackage.detectedVersion,
+        schemaVersion: importedPackage.schemaVersion,
+        runtimeExecutable: importedPackage.readiness.runtimeExecutable,
+        publishable: importedPackage.readiness.publishable,
       })
 
       return {
         ok: true,
         code: 'imported',
-        message: validation.warnings.length > 0
-          ? 'Package imported with warnings. Publish remains allowed, but review the warnings first.'
-          : 'Package imported successfully.',
+        message: importedPackage.detectedVersion === 'package_contract_v2'
+          ? importedPackage.warnings.length > 0
+            ? 'Package Contract v2 imported with warnings. The package is stored and previewable, but publish stays blocked until the v2 runtime path is supported.'
+            : 'Package Contract v2 imported successfully. The package is stored and previewable, but publish stays blocked until the v2 runtime path is supported.'
+          : importedPackage.warnings.length > 0
+            ? 'Package imported with warnings. Publish remains allowed, but review the warnings first.'
+            : 'Package imported successfully.',
         assessmentId: input.assessmentId,
         versionId: input.versionId,
-        validationResult: { errors: validation.errors, warnings: validation.warnings },
+        validationResult: importedPackage.validationSummary,
       }
     })
   } catch (error) {

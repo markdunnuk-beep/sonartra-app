@@ -6,6 +6,7 @@ import type {
   SonartraAssessmentPackageV1,
 } from '@/lib/admin/domain/assessment-package'
 import { parseStoredNormalizedAssessmentPackage } from '@/lib/admin/domain/assessment-package'
+import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 } from '@/lib/admin/domain/assessment-package-v2'
 import { resolveAssessmentPackageLocaleContext } from '@/lib/admin/domain/assessment-package-content'
 import type { AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
 
@@ -221,13 +222,19 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
     ? version.packageInfo.status
     : 'missing'
   const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
+  const isImportedV2Package = version.packageInfo?.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
+    && (status === 'valid' || status === 'valid_with_warnings')
 
   if (!pkg || status === 'missing') {
     return {
       eligibility: 'blocked',
       statusLabel: 'Blocked',
-      summary: 'Simulation is unavailable until a valid normalized package is attached to the version.',
-      blockingReason: 'No valid package is attached to this version yet.',
+      summary: isImportedV2Package
+        ? 'Simulation is blocked because Package Contract v2 imports are not yet executable by the live admin runtime.'
+        : 'Simulation is unavailable until a valid normalized package is attached to the version.',
+      blockingReason: isImportedV2Package
+        ? 'Package Contract v2 imported successfully, but simulation still depends on the legacy v1 execution path.'
+        : 'No valid package is attached to this version yet.',
       canRunSimulation: false,
     }
   }

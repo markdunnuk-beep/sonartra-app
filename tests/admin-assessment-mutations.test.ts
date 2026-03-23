@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import examplePackageV2 from './fixtures/package-contract-v2-example.json'
 import {
   archiveAdminAssessmentVersion,
   cloneAdminAssessmentSavedScenario,
@@ -87,6 +88,15 @@ function matchRuntimeSchemaQuery(
   if (/select to_regclass\(current_schema\(\) \|\| '\.' \|\| \$1::text\) is not null as table_exists/i.test(sql)) {
     const tableName = String(params[0] ?? '')
     return { rows: [{ table_exists: !(options.missingTables ?? []).includes(tableName) }] }
+  }
+
+  if (/from information_schema\.tables/i.test(sql) && /table_name = any\(\$1::text\[\]\)/i.test(sql)) {
+    const tableNames = Array.isArray(params[0]) ? params[0].map((value) => String(value)) : []
+    return {
+      rows: tableNames
+        .filter((tableName) => !(options.missingTables ?? []).includes(tableName))
+        .map((table_name) => ({ table_name })),
+    }
   }
 
   if (/from information_schema\.columns/i.test(sql) && /table_name = any\(\$1::text\[\]\)/i.test(sql)) {
@@ -650,6 +660,62 @@ test('package import persists validation failure for missing sections and broken
   assert.equal(result.code, 'validation_error')
   assert.ok((result.validationResult?.errors.length ?? 0) >= 4)
   assert.ok(auditEvents.includes('assessment_package_validation_failed'))
+  assert.ok(auditEvents.includes('assessment_release_readiness_evaluated'))
+})
+
+test('valid Package Contract v2 import succeeds through the admin import path and stays compatibility-safe', async () => {
+  const updates: unknown[][] = []
+  const auditEvents: string[] = []
+
+  const result = await importAdminAssessmentPackage({
+    assessmentId: 'assessment-1',
+    versionId: 'version-2',
+    expectedUpdatedAt: '2026-03-21T09:00:00.000Z',
+    packageText: JSON.stringify(examplePackageV2),
+    sourceFilename: 'signals-v2.json',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        if (/from assessment_versions av/i.test(sql)) {
+          return { rows: [makeManagedVersionRow({ package_status: 'missing' })] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions/i.test(sql) || /update assessment_definitions/i.test(sql)) {
+          updates.push(params)
+          return { rows: [] }
+        }
+
+        if (/insert into access_audit_events/i.test(sql)) {
+          auditEvents.push(String(params[1]))
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-21T10:00:00.000Z'),
+    createId: (() => {
+      const ids = ['audit-1', 'audit-2']
+      return () => ids.shift() ?? 'audit-3'
+    })(),
+  } as never)
+
+  assert.equal(result.ok, true)
+  assert.equal(result.validationResult?.detectedVersion, 'package_contract_v2')
+  assert.equal(result.validationResult?.summary?.questionsCount, 4)
+  assert.equal(result.validationResult?.summary?.sectionCount, 2)
+  assert.equal(result.validationResult?.readiness?.runtimeExecutable, false)
+  assert.equal(result.validationResult?.readiness?.publishable, false)
+  assert.match(result.message, /publish stays blocked/i)
+  assert.equal(updates.length, 3)
+  assert.ok(auditEvents.includes('assessment_package_imported'))
   assert.ok(auditEvents.includes('assessment_release_readiness_evaluated'))
 })
 
@@ -1285,6 +1351,90 @@ test('publish version is blocked when the package is valid but not executable by
   assert.equal(result.ok, false)
   assert.equal(result.code, 'invalid_transition')
   assert.match(result.message, /does not support signal code/i)
+  assert.ok(auditEvents.includes('assessment_publish_blocked_release_governance'))
+})
+
+test('publish version is blocked when the imported package uses Package Contract v2 before runtime support is enabled', async () => {
+  const auditEvents: string[] = []
+  const result = await publishAdminAssessmentVersion({
+    assessmentId: 'assessment-1',
+    versionId: 'version-2',
+    expectedUpdatedAt: '2026-03-21T09:00:00.000Z',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        const runtimeSchemaResult = matchRuntimeSchemaQuery(sql, params)
+        if (runtimeSchemaResult) {
+          return runtimeSchemaResult
+        }
+
+        if (/from assessment_versions av/i.test(sql)) {
+          return {
+            rows: [
+              makeManagedVersionRow({
+                sign_off_status: 'signed_off',
+                sign_off_at: '2026-03-21T09:30:00.000Z',
+                sign_off_by_name: 'Rina Patel',
+                sign_off_material_updated_at: '2026-03-21T08:00:00.000Z',
+                definition_payload: examplePackageV2,
+                package_status: 'valid',
+                package_schema_version: 'sonartra-assessment-package/v2',
+                package_validation_report_json: {
+                  detectedVersion: 'package_contract_v2',
+                  success: true,
+                  summary: {
+                    packageName: 'Adaptive Workstyle Signals',
+                    versionLabel: '2.0.0',
+                    dimensionsCount: 2,
+                    questionsCount: 4,
+                    optionsCount: 0,
+                    scoringRuleCount: 1,
+                    normalizationRuleCount: 1,
+                    outputRuleCount: 2,
+                    localeCount: 2,
+                    sectionCount: 2,
+                  },
+                  errors: [],
+                  warnings: [],
+                },
+              }),
+            ],
+          }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/insert into access_audit_events/i.test(sql)) {
+          auditEvents.push(String(params[1]))
+          return { rows: [] }
+        }
+
+        if (/insert into assessment_question_sets/i.test(sql) || /update assessment_versions\s+set lifecycle_status = 'published'/i.test(sql)) {
+          throw new Error(`Unexpected live-runtime materialization write: ${sql}`)
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-21T10:00:00.000Z'),
+    createId: (() => {
+      const ids = ['audit-1', 'audit-2']
+      return () => ids.shift() ?? 'audit-3'
+    })(),
+  } as never)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'invalid_transition')
+  assert.match(result.message, /v2|runtime supports v2 execution/i)
   assert.ok(auditEvents.includes('assessment_publish_blocked_release_governance'))
 })
 

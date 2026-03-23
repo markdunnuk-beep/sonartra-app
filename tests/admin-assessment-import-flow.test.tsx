@@ -12,6 +12,7 @@ import {
 } from '../lib/admin/domain/assessment-management'
 import { getAdminAssessmentPackagePreviewSummary } from '../lib/admin/domain/assessment-package-review'
 import type { SonartraAssessmentPackageV1 } from '../lib/admin/domain/assessment-package'
+import examplePackageV2 from './fixtures/package-contract-v2-example.json'
 
 const normalizedPackage: SonartraAssessmentPackageV1 = {
   meta: {
@@ -211,6 +212,81 @@ test('getAdminAssessmentPackagePreviewSummary tolerates malformed runtime packag
   assert.equal(preview.state, 'invalid')
   assert.equal(preview.metrics.questionsCount, 0)
   assert.match(preview.scoringSummary, /cannot be inspected/i)
+})
+
+test('getAdminAssessmentPackagePreviewSummary provides a safe compatibility preview for validated v2 imports', () => {
+  const preview = getAdminAssessmentPackagePreviewSummary({
+    packageInfo: {
+      status: 'valid',
+      detectedVersion: 'package_contract_v2',
+      schemaVersion: 'sonartra-assessment-package/v2',
+      sourceType: 'manual_import',
+      importedAt: '2026-03-22T10:00:00Z',
+      importedByName: 'Admin User',
+      sourceFilename: 'signals-v2.json',
+      summary: {
+        packageName: examplePackageV2.metadata.assessmentName,
+        versionLabel: examplePackageV2.metadata.compatibility.packageSemver,
+        dimensionsCount: 2,
+        questionsCount: 4,
+        optionsCount: 0,
+        scoringRuleCount: 1,
+        normalizationRuleCount: 1,
+        outputRuleCount: 2,
+        localeCount: 2,
+        sectionCount: 2,
+        derivedDimensionCount: 1,
+      },
+      errors: [],
+      warnings: [],
+    },
+    normalizedPackage: examplePackageV2 as never,
+  })
+
+  assert.equal(preview.state, 'ready')
+  assert.equal(preview.metrics.questionsCount, 4)
+  assert.equal(preview.metrics.dimensionsCount, 2)
+  assert.match(preview.scoringSummary, /cannot execute v2 scoring/i)
+  assert.match(preview.dimensionsSummary, /2 dimensions/i)
+})
+
+test('normalizeAdminAssessmentPackageImportState preserves version-aware validation metadata safely', () => {
+  const state = normalizeAdminAssessmentPackageImportState({
+    status: 'success',
+    message: 'Package Contract v2 imported successfully.',
+    validationResult: {
+      success: true,
+      detectedVersion: 'package_contract_v2',
+      schemaVersion: 'sonartra-assessment-package/v2',
+      packageName: 'Adaptive Workstyle Signals',
+      versionLabel: '2.0.0',
+      summary: {
+        packageName: 'Adaptive Workstyle Signals',
+        versionLabel: '2.0.0',
+        dimensionsCount: 2,
+        questionsCount: 4,
+        optionsCount: 0,
+        scoringRuleCount: 1,
+        normalizationRuleCount: 1,
+        outputRuleCount: 2,
+        localeCount: 2,
+        sectionCount: 2,
+      },
+      readiness: {
+        structurallyValid: true,
+        importable: true,
+        runtimeExecutable: false,
+        publishable: false,
+      },
+      errors: [],
+      warnings: [],
+    },
+  })
+
+  assert.equal(state.validationResult?.detectedVersion, 'package_contract_v2')
+  assert.equal(state.validationResult?.summary?.sectionCount, 2)
+  assert.equal(state.validationResult?.readiness?.runtimeExecutable, false)
+  assert.equal(state.validationResult?.packageName, 'Adaptive Workstyle Signals')
 })
 
 test('assessment import surface renders inline fallback content when optional fields are missing', () => {

@@ -75,8 +75,10 @@ function InlineStateMessage({ state }: { state: AdminAssessmentPackageImportStat
 function ValidationResults({ state }: { state: AdminAssessmentPackageImportState }) {
   const validationErrors = state.validationResult?.errors ?? []
   const validationWarnings = state.validationResult?.warnings ?? []
+  const summary = state.validationResult?.summary
+  const readiness = state.validationResult?.readiness
 
-  if (validationErrors.length === 0 && validationWarnings.length === 0) {
+  if (validationErrors.length === 0 && validationWarnings.length === 0 && !summary && !state.validationResult?.detectedVersion) {
     return null
   }
 
@@ -85,7 +87,34 @@ function ValidationResults({ state }: { state: AdminAssessmentPackageImportState
       <div>
         <p className="text-[11px] uppercase tracking-[0.16em] text-textSecondary">Validation results</p>
         <p className="mt-1 text-sm text-textPrimary">{validationErrors.length} error(s) · {validationWarnings.length} warning(s)</p>
+        <p className="mt-1 text-xs text-textSecondary">
+          Detected package version: {state.validationResult?.detectedVersion?.replace(/_/g, ' ') ?? 'unknown'}
+          {state.validationResult?.schemaVersion ? ` · schema ${state.validationResult.schemaVersion}` : ''}
+        </p>
+        {state.validationResult?.packageName || state.validationResult?.versionLabel ? (
+          <p className="mt-1 text-xs text-textSecondary">
+            {(state.validationResult?.packageName ?? 'Unnamed package')}
+            {state.validationResult?.versionLabel ? ` · version ${state.validationResult.versionLabel}` : ''}
+          </p>
+        ) : null}
       </div>
+
+      {summary ? (
+        <div className="grid gap-2 text-xs text-textSecondary sm:grid-cols-2">
+          <div className="rounded-xl border border-white/[0.08] bg-bg/30 px-3 py-2">Questions · <span className="text-textPrimary">{summary.questionsCount}</span></div>
+          <div className="rounded-xl border border-white/[0.08] bg-bg/30 px-3 py-2">Dimensions · <span className="text-textPrimary">{summary.dimensionsCount}</span></div>
+          <div className="rounded-xl border border-white/[0.08] bg-bg/30 px-3 py-2">Sections · <span className="text-textPrimary">{summary.sectionCount ?? 0}</span></div>
+          <div className="rounded-xl border border-white/[0.08] bg-bg/30 px-3 py-2">Outputs · <span className="text-textPrimary">{summary.outputRuleCount}</span></div>
+        </div>
+      ) : null}
+
+      {readiness ? (
+        <div className="rounded-xl border border-white/[0.08] bg-bg/30 px-3 py-3 text-xs text-textSecondary">
+          <p className="font-semibold uppercase tracking-[0.14em] text-textPrimary">Readiness</p>
+          <p className="mt-2">Structurally valid: {readiness.structurallyValid ? 'Yes' : 'No'} · Importable: {readiness.importable ? 'Yes' : 'No'}</p>
+          <p className="mt-1">Runtime executable: {readiness.runtimeExecutable ? 'Yes' : 'No'} · Publishable: {readiness.publishable ? 'Yes' : 'No'}</p>
+        </div>
+      ) : null}
 
       {validationErrors.length ? (
         <div>
@@ -143,7 +172,7 @@ export function AdminAssessmentVersionPackageImportForm({
             <textarea
               name="packageText"
               rows={18}
-              placeholder='Paste a Sonartra package spec v1 JSON payload, for example {"meta": {"schemaVersion": "sonartra-assessment-package/v1"}}'
+              placeholder='Paste a Sonartra package JSON payload (legacy v1 or Package Contract v2), for example {"meta": {"schemaVersion": "sonartra-assessment-package/v1"}} or {"packageVersion":"2","schemaVersion":"sonartra-assessment-package/v2"}'
               className="min-h-[28rem] w-full rounded-2xl border border-border/90 bg-panel/70 px-4 py-3 text-sm leading-6 text-textPrimary outline-none ring-accent/40 focus:border-accent/50 focus:ring"
             />
             {state.fieldErrors?.packageText ? <p className="text-sm text-rose-200">{state.fieldErrors.packageText}</p> : null}
@@ -167,7 +196,8 @@ export function AdminAssessmentVersionPackageImportForm({
               <ul className="mt-3 space-y-2">
                 <li>• Only draft versions can accept package imports.</li>
                 <li>• Valid packages replace the current draft payload in-place.</li>
-                <li>• Warning-level imports remain publishable, but the warnings stay visible in admin.</li>
+                <li>• Legacy v1 packages can continue through the current simulation/publish workflow.</li>
+                <li>• Package Contract v2 imports validate and persist safely, but publish remains blocked until the runtime path supports v2 execution.</li>
                 <li>• Invalid imports are rejected and block publish until a valid package is attached.</li>
               </ul>
             </div>

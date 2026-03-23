@@ -5,6 +5,7 @@ import {
   type SonartraAssessmentPackageQuestion,
   type SonartraAssessmentPackageV1,
 } from '@/lib/admin/domain/assessment-package'
+import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 } from '@/lib/admin/domain/assessment-package-v2'
 import type {
   AdminAssessmentReleaseCheck,
   AdminAssessmentReleaseCheckStatus,
@@ -122,6 +123,9 @@ function normalizePackageInfoRuntime(packageInfo: AdminAssessmentVersionPackageI
     status: packageInfo?.status === 'valid' || packageInfo?.status === 'valid_with_warnings' || packageInfo?.status === 'invalid' || packageInfo?.status === 'missing'
       ? packageInfo.status
       : 'missing',
+    detectedVersion: packageInfo?.detectedVersion === 'legacy_v1' || packageInfo?.detectedVersion === 'package_contract_v2' || packageInfo?.detectedVersion === 'unknown'
+      ? packageInfo.detectedVersion
+      : null,
     schemaVersion: typeof packageInfo?.schemaVersion === 'string' && packageInfo.schemaVersion.trim() ? packageInfo.schemaVersion.trim() : null,
     sourceType: packageInfo?.sourceType === 'manual_import' ? 'manual_import' : null,
     importedAt: typeof packageInfo?.importedAt === 'string' && packageInfo.importedAt.trim() ? packageInfo.importedAt.trim() : null,
@@ -252,8 +256,10 @@ export function getAdminAssessmentPackagePreviewSummary(version: Pick<AdminAsses
   const localeSummary = getLocaleKeyCounts(pkg)
 
   if (!pkg) {
+    const isValidatedV2Package = packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
+      && (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings')
     return {
-      state: packageInfo.status === 'missing' ? 'missing' : 'invalid',
+      state: packageInfo.status === 'missing' ? 'missing' : isValidatedV2Package ? 'ready' : 'invalid',
       schemaVersion: packageInfo.schemaVersion,
       provenanceSummary: packageInfo.sourceFilename
         ? `Imported from ${packageInfo.sourceFilename}${packageInfo.sourceType ? ` via ${packageInfo.sourceType.replace(/_/g, ' ')}` : ''}.`
@@ -262,15 +268,27 @@ export function getAdminAssessmentPackagePreviewSummary(version: Pick<AdminAsses
           : 'No package provenance recorded yet.',
       validationSummary: packageInfo.status === 'missing'
         ? 'No package attached yet.'
+        : isValidatedV2Package
+          ? `${packageInfo.errors.length} blocking issue(s) · ${packageInfo.warnings.length} warning(s) · imported through the Package Contract v2 compatibility path.`
         : `${packageInfo.errors.length} blocking issue(s) · ${packageInfo.warnings.length} warning(s).`,
       lastImportedSummary: packageInfo.importedAt
         ? `${packageInfo.importedByName ?? 'Unknown admin'} imported the latest package.`
         : 'No import has been recorded.',
-      dimensionsSummary: 'No normalized dimensions available.',
-      questionSummary: 'No normalized questions available.',
-      scoringSummary: 'Scoring coverage cannot be inspected until the package validates.',
-      outputsSummary: 'Output coverage is unavailable until the package validates.',
-      languageSummary: 'Language coverage is unavailable until the package validates.',
+      dimensionsSummary: isValidatedV2Package
+        ? `${formatCount(packageInfo.summary?.dimensionsCount ?? 0, 'dimension')} recorded in the compatibility summary across ${formatCount(packageInfo.summary?.sectionCount ?? 0, 'section')}.`
+        : 'No normalized dimensions available.',
+      questionSummary: isValidatedV2Package
+        ? `${formatCount(packageInfo.summary?.questionsCount ?? 0, 'question')} recorded in the compatibility summary.`
+        : 'No normalized questions available.',
+      scoringSummary: isValidatedV2Package
+        ? 'Package Contract v2 imported successfully, but the current admin runtime cannot execute v2 scoring or simulation yet.'
+        : 'Scoring coverage cannot be inspected until the package validates.',
+      outputsSummary: isValidatedV2Package
+        ? `${formatCount(packageInfo.summary?.outputRuleCount ?? 0, 'output rule')} recorded in the stored compatibility summary.`
+        : 'Output coverage is unavailable until the package validates.',
+      languageSummary: isValidatedV2Package
+        ? `${formatCount(packageInfo.summary?.localeCount ?? 0, 'locale')} recorded in the stored compatibility summary.`
+        : 'Language coverage is unavailable until the package validates.',
       dimensions: [],
       questions: [],
       warnings: getPackageWarningMessages(packageInfo),
@@ -357,13 +375,37 @@ export function getAdminAssessmentVersionReadiness(
   const packageAttached = packageInfo.status !== 'missing'
   addCheck('package_attached', 'Package attached', packageAttached ? 'pass' : 'fail', packageAttached ? 'A package payload is attached to the version record.' : 'Attach a package before publish.')
 
+  const isImportedV2Package = packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
+    && (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings')
   const structurallyValid = (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings') && Boolean(pkg)
-  addCheck('package_valid', 'Executable normalized package', structurallyValid ? 'pass' : 'fail', structurallyValid ? 'The latest package validated and produced a normalized executable payload.' : 'The latest package is missing, invalid, or has no normalized payload.')
+  addCheck(
+    'package_valid',
+    'Executable normalized package',
+    structurallyValid ? 'pass' : 'fail',
+    structurallyValid
+      ? 'The latest package validated and produced a normalized executable payload.'
+      : isImportedV2Package
+        ? 'Package Contract v2 imported successfully, but there is no executable runtime package until the live execution path supports v2.'
+        : 'The latest package is missing, invalid, or has no normalized payload.',
+  )
+
+  addCheck(
+    'runtime_execution_path',
+    'Current runtime can execute this contract version',
+    isImportedV2Package ? 'fail' : 'pass',
+    isImportedV2Package
+      ? 'Package Contract v2 is importable and structurally valid, but publish stays blocked until the live runtime supports v2 execution.'
+      : 'Current runtime execution path is compatible with the stored package contract.',
+  )
 
   if (!pkg) {
     const status: AdminAssessmentReleaseReadinessStatus = blockingIssues.length > 0 ? 'not_ready' : warnings.length > 0 ? 'ready_with_warnings' : 'ready'
     const verdict: AdminAssessmentPublishReadinessVerdict = status === 'not_ready' ? 'blocked' : status
-    const summaryText = status === 'not_ready' ? 'Publish is blocked until a valid normalized package is attached.' : 'Review the package evidence before publish.'
+    const summaryText = isImportedV2Package
+      ? 'Publish is blocked because this version uses Package Contract v2 and the live execution path is not enabled for v2 yet.'
+      : status === 'not_ready'
+        ? 'Publish is blocked until a valid normalized package is attached.'
+        : 'Review the package evidence before publish.'
     return {
       status,
       verdict,
