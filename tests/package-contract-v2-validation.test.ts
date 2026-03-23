@@ -3,9 +3,9 @@ import test from 'node:test'
 import examplePackage from './fixtures/package-contract-v2-example.json'
 import {
   SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
-  compileValidatedAssessmentPackageV2ToRuntime,
   validateSonartraAssessmentPackageV2,
 } from '../lib/admin/domain/assessment-package-v2'
+import { compileAssessmentPackageV2, EXECUTABLE_ASSESSMENT_PACKAGE_V2_RUNTIME_VERSION } from '../lib/admin/domain/assessment-package-v2-compiler'
 
 test('Package Contract v2 accepts the example package fixture', () => {
   const result = validateSonartraAssessmentPackageV2(examplePackage)
@@ -116,6 +116,7 @@ test('Package Contract v2 accepts derived dimensions, integrity rules, and outpu
   assert.equal(validation.normalizedPackage?.integrity.rules[0]?.kind, 'contradiction')
   assert.equal(validation.normalizedPackage?.outputs.rules[1]?.type, 'warning')
 
-  const runtimePackage = compileValidatedAssessmentPackageV2ToRuntime(validation.normalizedPackage!)
-  assert.equal(runtimePackage.runtimeVersion, 'package-contract-v2-runtime/1')
+  const runtimePackage = compileAssessmentPackageV2(validation.normalizedPackage!)
+  assert.equal(runtimePackage.ok, true)
+  assert.equal(runtimePackage.executablePackage?.runtimeVersion, EXECUTABLE_ASSESSMENT_PACKAGE_V2_RUNTIME_VERSION)
 })

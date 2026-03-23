@@ -14,3 +14,4 @@ export * from './access-priority'
 export * from './assessment-management'
 
 export * from './assessment-package-v2'
+export * from './assessment-package-v2-compiler'
