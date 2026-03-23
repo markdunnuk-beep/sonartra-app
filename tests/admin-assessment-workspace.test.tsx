@@ -466,7 +466,7 @@ test('assessment detail overview renders workspace tabs, metadata, and audit act
   assert.match(html, /\/admin\/audit\?entityType=assessment&amp;entityId=assessment-1/)
 })
 
-test('manual container and package-first import surfaces describe the transition truthfully', async () => {
+test('assessment package import surface uses simplified operator-friendly copy', async () => {
   const [manualCreateSource, packageImportSource] = await Promise.all([
     readFile(new URL('../components/admin/surfaces/AdminAssessmentCreateForm.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../components/admin/surfaces/AdminAssessmentPackageCreateOrAttachForm.tsx', import.meta.url), 'utf8'),
@@ -474,9 +474,14 @@ test('manual container and package-first import surfaces describe the transition
 
   assert.match(manualCreateSource, /Create manual assessment container/)
   assert.match(manualCreateSource, /Package import is now the preferred way/)
-  assert.match(packageImportSource, /Package-first workflow/)
-  assert.match(packageImportSource, /Package owns identity/)
-  assert.match(packageImportSource, /Open manual draft fallback/)
+  assert.match(packageImportSource, /Upload a package to create a new assessment or add a new version to an existing one\./)
+  assert.match(packageImportSource, /← Back to Assessments/)
+  assert.match(packageImportSource, /Paste your package or upload a JSON file\. You’ll be able to review it before anything is saved\./)
+  assert.match(packageImportSource, /Paste your assessment package JSON here/)
+  assert.doesNotMatch(packageImportSource, /Workflow framing/)
+  assert.doesNotMatch(packageImportSource, /Identity mutability/)
+  assert.doesNotMatch(packageImportSource, /Transitional fallback/)
+  assert.doesNotMatch(packageImportSource, /Open manual draft fallback/)
 })
 
 test('assessment versions workspace surfaces package evidence and diff snippets', async () => {
