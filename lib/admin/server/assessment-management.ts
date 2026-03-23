@@ -28,9 +28,9 @@ import {
   parseStoredNormalizedAssessmentPackage,
 } from '@/lib/admin/domain/assessment-package'
 import { importAssessmentPackagePayload, type AdminAssessmentPackageValidationSummary } from '@/lib/admin/server/assessment-package-import'
-import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
 import { getAdminAssessmentVersionReadiness } from '@/lib/admin/domain/assessment-package-review'
+import { evaluatePackageV2LiveRuntimeSupport } from '@/lib/package-contract-v2-live-runtime'
 import {
   executeAdminAssessmentSimulationForPackage,
   getAdminAssessmentSimulationWorkspaceStatus,
@@ -3200,11 +3200,11 @@ export async function publishAdminAssessmentVersion(
 
       if (evaluatedVersion.packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
         const runtimePackageV2 = parseStoredValidatedAssessmentPackageV2(evaluatedVersion.storedDefinitionPayload ?? null)
-        const compiledV2 = runtimePackageV2 ? compileAssessmentPackageV2(runtimePackageV2) : null
+        const runtimeSupportV2 = evaluatePackageV2LiveRuntimeSupport(runtimePackageV2)
 
-        if (!runtimePackageV2 || !compiledV2?.ok || !compiledV2.executablePackage) {
-          const blockingSummary = compiledV2?.diagnostics.find((entry) => entry.severity === 'error')?.message
-            ?? 'The Package Contract v2 payload cannot be compiled for live runtime execution.'
+        if (!runtimePackageV2 || !runtimeSupportV2.supported) {
+          const blockingSummary = runtimeSupportV2.issues[0]?.message
+            ?? 'The Package Contract v2 payload is not supported by the live runtime execution path.'
 
           await writeAssessmentAuditEvent(client, {
             createId: deps.createId,
@@ -3219,7 +3219,7 @@ export async function publishAdminAssessmentVersion(
             metadata: {
               readinessStatus: publishReadiness.status,
               contractVersion: 'package_contract_v2',
-              compileDiagnostics: compiledV2?.diagnostics ?? [],
+              runtimeSupportIssues: runtimeSupportV2.issues,
             },
           })
 

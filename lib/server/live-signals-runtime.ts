@@ -1,9 +1,9 @@
-import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import {
   SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
   parseStoredValidatedAssessmentPackageV2,
 } from '@/lib/admin/domain/assessment-package-v2'
 import { queryDb } from '@/lib/db'
+import { evaluatePackageV2LiveRuntimeSupport } from '@/lib/package-contract-v2-live-runtime'
 
 const LIVE_SIGNALS_ASSESSMENT_KEY = 'sonartra_signals'
 
@@ -154,12 +154,12 @@ export async function resolveLiveSignalsPublishedVersionState(
       })
     }
 
-    const compiled = compileAssessmentPackageV2(pkg)
-    if (!compiled.ok || !compiled.executablePackage) {
+    const runtimeSupport = evaluatePackageV2LiveRuntimeSupport(pkg)
+    if (!runtimeSupport.supported) {
       return buildUnavailableState({
-        code: 'package_not_compilable',
-        message: compiled.diagnostics.find((entry) => entry.severity === 'error')?.message
-          ?? 'The published Sonartra Signals Package Contract v2 payload could not be compiled for live runtime use.',
+        code: runtimeSupport.issues[0]?.code === 'package_not_compilable' ? 'package_not_compilable' : 'package_not_live_runtime_enabled',
+        message: runtimeSupport.issues[0]?.message
+          ?? 'The published Sonartra Signals Package Contract v2 payload is not supported by the live runtime end-to-end.',
       })
     }
 

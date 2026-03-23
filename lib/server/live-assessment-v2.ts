@@ -2,17 +2,22 @@ import type { PoolClient } from 'pg'
 
 import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import { materializeAssessmentOutputsV2, type MaterializedAssessmentOutputsV2 } from '@/lib/admin/domain/assessment-package-v2-materialization'
-import { evaluateAssessmentPackageV2, type AssessmentEvaluationResultV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
+import type { AssessmentEvaluationResultV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
 import {
   SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
   parseStoredValidatedAssessmentPackageV2,
-  type SonartraAssessmentPackageV2Option,
   type SonartraAssessmentPackageV2ResponseModel,
   type SonartraAssessmentPackageV2ValidatedImport,
 } from '@/lib/admin/domain/assessment-package-v2'
 import type { AssessmentRow } from '@/lib/assessment-types'
 import { queryDb, withTransaction } from '@/lib/db'
+import {
+  canonicalizeV2ResponseEnvelope,
+  evaluatePackageV2LiveRuntimeSupport,
+  normalizeV2LiveResponseValue,
+} from '@/lib/package-contract-v2-live-runtime'
 import { getLatestAssessmentResultSnapshot } from '@/lib/server/assessment-results'
+import { evaluateAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
 
 export type LiveAssessmentContractVersion = 'legacy_v1' | 'package_contract_v2'
 export type RuntimeExecutionDiagnosticCode =
@@ -118,11 +123,6 @@ interface AssessmentVersionRuntimeRow {
   scoring_status: AssessmentRow['scoring_status']
 }
 
-interface V2ResponseEnvelope {
-  responses: Record<string, unknown>
-  updatedAtByQuestionId: Record<string, string>
-}
-
 export interface SaveV2AssessmentResponseInput {
   assessmentId: string
   appUserId: string
@@ -148,67 +148,42 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-function getResponseModelOptions(
-  pkg: SonartraAssessmentPackageV2ValidatedImport,
-  responseModel: SonartraAssessmentPackageV2ResponseModel,
-): SonartraAssessmentPackageV2Option[] {
-  return [
-    ...(responseModel.optionSetId ? (pkg.responseModels.optionSets ?? []).find((entry) => entry.id === responseModel.optionSetId)?.options ?? [] : []),
-    ...(responseModel.options ?? []),
-  ]
-}
-
 export function isV2PackageLiveRuntimeExecutable(
   pkg: SonartraAssessmentPackageV2ValidatedImport | null,
 ): LiveRuntimeEligibilityResult {
-  const diagnostics: RuntimeExecutionDiagnostic[] = []
-
-  if (!pkg) {
-    diagnostics.push({
-      code: 'package_invalid',
-      message: 'Package Contract v2 runtime is unavailable because the stored package is missing or invalid.',
-      stage: 'eligibility',
-    })
-    return { eligible: false, contractVersion: 'package_contract_v2', diagnostics }
-  }
-
-  const compiled = compileAssessmentPackageV2(pkg)
-  const blockingDiagnostics = compiled.diagnostics.filter((entry) => entry.severity === 'error')
-
-  if (!compiled.ok || !compiled.executablePackage) {
-    diagnostics.push({
-      code: 'package_not_compilable',
-      message: blockingDiagnostics[0]?.message ?? 'Package Contract v2 could not be compiled for live runtime execution.',
-      stage: 'eligibility',
-      details: blockingDiagnostics[0]
-        ? { path: blockingDiagnostics[0].path, diagnosticCode: blockingDiagnostics[0].code }
-        : undefined,
-    })
-  }
+  const support = evaluatePackageV2LiveRuntimeSupport(pkg)
+  const diagnostics: RuntimeExecutionDiagnostic[] = support.issues.map((issue) => ({
+    code:
+      issue.code === 'package_invalid'
+        ? 'package_invalid'
+        : issue.code === 'package_not_compilable'
+          ? 'package_not_compilable'
+          : issue.code === 'invalid_response'
+            ? 'invalid_response'
+          : issue.code === 'unsupported_response_model'
+            ? 'unsupported_response_model'
+            : 'invalid_response',
+    message: issue.message,
+    stage: issue.capability === 'completion'
+      ? 'completion'
+      : issue.capability === 'result_read'
+        ? 'result_read'
+        : issue.capability === 'question_delivery'
+          ? 'question_delivery'
+          : 'response_save',
+    details: issue.details,
+  }))
 
   return {
-    eligible: diagnostics.length === 0,
+    eligible: support.supported,
     contractVersion: 'package_contract_v2',
     diagnostics,
   }
 }
 
-export function extractV2ResponseEnvelope(metadataJson: Record<string, unknown> | null | undefined): V2ResponseEnvelope {
-  const runtime = metadataJson && isRecord(metadataJson.liveRuntimeV2) ? metadataJson.liveRuntimeV2 : null
-  const responses = runtime && isRecord(runtime.responses) ? runtime.responses : {}
-  const updatedAtByQuestionId = runtime && isRecord(runtime.updatedAtByQuestionId) ? runtime.updatedAtByQuestionId : {}
-
-  return {
-    responses: { ...responses },
-    updatedAtByQuestionId: Object.fromEntries(
-      Object.entries(updatedAtByQuestionId).filter((entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string'),
-    ),
-  }
-}
-
 export function mergeV2ResponsesIntoMetadata(
   metadataJson: Record<string, unknown> | null | undefined,
-  envelope: V2ResponseEnvelope,
+  envelope: ReturnType<typeof canonicalizeV2ResponseEnvelope>,
 ): Record<string, unknown> {
   const base = isRecord(metadataJson) ? { ...metadataJson } : {}
   base.liveRuntimeV2 = {
@@ -227,7 +202,7 @@ export function buildV2QuestionDeliveryContract(input: {
   metadataJson: Record<string, unknown> | null
   pkg: SonartraAssessmentPackageV2ValidatedImport
 }): V2LiveQuestionDeliveryContract {
-  const { responses, updatedAtByQuestionId } = extractV2ResponseEnvelope(input.metadataJson)
+  const { responses, updatedAtByQuestionId } = canonicalizeV2ResponseEnvelope(input.pkg, input.metadataJson)
   const sectionsById = new Map(input.pkg.sections.map((section) => [section.id, section]))
 
   return {
@@ -241,7 +216,12 @@ export function buildV2QuestionDeliveryContract(input: {
     questionCount: input.pkg.questions.length,
     questions: input.pkg.questions.map((question, index) => {
       const responseModel = input.pkg.responseModels.models.find((entry) => entry.id === question.responseModelId)
-      const options = responseModel ? getResponseModelOptions(input.pkg, responseModel) : []
+      const options = responseModel
+        ? [
+            ...(responseModel.optionSetId ? (input.pkg.responseModels.optionSets ?? []).find((entry) => entry.id === responseModel.optionSetId)?.options ?? [] : []),
+            ...(responseModel.options ?? []),
+          ]
+        : []
       return {
         id: question.id,
         code: question.code,
@@ -273,11 +253,13 @@ export function buildV2QuestionDeliveryContract(input: {
         order: index + 1,
       }
     }),
-    responses: Object.entries(responses).map(([questionId, value]) => ({
-      questionId,
-      value,
-      updatedAt: updatedAtByQuestionId[questionId] ?? null,
-    })),
+    responses: input.pkg.questions
+      .filter((question) => question.id in responses)
+      .map((question) => ({
+        questionId: question.id,
+        value: responses[question.id],
+        updatedAt: updatedAtByQuestionId[question.id] ?? null,
+      })),
   }
 }
 
@@ -310,61 +292,27 @@ export function validateV2LiveResponse(input: {
       },
     }
   }
-
-  const options = getResponseModelOptions(input.pkg, responseModel)
-  const optionIds = new Set(options.map((option) => option.id))
-
-  switch (responseModel.type) {
-    case 'numeric':
-      if (typeof input.response !== 'number' || !Number.isFinite(input.response)) {
-        return { ok: false, diagnostic: { code: 'invalid_response', message: `Question "${input.questionId}" expects a numeric response.`, stage: 'response_save' } }
+  const normalized = normalizeV2LiveResponseValue(input)
+  return normalized.ok
+    ? { ok: true }
+    : {
+        ok: false,
+        diagnostic: {
+          code: normalized.issue.code === 'unsupported_response_model' ? 'unsupported_response_model' : 'invalid_response',
+          message: normalized.issue.message,
+          stage: 'response_save',
+          details: normalized.issue.details,
+        },
       }
-      if (
-        responseModel.numericRange
-        && (input.response < responseModel.numericRange.min || input.response > responseModel.numericRange.max)
-      ) {
-        return {
-          ok: false,
-          diagnostic: {
-            code: 'invalid_response',
-            message: `Question "${input.questionId}" expects a value between ${responseModel.numericRange.min} and ${responseModel.numericRange.max}.`,
-            stage: 'response_save',
-          },
-        }
-      }
-      return { ok: true }
-    case 'boolean':
-      return typeof input.response === 'boolean'
-        ? { ok: true }
-        : { ok: false, diagnostic: { code: 'invalid_response', message: `Question "${input.questionId}" expects a boolean response.`, stage: 'response_save' } }
-    case 'multi_select': {
-      if (!Array.isArray(input.response)) {
-        return { ok: false, diagnostic: { code: 'invalid_response', message: `Question "${input.questionId}" expects an array of option ids.`, stage: 'response_save' } }
-      }
-      const selected = input.response.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-      const unique = new Set(selected)
-      if (selected.length !== input.response.length || unique.size !== selected.length || selected.some((optionId) => !optionIds.has(optionId))) {
-        return { ok: false, diagnostic: { code: 'invalid_response', message: `Question "${input.questionId}" includes one or more unknown option ids.`, stage: 'response_save' } }
-      }
-      if (typeof responseModel.multiSelect?.minSelections === 'number' && selected.length < responseModel.multiSelect.minSelections) {
-        return { ok: false, diagnostic: { code: 'invalid_response', message: `Question "${input.questionId}" requires at least ${responseModel.multiSelect.minSelections} selections.`, stage: 'response_save' } }
-      }
-      if (typeof responseModel.multiSelect?.maxSelections === 'number' && selected.length > responseModel.multiSelect.maxSelections) {
-        return { ok: false, diagnostic: { code: 'invalid_response', message: `Question "${input.questionId}" allows at most ${responseModel.multiSelect.maxSelections} selections.`, stage: 'response_save' } }
-      }
-      return { ok: true }
-    }
-    default:
-      return typeof input.response === 'string' && optionIds.has(input.response)
-        ? { ok: true }
-        : { ok: false, diagnostic: { code: 'invalid_response', message: `Question "${input.questionId}" expects a valid option id.`, stage: 'response_save' } }
-  }
 }
 
 export async function loadAssessmentVersionRuntimeRow(
   assessmentId: string,
   ownerUserId: string,
   client?: Pick<PoolClient, 'query'>,
+  options: {
+    forUpdate?: boolean
+  } = {},
 ): Promise<AssessmentVersionRuntimeRow | null> {
   const sql = `SELECT a.id AS assessment_id,
                       a.assessment_version_id,
@@ -381,7 +329,7 @@ export async function loadAssessmentVersionRuntimeRow(
                FROM assessments a
                INNER JOIN assessment_versions av ON av.id = a.assessment_version_id
                WHERE a.id = $1 AND a.user_id = $2
-               LIMIT 1`
+               LIMIT 1${options.forUpdate ? ' FOR UPDATE' : ''}`
 
   const result = client
     ? await client.query<AssessmentVersionRuntimeRow>(sql, [assessmentId, ownerUserId])
@@ -431,8 +379,12 @@ export async function saveV2AssessmentResponse(
       return { status: 400 as const, body: { error: validation.diagnostic.message } }
     }
 
-    const responseEnvelope = extractV2ResponseEnvelope(row.metadata_json)
-    responseEnvelope.responses[input.questionId] = input.response
+    const responseEnvelope = canonicalizeV2ResponseEnvelope(pkg, row.metadata_json)
+    const normalized = normalizeV2LiveResponseValue({ pkg, questionId: input.questionId, response: input.response })
+    if (!normalized.ok) {
+      return { status: 400 as const, body: { error: normalized.issue.message } }
+    }
+    responseEnvelope.responses[input.questionId] = normalized.value
     responseEnvelope.updatedAtByQuestionId[input.questionId] = new Date().toISOString()
     const progressCount = Object.keys(responseEnvelope.responses).length
     const progressPercent = row.total_questions > 0 ? Math.round((progressCount * 10000) / row.total_questions) / 100 : 0
@@ -483,7 +435,10 @@ export async function evaluateCompletedV2Assessment(input: {
     resultPayload: Record<string, unknown> | null
     responseQualityPayload: Record<string, unknown> | null
   }, client: PoolClient) => Promise<{ assessmentResultId: string }>
-}): Promise<{
+}, deps: {
+  withTransactionFn?: typeof withTransaction
+  getLatestResultSnapshot?: typeof getLatestAssessmentResultSnapshot
+} = {}): Promise<{
   httpStatus: number
   body: {
     ok: boolean
@@ -495,8 +450,11 @@ export async function evaluateCompletedV2Assessment(input: {
     error?: string
   }
 }> {
-  const lifecycle = await withTransaction(async (client) => {
-    const row = await loadAssessmentVersionRuntimeRow(input.assessmentId, input.ownerUserId, client)
+  const runInTransaction = deps.withTransactionFn ?? withTransaction
+  const getLatestResultSnapshot = deps.getLatestResultSnapshot ?? getLatestAssessmentResultSnapshot
+
+  const lifecycle = await runInTransaction(async (client) => {
+    const row = await loadAssessmentVersionRuntimeRow(input.assessmentId, input.ownerUserId, client, { forUpdate: true })
     if (!row) {
       return { kind: 'error' as const, httpStatus: 404, error: 'Assessment not found.' }
     }
@@ -514,7 +472,7 @@ export async function evaluateCompletedV2Assessment(input: {
       }
     }
 
-    const responses = extractV2ResponseEnvelope(row.metadata_json).responses
+    const responses = canonicalizeV2ResponseEnvelope(pkg, row.metadata_json).responses
     if (Object.keys(responses).length < pkg.questions.length) {
       return {
         kind: 'error' as const,
@@ -523,7 +481,7 @@ export async function evaluateCompletedV2Assessment(input: {
       }
     }
 
-    const latestResult = await getLatestAssessmentResultSnapshot(input.assessmentId, client)
+    const latestResult = await getLatestResultSnapshot(input.assessmentId, client)
     if (row.assessment_status === 'completed' && latestResult && (latestResult.status === 'complete' || latestResult.status === 'failed')) {
       return {
         kind: 'existing' as const,
@@ -533,6 +491,13 @@ export async function evaluateCompletedV2Assessment(input: {
         latestResult,
         pkg,
         responses,
+      }
+    }
+
+    if (row.assessment_status === 'completed' && row.scoring_status === 'pending' && !latestResult) {
+      return {
+        kind: 'pending' as const,
+        assessment: row,
       }
     }
 
@@ -579,7 +544,25 @@ export async function evaluateCompletedV2Assessment(input: {
     }
   }
 
+  if (lifecycle.kind === 'pending') {
+    return {
+      httpStatus: 200,
+      body: {
+        ok: true,
+        assessmentId: input.assessmentId,
+        assessmentStatus: 'completed',
+        resultStatus: 'pending',
+        resultId: null,
+      },
+    }
+  }
+
   try {
+    const runtimeSupport = evaluatePackageV2LiveRuntimeSupport(lifecycle.pkg)
+    if (!runtimeSupport.supported) {
+      throw new Error(runtimeSupport.issues[0]?.message ?? 'Package Contract v2 could not be executed safely on the live runtime.')
+    }
+
     const compiled = compileAssessmentPackageV2(lifecycle.pkg)
     if (!compiled.ok || !compiled.executablePackage) {
       throw new Error(compiled.diagnostics.find((entry) => entry.severity === 'error')?.message ?? 'Package Contract v2 could not be compiled for live execution.')
@@ -607,7 +590,7 @@ export async function evaluateCompletedV2Assessment(input: {
       scoredAt,
     }
 
-    const persisted = await withTransaction(async (client) => {
+    const persisted = await runInTransaction(async (client) => {
       const result = await input.persistResult({
         assessmentId: input.assessmentId,
         assessmentVersionId: lifecycle.assessment.assessment_version_id,
@@ -649,7 +632,7 @@ export async function evaluateCompletedV2Assessment(input: {
       message: error instanceof Error ? error.message : 'Unexpected error',
     })
 
-    const failedResult = await withTransaction(async (client) => {
+    const failedResult = await runInTransaction(async (client) => {
       const failurePayload = {
         failure: {
           stage: 'completion_orchestration',
