@@ -21,6 +21,12 @@ interface AuthDependencies {
   withTransaction: typeof withTransaction
 }
 
+interface UsersTableCapabilities {
+  hasUsersTable: boolean
+  usersSchema: string | null
+  columns: Set<string>
+}
+
 export class DatabaseUserResolutionError extends Error {
   override readonly cause?: unknown
 
@@ -51,6 +57,102 @@ const defaultDependencies: AuthDependencies = {
   withTransaction,
 }
 
+async function getUsersTableCapabilities(deps: Pick<AuthDependencies, 'queryDb'>): Promise<UsersTableCapabilities> {
+  const tableResult = await deps.queryDb<{ users_schema: string | null }>(
+    `select (
+       select n.nspname
+       from pg_class c
+       inner join pg_namespace n on n.oid = c.relnamespace
+       where c.oid = to_regclass('users')
+     ) as users_schema`,
+  )
+
+  const usersSchema = tableResult.rows[0]?.users_schema ?? null
+  if (!usersSchema) {
+    return {
+      hasUsersTable: false,
+      usersSchema: null,
+      columns: new Set<string>(),
+    }
+  }
+
+  const columnResult = await deps.queryDb<{ column_name: string | null }>(
+    `select column_name
+     from information_schema.columns
+     where table_schema = $1
+       and table_name = 'users'`,
+    [usersSchema],
+  )
+
+  return {
+    hasUsersTable: true,
+    usersSchema,
+    columns: new Set((columnResult.rows ?? []).flatMap((row) => row.column_name ? [row.column_name] : [])),
+  }
+}
+
+function buildUserSelectSql(usersTableCapabilities: UsersTableCapabilities, whereClause: string): string {
+  const hasExternalAuthId = usersTableCapabilities.columns.has('external_auth_id')
+
+  return `SELECT id, ${hasExternalAuthId ? 'external_auth_id' : 'NULL::text AS external_auth_id'}, email
+       FROM users
+       WHERE ${whereClause}
+       LIMIT 1`
+}
+
+function buildUserUpsertSql(
+  usersTableCapabilities: UsersTableCapabilities,
+  values: {
+    clerkUserId: string
+    emailAddress: string
+    firstName: string | null
+    lastName: string | null
+  },
+): { sql: string; params: unknown[] } {
+  const columns: string[] = []
+  const params: unknown[] = []
+  const placeholders: string[] = []
+  const updateAssignments: string[] = ['updated_at = NOW()']
+
+  const pushColumnValue = (columnName: string, value: unknown, updateClause?: string) => {
+    columns.push(columnName)
+    params.push(value)
+    const placeholder = `$${params.length}`
+    placeholders.push(placeholder)
+    if (updateClause) {
+      updateAssignments.push(updateClause.replaceAll('$value', placeholder))
+    }
+  }
+
+  pushColumnValue('email', values.emailAddress)
+
+  if (usersTableCapabilities.columns.has('external_auth_id')) {
+    pushColumnValue('external_auth_id', values.clerkUserId, 'external_auth_id = $value')
+  }
+
+  if (usersTableCapabilities.columns.has('first_name')) {
+    pushColumnValue('first_name', values.firstName, 'first_name = COALESCE($value, users.first_name)')
+  }
+
+  if (usersTableCapabilities.columns.has('last_name')) {
+    pushColumnValue('last_name', values.lastName, 'last_name = COALESCE($value, users.last_name)')
+  }
+
+  if (usersTableCapabilities.columns.has('account_type')) {
+    pushColumnValue('account_type', 'individual')
+  }
+
+  return {
+    sql: `INSERT INTO users (${columns.join(', ')})
+         VALUES (${placeholders.join(', ')})
+         ON CONFLICT (email)
+         DO UPDATE SET
+           ${updateAssignments.join(', ')}
+         RETURNING id, ${usersTableCapabilities.columns.has('external_auth_id') ? 'external_auth_id' : 'NULL::text AS external_auth_id'}, email`,
+    params,
+  }
+}
+
 export async function resolveAuthenticatedAppUser(
   dependencies: Partial<AuthDependencies> = {},
 ): Promise<AuthenticatedAppUser | null> {
@@ -61,18 +163,28 @@ export async function resolveAuthenticatedAppUser(
     return null
   }
 
-  let existingByExternalAuthId
+  let usersTableCapabilities
   try {
-    existingByExternalAuthId = await deps.queryDb<DbUserRow>(
-      `SELECT id, external_auth_id, email
-       FROM users
-       WHERE external_auth_id = $1
-       LIMIT 1`,
-      [userId],
-    )
+    usersTableCapabilities = await getUsersTableCapabilities(deps)
   } catch (error) {
-    logDatabaseUserResolutionFailure('lookup', userId, error)
+    logDatabaseUserResolutionFailure('schema capability check', userId, error)
     throw new DatabaseUserResolutionError('Database user resolution failed.', error)
+  }
+
+  let existingByExternalAuthId
+  if (usersTableCapabilities.columns.has('external_auth_id')) {
+    try {
+      existingByExternalAuthId = await deps.queryDb<DbUserRow>(
+        buildUserSelectSql(usersTableCapabilities, 'external_auth_id = $1'),
+        [userId],
+      )
+    } catch (error) {
+      logDatabaseUserResolutionFailure('lookup', userId, error)
+      throw new DatabaseUserResolutionError('Database user resolution failed.', error)
+    }
+  } else {
+    existingByExternalAuthId = { rows: [] as DbUserRow[] }
+    console.warn('resolveAuthenticatedAppUser skipped external_auth_id lookup because users.external_auth_id is unavailable.')
   }
 
   if (existingByExternalAuthId.rows[0]) {
@@ -105,10 +217,7 @@ export async function resolveAuthenticatedAppUser(
   let existingByEmail
   try {
     existingByEmail = await deps.queryDb<DbUserRow>(
-      `SELECT id, external_auth_id, email
-       FROM users
-       WHERE email = $1
-       LIMIT 1`,
+      buildUserSelectSql(usersTableCapabilities, 'email = $1'),
       [emailAddress],
     )
   } catch (error) {
@@ -119,17 +228,15 @@ export async function resolveAuthenticatedAppUser(
   let upserted
   try {
     upserted = await deps.withTransaction(async (client) => {
+      const { sql, params } = buildUserUpsertSql(usersTableCapabilities, {
+        clerkUserId: userId,
+        emailAddress,
+        firstName,
+        lastName,
+      })
       const result = await client.query<DbUserRow>(
-        `INSERT INTO users (external_auth_id, email, first_name, last_name, account_type)
-         VALUES ($1, $2, $3, $4, 'individual')
-         ON CONFLICT (email)
-         DO UPDATE SET
-           external_auth_id = EXCLUDED.external_auth_id,
-           first_name = COALESCE(EXCLUDED.first_name, users.first_name),
-           last_name = COALESCE(EXCLUDED.last_name, users.last_name),
-           updated_at = NOW()
-         RETURNING id, external_auth_id, email`,
-        [userId, emailAddress, firstName, lastName],
+        sql,
+        params,
       )
 
       return result.rows[0]
