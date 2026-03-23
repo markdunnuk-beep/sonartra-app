@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
@@ -373,7 +374,7 @@ test('report preview surface makes authored-vs-fallback quality signals visible'
   assert.match(html, /system fallback/i)
 })
 
-test('report preview workspace status and surface block invalid package states cleanly', () => {
+test('report preview workspace status explains simulation dependency and next-step guidance', () => {
   const blockedStatus = getAdminAssessmentReportPreviewWorkspaceStatus({
     packageInfo: {
       status: 'invalid',
@@ -390,12 +391,67 @@ test('report preview workspace status and surface block invalid package states c
   })
 
   assert.equal(blockedStatus.canGeneratePreview, false)
-  assert.match(blockedStatus.summary, /preview is unavailable/i)
+  assert.match(blockedStatus.summary, /depends on a simulation/i)
+  assert.match(blockedStatus.blockingReason ?? '', /make simulation available for this version/i)
+
+  const previewReadyPackage: SonartraAssessmentPackageV1 = {
+    meta: {
+      schemaVersion: 'sonartra-assessment-package/v1',
+      assessmentKey: 'preview_ready',
+      assessmentTitle: 'Preview Ready',
+      versionLabel: '1.0.0',
+      defaultLocale: 'en',
+    },
+    dimensions: [{ id: 'drive', labelKey: 'dimension.drive.label' }],
+    questions: [{
+      id: 'q1',
+      promptKey: 'question.q1.prompt',
+      dimensionId: 'drive',
+      reverseScored: false,
+      weight: 1,
+      options: [{ id: 'q1.a', labelKey: 'question.q1.option.a', value: 1, scoreMap: { drive: 1 } }],
+    }],
+    scoring: { dimensionRules: [{ dimensionId: 'drive', aggregation: 'sum' }] },
+    normalization: {
+      scales: [{
+        id: 'core-scale',
+        dimensionIds: ['drive'],
+        range: { min: 0, max: 10 },
+        bands: [{ key: 'low', min: 0, max: 10, labelKey: 'band.low.label' }],
+      }],
+    },
+    outputs: {
+      reportRules: [{ key: 'summary', labelKey: 'output.summary.label', dimensionIds: ['drive'], normalizationScaleId: 'core-scale' }],
+    },
+    language: {
+      locales: [{
+        locale: 'en',
+        text: {
+          'dimension.drive.label': 'Drive',
+          'question.q1.prompt': 'Prompt',
+          'question.q1.option.a': 'A',
+          'band.low.label': 'Low',
+          'output.summary.label': 'Summary',
+        },
+      }],
+    },
+  }
+  const readyDetailData = createDetailData(previewReadyPackage)
+  const readyAfterSimulation = getAdminAssessmentReportPreviewWorkspaceStatus(readyDetailData.versions[0]!)
+
+  assert.equal(readyAfterSimulation.canGeneratePreview, true)
+  assert.equal(readyAfterSimulation.statusLabel, 'Ready after simulation')
+  assert.match(readyAfterSimulation.summary, /No simulation run yet for this version/i)
+  assert.match(readyAfterSimulation.summary, /Run a simulation to generate report preview evidence/i)
 
   const detailData = createDetailData(basePackage, 'invalid')
-  const html = renderToStaticMarkup(<AdminAssessmentVersionReportPreviewSurface detailData={detailData} version={detailData.versions[0]!} />)
-  assert.match(html, /No report preview yet/)
-  assert.match(html, /Open simulation workspace/)
+  const blockedHtml = renderToStaticMarkup(<AdminAssessmentVersionReportPreviewSurface detailData={detailData} version={detailData.versions[0]!} />)
+  assert.match(blockedHtml, /Report preview not ready yet/)
+  assert.match(blockedHtml, /Open simulation workspace/)
+
+  const reportPreviewSurfaceSource = readFileSync(new URL('../components/admin/surfaces/AdminAssessmentVersionReportPreviewSurface.tsx', import.meta.url), 'utf8')
+  assert.match(reportPreviewSurfaceSource, /No report preview yet for this version/)
+  assert.match(reportPreviewSurfaceSource, /Report preview becomes available after a successful simulation using the normalized package/i)
 })
 
 test('canonical report preview route uses version-level path and notFound handling', async () => {

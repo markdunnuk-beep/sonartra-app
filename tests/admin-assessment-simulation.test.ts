@@ -154,8 +154,8 @@ test('simulation engine surfaces unresolved output language references as warnin
   assert.equal(result.result?.outputs.find((entry) => entry.key === 'combined-summary')?.label, 'output.combined-summary.label')
 })
 
-test('simulation workspace status blocks versions without a valid normalized package', () => {
-  const blocked = getAdminAssessmentSimulationWorkspaceStatus({
+test('simulation workspace status distinguishes not-yet-run package setup work from unsupported package states', () => {
+  const invalidPackage = getAdminAssessmentSimulationWorkspaceStatus({
     packageInfo: {
       status: 'invalid',
       schemaVersion: 'sonartra-assessment-package/v1',
@@ -170,8 +170,39 @@ test('simulation workspace status blocks versions without a valid normalized pac
     normalizedPackage: null,
   })
 
-  assert.equal(blocked.canRunSimulation, false)
-  assert.match(blocked.blockingReason ?? '', /valid package is attached/i)
+  assert.equal(invalidPackage.canRunSimulation, false)
+  assert.match(invalidPackage.summary, /No simulation run yet for this version because a valid normalized package has not been attached/i)
+  assert.match(invalidPackage.blockingReason ?? '', /make simulation available for this version/i)
+
+  const unsupportedPackage = getAdminAssessmentSimulationWorkspaceStatus({
+    packageInfo: {
+      status: 'valid',
+      schemaVersion: 'sonartra-assessment-package/v1',
+      sourceType: 'manual_import',
+      importedAt: null,
+      importedByName: null,
+      sourceFilename: null,
+      summary: {
+        dimensionsCount: 1,
+        questionsCount: 0,
+        optionsCount: 0,
+        scoringRuleCount: 1,
+        normalizationRuleCount: 1,
+        outputRuleCount: 0,
+        localeCount: 1,
+      },
+      errors: [],
+      warnings: [],
+    },
+    normalizedPackage: {
+      ...basePackage,
+      questions: [],
+    },
+  })
+
+  assert.equal(unsupportedPackage.canRunSimulation, false)
+  assert.match(unsupportedPackage.summary, /not supported for the current normalized package/i)
+  assert.match(unsupportedPackage.blockingReason ?? '', /At least one normalized question is required/i)
 })
 
 test('simulation route uses the canonical version-level path and notFound handling', async () => {
