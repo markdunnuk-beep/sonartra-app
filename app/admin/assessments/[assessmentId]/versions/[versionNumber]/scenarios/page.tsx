@@ -83,7 +83,7 @@ export default async function AdminAssessmentVersionScenariosPage({
             { label: 'Question count', value: String(version.packageInfo.summary?.questionsCount ?? 0) },
             { label: 'Dimension count', value: String(version.packageInfo.summary?.dimensionsCount ?? 0) },
             { label: 'Output rules', value: String(version.packageInfo.summary?.outputRuleCount ?? 0) },
-            { label: 'Default locale', value: version.normalizedPackage?.meta.defaultLocale ?? 'n/a' },
+            { label: 'Default locale', value: (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.meta?.defaultLocale ?? (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.metadata?.locales?.defaultLocale ?? 'n/a' },
           ]}
         />
       </SurfaceSection>

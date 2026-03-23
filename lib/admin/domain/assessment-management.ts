@@ -253,7 +253,9 @@ export interface AdminAssessmentPackageImportState {
       importable: boolean
       compilable: boolean
       evaluatable: boolean
+      simulatable: boolean
       runtimeExecutable: boolean
+      liveRuntimeEnabled: boolean
       publishable: boolean
     }
     errors: Array<{ path: string; message: string }>
@@ -333,7 +335,9 @@ export function normalizeAdminAssessmentPackageImportState(
                 importable: Boolean(readiness.importable),
                 compilable: Boolean(readiness.compilable),
                 evaluatable: Boolean(readiness.evaluatable),
+                simulatable: Boolean(readiness.simulatable),
                 runtimeExecutable: Boolean(readiness.runtimeExecutable),
+                liveRuntimeEnabled: Boolean(readiness.liveRuntimeEnabled),
                 publishable: Boolean(readiness.publishable),
               }
             : undefined,

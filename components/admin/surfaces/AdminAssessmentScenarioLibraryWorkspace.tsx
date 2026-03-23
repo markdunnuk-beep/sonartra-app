@@ -128,15 +128,15 @@ export function AdminAssessmentScenarioLibraryWorkspace({
   const [name, setName] = React.useState(editingScenario?.name ?? '')
   const [description, setDescription] = React.useState(editingScenario?.description ?? '')
   const [scenarioType, setScenarioType] = React.useState<AdminSavedAssessmentScenarioRecord['scenarioType']>(editingScenario?.scenarioType ?? 'regression')
-  const [locale, setLocale] = React.useState(editingScenario?.locale ?? version.normalizedPackage?.meta.defaultLocale ?? '')
-  const [payloadText, setPayloadText] = React.useState(editingScenario?.sampleResponsePayload ?? buildAdminAssessmentSimulationPayloadText(defaultScenario ?? { answers: [], locale: version.normalizedPackage?.meta.defaultLocale ?? null, source: 'manual_json', scenarioKey: null }))
+  const [locale, setLocale] = React.useState(editingScenario?.locale ?? (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.meta?.defaultLocale ?? (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.metadata?.locales?.defaultLocale ?? '')
+  const [payloadText, setPayloadText] = React.useState(editingScenario?.sampleResponsePayload ?? buildAdminAssessmentSimulationPayloadText(defaultScenario ?? { answers: [], locale: (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.meta?.defaultLocale ?? (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.metadata?.locales?.defaultLocale ?? null, source: 'manual_json', scenarioKey: null }))
 
   React.useEffect(() => {
     if (!editingScenario) return
     setName(editingScenario.name)
     setDescription(editingScenario.description ?? '')
     setScenarioType(editingScenario.scenarioType)
-    setLocale(editingScenario.locale ?? version.normalizedPackage?.meta.defaultLocale ?? '')
+    setLocale(editingScenario.locale ?? (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.meta?.defaultLocale ?? (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.metadata?.locales?.defaultLocale ?? '')
     setPayloadText(editingScenario.sampleResponsePayload)
   }, [editingScenario, version.normalizedPackage])
 
@@ -173,7 +173,7 @@ export function AdminAssessmentScenarioLibraryWorkspace({
           title={editingScenario ? 'Edit saved scenario' : 'Create saved scenario'}
           eyebrow="Scenario library"
           description="Save deterministic QA payloads for this assessment version. Payloads are validated against the current normalized package before they can be stored."
-          actions={<button type="button" onClick={() => { setEditingScenarioId(null); setName(''); setDescription(''); setScenarioType('regression'); setLocale(version.normalizedPackage?.meta.defaultLocale ?? ''); setPayloadText(buildAdminAssessmentSimulationPayloadText(defaultScenario ?? { answers: [], locale: version.normalizedPackage?.meta.defaultLocale ?? null, source: 'manual_json', scenarioKey: null })) }} className="inline-flex min-h-10 items-center rounded-xl border border-white/[0.1] bg-bg/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-textSecondary hover:border-accent/35 hover:text-textPrimary"><CopyPlus className="mr-2 h-4 w-4" />New scenario</button>}
+          actions={<button type="button" onClick={() => { setEditingScenarioId(null); setName(''); setDescription(''); setScenarioType('regression'); setLocale((version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.meta?.defaultLocale ?? (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.metadata?.locales?.defaultLocale ?? ''); setPayloadText(buildAdminAssessmentSimulationPayloadText(defaultScenario ?? { answers: [], locale: (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.meta?.defaultLocale ?? (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.metadata?.locales?.defaultLocale ?? null, source: 'manual_json', scenarioKey: null })) }} className="inline-flex min-h-10 items-center rounded-xl border border-white/[0.1] bg-bg/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-textSecondary hover:border-accent/35 hover:text-textPrimary"><CopyPlus className="mr-2 h-4 w-4" />New scenario</button>}
         >
           <form action={editorAction} className="space-y-4">
             <input type="hidden" name="assessmentId" value={assessmentId} />
@@ -243,7 +243,7 @@ export function AdminAssessmentScenarioLibraryWorkspace({
               rows={scenarios.map((scenario) => [
                 <div key={`${scenario.id}-name`}>
                   <p className="text-sm font-medium text-textPrimary">{scenario.name}</p>
-                  <p className="mt-1 text-xs text-textSecondary">{scenario.scenarioType.replace(/_/g, ' ')} · {scenario.locale ?? version.normalizedPackage?.meta.defaultLocale ?? 'default locale'}</p>
+                  <p className="mt-1 text-xs text-textSecondary">{scenario.scenarioType.replace(/_/g, ' ')} · {scenario.locale ?? (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.meta?.defaultLocale ?? (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.metadata?.locales?.defaultLocale ?? 'default locale'}</p>
                 </div>,
                 <div key={`${scenario.id}-coverage`}>
                   <p className="text-sm text-textPrimary">{scenario.questionCoverage ?? 'n/a'}</p>

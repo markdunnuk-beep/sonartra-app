@@ -30,9 +30,9 @@ import {
 import { importAssessmentPackagePayload, type AdminAssessmentPackageValidationSummary } from '@/lib/admin/server/assessment-package-import'
 import { getAdminAssessmentVersionReadiness } from '@/lib/admin/domain/assessment-package-review'
 import {
-  executeAdminAssessmentSimulation,
+  executeAdminAssessmentSimulationForPackage,
   getAdminAssessmentSimulationWorkspaceStatus,
-  parseAdminAssessmentSimulationPayload,
+  parseAdminAssessmentSimulationPayloadForPackage,
   type AdminAssessmentSimulationActionState,
 } from '@/lib/admin/domain/assessment-simulation'
 import { queryDb, withTransaction, describeDatabaseError, logDatabaseError, logDatabaseSessionDiagnostics } from '@/lib/db'
@@ -2209,7 +2209,9 @@ export async function importAdminAssessmentPackage(
           importable: false,
           compilable: false,
           evaluatable: false,
+          simulatable: false,
           runtimeExecutable: false,
+          liveRuntimeEnabled: false,
           publishable: false,
         },
         errors: [{ path: '$', message: 'Malformed JSON.' }],
@@ -2468,23 +2470,6 @@ export async function simulateAdminAssessmentVersion(
     }
   }
 
-  const payloadValidation = parseAdminAssessmentSimulationPayload(input.responsePayload)
-
-  if (!payloadValidation.ok || !payloadValidation.normalizedRequest) {
-    return {
-      ok: false,
-      code: 'validation_error',
-      message: 'Simulation payload is invalid.',
-      state: {
-        status: 'error',
-        message: 'Simulation payload is invalid. Resolve the input errors and try again.',
-        fieldErrors: {
-          responsePayload: payloadValidation.errors[0]?.message ?? 'Simulation payload is invalid.',
-        },
-      },
-    }
-  }
-
   try {
     return await deps.withTransaction(async (client) => {
       const versionRow = await loadAssessmentVersionRowById(
@@ -2504,6 +2489,27 @@ export async function simulateAdminAssessmentVersion(
           state: {
             status: 'blocked',
             message: 'The assessment version could not be found.',
+          },
+        }
+      }
+
+      const payloadValidation = parseAdminAssessmentSimulationPayloadForPackage(
+        version.normalizedPackage,
+        version.packageInfo.schemaVersion,
+        input.responsePayload,
+      )
+
+      if (!payloadValidation.ok || !payloadValidation.normalizedRequest) {
+        return {
+          ok: false,
+          code: 'validation_error',
+          message: 'Simulation payload is invalid.',
+          state: {
+            status: 'error',
+            message: 'Simulation payload is invalid. Resolve the input errors and try again.',
+            fieldErrors: {
+              responsePayload: payloadValidation.errors[0]?.message ?? 'Simulation payload is invalid.',
+            },
           },
         }
       }
@@ -2555,7 +2561,7 @@ export async function simulateAdminAssessmentVersion(
           },
         }
       }
-      const simulation = executeAdminAssessmentSimulation(version.normalizedPackage, normalizedSimulationRequest)
+      const simulation = executeAdminAssessmentSimulationForPackage(version.normalizedPackage, version.packageInfo.schemaVersion, normalizedSimulationRequest)
       if (!simulation.ok || !simulation.result) {
         return {
           ok: false,
@@ -2664,13 +2670,13 @@ export async function importAdminAssessmentSavedScenarios(
       const skipped: Array<{ name: string; reason: string }> = []
 
       for (const sourceScenario of sourceScenarios) {
-        const parsedPayload = parseAdminAssessmentSimulationPayload(sourceScenario.payload)
+        const parsedPayload = parseAdminAssessmentSimulationPayloadForPackage(targetVersion.normalizedPackage, targetVersion.packageInfo.schemaVersion, sourceScenario.payload)
         if (!parsedPayload.ok || !parsedPayload.normalizedRequest) {
           skipped.push({ name: sourceScenario.name, reason: parsedPayload.errors[0]?.message ?? 'Stored scenario payload is malformed.' })
           continue
         }
 
-        const validation = executeAdminAssessmentSimulation(targetVersion.normalizedPackage, parsedPayload.normalizedRequest)
+        const validation = executeAdminAssessmentSimulationForPackage(targetVersion.normalizedPackage, targetVersion.packageInfo.schemaVersion, parsedPayload.normalizedRequest)
         if (!validation.ok) {
           skipped.push({ name: sourceScenario.name, reason: validation.errors[0]?.message ?? 'Scenario is incompatible with the target version package.' })
           continue
@@ -2806,7 +2812,7 @@ export async function cloneAdminAssessmentSavedScenario(
         return { ok: false, code: 'not_found', message: 'Source scenario not found.', sourceVersionLabel: null, importedCount: 0, skippedCount: 0, importedNames: [], skipped: [] }
       }
 
-      const parsedPayload = parseAdminAssessmentSimulationPayload(sourceScenario.scenario.payload)
+      const parsedPayload = parseAdminAssessmentSimulationPayloadForPackage(targetVersion.normalizedPackage, targetVersion.packageInfo.schemaVersion, sourceScenario.scenario.payload)
       if (!parsedPayload.ok || !parsedPayload.normalizedRequest) {
         return {
           ok: false,
@@ -2820,7 +2826,7 @@ export async function cloneAdminAssessmentSavedScenario(
         }
       }
 
-      const validation = executeAdminAssessmentSimulation(targetVersion.normalizedPackage, parsedPayload.normalizedRequest)
+      const validation = executeAdminAssessmentSimulationForPackage(targetVersion.normalizedPackage, targetVersion.packageInfo.schemaVersion, parsedPayload.normalizedRequest)
       if (!validation.ok) {
         return {
           ok: false,
@@ -2958,13 +2964,13 @@ export async function runAdminAssessmentScenarioSuite(
       let failedCount = 0
 
       for (const scenario of activeScenarios) {
-        const parsedPayload = parseAdminAssessmentSimulationPayload(scenario.payload)
+        const parsedPayload = parseAdminAssessmentSimulationPayloadForPackage(version.normalizedPackage, version.packageInfo.schemaVersion, scenario.payload)
         if (!parsedPayload.ok || !parsedPayload.normalizedRequest) {
           failedCount += 1
           continue
         }
 
-        const simulation = executeAdminAssessmentSimulation(version.normalizedPackage, parsedPayload.normalizedRequest)
+        const simulation = executeAdminAssessmentSimulationForPackage(version.normalizedPackage, version.packageInfo.schemaVersion, parsedPayload.normalizedRequest)
         if (!simulation.ok) {
           failedCount += 1
         } else if (simulation.warnings.length > 0) {

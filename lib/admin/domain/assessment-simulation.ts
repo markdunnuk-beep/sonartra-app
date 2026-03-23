@@ -6,9 +6,16 @@ import type {
   SonartraAssessmentPackageV1,
 } from '@/lib/admin/domain/assessment-package'
 import { parseStoredNormalizedAssessmentPackage } from '@/lib/admin/domain/assessment-package'
-import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 } from '@/lib/admin/domain/assessment-package-v2'
+import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
 import { resolveAssessmentPackageLocaleContext } from '@/lib/admin/domain/assessment-package-content'
 import type { AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
+import {
+  buildAdminAssessmentSimulationScenarioV2,
+  executeAdminAssessmentSimulationV2,
+  parseAdminAssessmentSimulationPayloadV2,
+  type AdminAssessmentSimulationRequestV2,
+  type AssessmentSimulationResultV2,
+} from '@/lib/admin/domain/assessment-simulation-v2'
 
 export type AdminAssessmentSimulationEligibility = 'eligible' | 'blocked'
 export type AdminAssessmentSimulationInputMode = 'generated_form' | 'manual_json'
@@ -21,6 +28,7 @@ export interface AdminAssessmentSimulationAnswer {
 
 export interface AdminAssessmentSimulationRequest {
   answers: AdminAssessmentSimulationAnswer[]
+  responses?: Record<string, unknown>
   locale?: string | null
   source: AdminAssessmentSimulationInputMode | 'seeded_scenario'
   scenarioKey?: AdminAssessmentSimulationScenarioKey | null
@@ -91,6 +99,31 @@ export interface AdminAssessmentSimulationOutputResult {
 }
 
 export interface AdminAssessmentSimulationResult {
+  contractVersion?: 'legacy_v1' | 'package_contract_v2'
+  readiness?: {
+    structurallyValid: boolean
+    importable: boolean
+    compilable: boolean
+    evaluatable: boolean
+    simulatable: boolean
+    runtimeExecutable: boolean
+    liveRuntimeEnabled: boolean
+    publishable: boolean
+  }
+  readinessStatus?: string
+  compileStatus?: string
+  evaluationStatus?: string
+  summaryMetrics?: {
+    answeredCount: number
+    totalQuestions: number
+    scoredDimensions?: number
+    insufficientDimensions?: number
+    triggeredOutputCount?: number
+    triggeredIntegrityCount?: number
+  }
+  materializedOutputs?: AssessmentSimulationResultV2['materializedOutputs']
+  viewModel?: AssessmentSimulationResultV2['viewModel']
+  errors?: AdminAssessmentSimulationIssue[]
   request: AdminAssessmentSimulationRequest
   responseSummary: {
     answeredCount: number
@@ -112,7 +145,9 @@ export interface AdminAssessmentSimulationResult {
   warnings: AdminAssessmentSimulationIssue[]
   readinessNotes: string[]
   debug: {
-    responsePayload: Record<string, string>
+    responsePayload: Record<string, unknown>
+    compiledPackageKey?: string | null
+    evaluationId?: string | null
   }
 }
 
@@ -159,6 +194,105 @@ function resolveText(text: Record<string, string>, key: string): string | null {
 
 function pushIssue(collection: AdminAssessmentSimulationIssue[], path: string, message: string) {
   collection.push({ path, message })
+}
+
+function buildSimulationReadinessFlags(canSimulate: boolean) {
+  return {
+    structurallyValid: canSimulate,
+    importable: canSimulate,
+    compilable: canSimulate,
+    evaluatable: canSimulate,
+    simulatable: canSimulate,
+    runtimeExecutable: canSimulate,
+    liveRuntimeEnabled: canSimulate,
+    publishable: canSimulate,
+  }
+}
+
+function isPackageContractV2Version(version: Pick<AdminAssessmentVersionRecord, 'packageInfo'>) {
+  return version.packageInfo?.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
+    && (version.packageInfo?.status === 'valid' || version.packageInfo?.status === 'valid_with_warnings')
+}
+
+function toLegacyCompatibleV2Result(
+  request: AdminAssessmentSimulationRequestV2,
+  result: AssessmentSimulationResultV2,
+): AdminAssessmentSimulationResult {
+  const viewModel = result.viewModel
+  const rawScores = viewModel?.rawDimensions.map((entry) => ({
+    dimensionId: entry.id,
+    label: entry.label,
+    rawScore: entry.rawScore ?? 0,
+    minimumPossibleScore: 0,
+    maximumPossibleScore: 0,
+    rawPercentage: null,
+    answeredQuestions: entry.answeredCount,
+  })) ?? []
+  const normalizedScores = viewModel?.normalizedValues.map((entry) => ({
+    dimensionId: entry.targetId,
+    label: entry.label ?? entry.targetId,
+    scaleId: 'v2-normalization',
+    normalizedScore: entry.normalizedScore,
+    range: { min: 0, max: 100 },
+    band: entry.band ? { key: entry.band, label: entry.band, min: 0, max: 0 } : null,
+  })) ?? []
+  const outputs = viewModel?.outputRules.map((entry) => ({
+    key: entry.key,
+    label: result.materializedOutputs?.webSummaryOutputs.find((item) => item.key === entry.key)?.label ?? entry.key,
+    triggered: entry.status === 'triggered',
+    normalizationScaleId: null,
+    referencedDimensions: [],
+    reasons: [entry.band ? `Band ${entry.band}.` : 'Evaluated from v2 output-rule predicate.'],
+    warnings: [],
+  })) ?? []
+
+  return {
+    contractVersion: 'package_contract_v2',
+    readiness: result.readiness,
+    readinessStatus: result.readinessStatus,
+    compileStatus: result.compileStatus,
+    evaluationStatus: result.evaluationStatus,
+    summaryMetrics: result.summaryMetrics,
+    materializedOutputs: result.materializedOutputs,
+    viewModel: result.viewModel,
+    errors: result.errors,
+    request: {
+      answers: [],
+      responses: { ...request.responses },
+      locale: request.locale ?? null,
+      source: request.source,
+      scenarioKey: request.scenarioKey ?? null,
+    },
+    responseSummary: {
+      answeredCount: result.summaryMetrics.answeredCount,
+      totalQuestions: result.summaryMetrics.totalQuestions,
+      locale: request.locale ?? 'n/a',
+      scenarioKey: request.scenarioKey ?? null,
+      source: request.source,
+    },
+    rawScores,
+    normalizedScores,
+    outputs,
+    trace: {
+      questions: [],
+      outputExecution: (viewModel?.outputRules ?? []).map((entry) => ({
+        ruleKey: entry.key,
+        explanation: `Output rule ${entry.key} resolved with status ${entry.status}.`,
+      })),
+    },
+    warnings: result.warnings,
+    readinessNotes: [
+      result.readinessStatus === 'not_ready' ? 'Admin simulation is not available for this v2 package.' : 'Admin simulation executed through the Package Contract v2 pipeline.',
+      result.readiness.liveRuntimeEnabled
+        ? 'Live runtime support is enabled.'
+        : 'Live runtime/publish support remains disabled; this is an admin-only simulation surface.',
+    ],
+    debug: {
+      responsePayload: result.debug.responsePayload,
+      compiledPackageKey: result.debug.compiledPackageKey,
+      evaluationId: result.debug.evaluationId,
+    },
+  }
 }
 
 function getQuestionOptionScoreTotal(option: SonartraAssessmentPackageQuestionOption): number {
@@ -222,19 +356,43 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
     ? version.packageInfo.status
     : 'missing'
   const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
-  const isImportedV2Package = version.packageInfo?.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
-    && (status === 'valid' || status === 'valid_with_warnings')
+  const isImportedV2Package = isPackageContractV2Version(version)
+  const pkgV2 = isImportedV2Package ? parseStoredValidatedAssessmentPackageV2(version.normalizedPackage as unknown) : null
+
+  if (isImportedV2Package) {
+    const executable = pkgV2 ? executeAdminAssessmentSimulationV2(version.normalizedPackage as unknown, {
+      responses: {},
+      locale: pkgV2?.metadata.locales.defaultLocale ?? null,
+      source: 'manual_json',
+      scenarioKey: null,
+    }) : null
+    const readiness = executable?.result.readiness ?? buildSimulationReadinessFlags(false)
+
+    if (!pkgV2 || !readiness.simulatable) {
+      return {
+        eligibility: 'blocked',
+        statusLabel: 'Blocked',
+        summary: 'Package Contract v2 was imported, but admin simulation is unavailable until the stored package compiles cleanly for the v2 evaluator and materializer.',
+        blockingReason: executable?.result.errors[0]?.message ?? 'Package Contract v2 is not simulatable in admin yet because compilation/readiness is incomplete.',
+        canRunSimulation: false,
+      }
+    }
+
+    return {
+      eligibility: 'eligible',
+      statusLabel: status === 'valid_with_warnings' ? 'Eligible with warnings' : 'Eligible',
+      summary: 'Package Contract v2 can run through the admin-only simulation/compiler/evaluator/materialization path. This does not imply live runtime or publish readiness.',
+      blockingReason: null,
+      canRunSimulation: true,
+    }
+  }
 
   if (!pkg || status === 'missing') {
     return {
       eligibility: 'blocked',
       statusLabel: 'Blocked',
-      summary: isImportedV2Package
-        ? 'Simulation is blocked because Package Contract v2 imports are not yet executable by the live admin runtime.'
-        : 'Simulation is unavailable until a valid normalized package is attached to the version.',
-      blockingReason: isImportedV2Package
-        ? 'Package Contract v2 imported successfully, but simulation still depends on the legacy v1 execution path.'
-        : 'No valid package is attached to this version yet.',
+      summary: 'Simulation is unavailable until a valid normalized package is attached to the version.',
+      blockingReason: 'No valid package is attached to this version yet.',
       canRunSimulation: false,
     }
   }
@@ -285,13 +443,44 @@ export function buildAdminAssessmentSimulationScenario(
   }
 }
 
+export function buildAdminAssessmentSimulationScenarioForPackage(
+  pkg: unknown,
+  scenarioKey: AdminAssessmentSimulationScenarioKey,
+): AdminAssessmentSimulationRequest | null {
+  const legacyPkg = parseStoredNormalizedAssessmentPackage(pkg)
+  if (legacyPkg) {
+    return buildAdminAssessmentSimulationScenario(legacyPkg, scenarioKey)
+  }
+
+  const pkgV2 = parseStoredValidatedAssessmentPackageV2(pkg)
+  if (!pkgV2) {
+    return null
+  }
+
+  const scenario = buildAdminAssessmentSimulationScenarioV2(pkgV2, scenarioKey)
+  return {
+    answers: [],
+    responses: scenario.responses,
+    locale: scenario.locale ?? null,
+    source: scenario.source,
+    scenarioKey: scenario.scenarioKey ?? null,
+  }
+}
+
 export function buildAdminAssessmentSimulationPayloadText(request: AdminAssessmentSimulationRequest): string {
-  return JSON.stringify({
-    answers: request.answers,
-    locale: request.locale ?? null,
-    source: request.source,
-    scenarioKey: request.scenarioKey ?? null,
-  }, null, 2)
+  return JSON.stringify(request.responses
+    ? {
+        responses: request.responses,
+        locale: request.locale ?? null,
+        source: request.source,
+        scenarioKey: request.scenarioKey ?? null,
+      }
+    : {
+        answers: request.answers,
+        locale: request.locale ?? null,
+        source: request.source,
+        scenarioKey: request.scenarioKey ?? null,
+      }, null, 2)
 }
 
 export function parseAdminAssessmentSimulationPayload(
@@ -381,6 +570,71 @@ export function parseAdminAssessmentSimulationPayload(
       scenarioKey,
     } : null,
   }
+}
+
+export function parseAdminAssessmentSimulationPayloadForPackage(
+  storedPackage: unknown,
+  schemaVersion: string | null | undefined,
+  input: string,
+): AdminAssessmentSimulationValidationResult {
+  if (schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
+    const parsed = parseAdminAssessmentSimulationPayloadV2(input)
+    return {
+      ok: parsed.ok,
+      errors: parsed.errors,
+      warnings: parsed.warnings,
+      normalizedRequest: parsed.normalizedRequest
+        ? {
+            answers: [],
+            responses: parsed.normalizedRequest.responses,
+            locale: parsed.normalizedRequest.locale ?? null,
+            source: parsed.normalizedRequest.source,
+            scenarioKey: parsed.normalizedRequest.scenarioKey ?? null,
+          }
+        : null,
+    }
+  }
+
+  return parseAdminAssessmentSimulationPayload(input)
+}
+
+export function executeAdminAssessmentSimulationForPackage(
+  storedPackage: unknown,
+  schemaVersion: string | null | undefined,
+  request: AdminAssessmentSimulationRequest,
+): AdminAssessmentSimulationExecutionResult {
+  if (schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
+    const simulation = executeAdminAssessmentSimulationV2(storedPackage, {
+      responses: request.responses ?? {},
+      locale: request.locale ?? null,
+      source: request.source,
+      scenarioKey: request.scenarioKey ?? null,
+    })
+
+    return {
+      ok: simulation.ok,
+      errors: simulation.result.errors,
+      warnings: simulation.result.warnings,
+      result: toLegacyCompatibleV2Result({
+        responses: request.responses ?? {},
+        locale: request.locale ?? null,
+        source: request.source,
+        scenarioKey: request.scenarioKey ?? null,
+      }, simulation.result),
+    }
+  }
+
+  const legacyPkg = parseStoredNormalizedAssessmentPackage(storedPackage)
+  if (!legacyPkg) {
+    return {
+      ok: false,
+      errors: [{ path: 'package', message: 'No valid normalized package is attached to this version yet.' }],
+      warnings: [],
+      result: null,
+    }
+  }
+
+  return executeAdminAssessmentSimulation(legacyPkg, request)
 }
 
 export function executeAdminAssessmentSimulation(
@@ -674,8 +928,22 @@ export function executeAdminAssessmentSimulation(
     errors,
     warnings,
     result: {
+      contractVersion: 'legacy_v1',
+      readiness: buildSimulationReadinessFlags(true),
+      readinessStatus: warnings.length > 0 ? 'simulatable_with_warnings' : 'simulatable',
+      compileStatus: 'ready',
+      evaluationStatus: warnings.length > 0 ? 'completed_with_warnings' : 'success',
+      summaryMetrics: {
+        answeredCount: request.answers.length,
+        totalQuestions: pkg.questions.length,
+        scoredDimensions: rawScores.length,
+        insufficientDimensions: 0,
+        triggeredOutputCount: outputs.filter((output) => output.triggered).length,
+        triggeredIntegrityCount: 0,
+      },
       request: {
         answers: request.answers.map((answer) => ({ ...answer })),
+        responses: Object.fromEntries(request.answers.map((answer) => [answer.questionId, answer.optionId])),
         locale,
         source: request.source,
         scenarioKey: request.scenarioKey ?? null,
@@ -704,7 +972,7 @@ export function executeAdminAssessmentSimulation(
 }
 
 export function getAdminAssessmentSimulationScenarioOptions(
-  pkg: SonartraAssessmentPackageV1 | null,
+  pkg: unknown,
 ): Array<{ key: AdminAssessmentSimulationScenarioKey; label: string; request: AdminAssessmentSimulationRequest | null }> {
   const scenarios: Array<{ key: AdminAssessmentSimulationScenarioKey; label: string }> = [
     { key: 'sensible_defaults', label: 'Sensible defaults' },
@@ -715,7 +983,7 @@ export function getAdminAssessmentSimulationScenarioOptions(
 
   return scenarios.map((scenario) => ({
     ...scenario,
-    request: pkg ? buildAdminAssessmentSimulationScenario(pkg, scenario.key) : null,
+    request: pkg ? buildAdminAssessmentSimulationScenarioForPackage(pkg, scenario.key) : null,
   }))
 }
 

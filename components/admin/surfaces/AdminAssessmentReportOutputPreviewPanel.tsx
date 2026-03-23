@@ -29,13 +29,132 @@ export function AdminAssessmentReportOutputPreviewPanel({
   version: AdminAssessmentVersionRecord
   simulationResult: AdminAssessmentSimulationResult
 }) {
-  const output = React.useMemo(() => {
-    if (!version.normalizedPackage) {
+  const materialized = simulationResult.contractVersion === 'package_contract_v2'
+    ? simulationResult.materializedOutputs ?? null
+    : null
+  const output = React.useMemo<AdminAssessmentGeneratedReportOutput | null>(() => {
+    if (simulationResult.contractVersion === 'package_contract_v2' || !version.normalizedPackage) {
       return null
     }
 
     return generateAdminAssessmentReportOutput(version.normalizedPackage, simulationResult)
   }, [simulationResult, version.normalizedPackage])
+
+  if (simulationResult.contractVersion === 'package_contract_v2') {
+    if (!materialized) {
+      return null
+    }
+
+    return (
+      <div className="space-y-5">
+        <SurfaceSection
+          title="Materialized output preview"
+          eyebrow="Package Contract v2"
+          description="Admin-only materialization turns raw v2 evaluation facts into stable web-summary and report-document contracts without implying live runtime or PDF renderer readiness."
+        >
+          <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-textSecondary" />
+                <p className="text-sm font-medium text-textPrimary">Materialization summary</p>
+                <Badge label={simulationResult.readinessStatus ?? 'n/a'} tone={simulationResult.evaluationStatus === 'failed' ? 'rose' : simulationResult.warnings.length ? 'amber' : 'emerald'} />
+              </div>
+              <p className="mt-3 text-sm leading-6 text-textSecondary">{simulationResult.evaluationStatus === 'failed' ? 'Simulation surfaced blocking issues.' : 'Simulation and materialization completed safely for admin preview.'}</p>
+              <div className="mt-4">
+                <MetaGrid
+                  columns={2}
+                  items={[
+                    { label: 'Web summary outputs', value: String(materialized.webSummaryOutputs.length) },
+                    { label: 'Report sections', value: String(materialized.reportDocument.sections.length) },
+                    { label: 'Integrity notices', value: String(materialized.integrityNotices.length) },
+                    { label: 'Diagnostics', value: String(materialized.diagnostics.length) },
+                    { label: 'Triggered outputs', value: String(materialized.adminDebug.triggeredOutputKeys.length) },
+                    { label: 'Non-triggered outputs', value: String(materialized.adminDebug.nonTriggeredOutputKeys.length) },
+                  ]}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
+              <p className="text-sm font-medium text-textPrimary">Web summary outputs</p>
+              <div className="mt-3 space-y-3">
+                {materialized.webSummaryOutputs.map((entry) => (
+                  <article key={entry.id} className="rounded-2xl border border-white/[0.07] bg-panel/40 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge label={entry.status} tone={entry.status === 'available' ? 'emerald' : entry.status === 'warning' ? 'amber' : 'slate'} />
+                      {entry.severity ? <Badge label={entry.severity} tone={entry.severity === 'error' ? 'rose' : entry.severity === 'warning' ? 'amber' : 'sky'} /> : null}
+                      {entry.band ? <Badge label={`Band ${entry.band}`} tone="sky" /> : null}
+                    </div>
+                    <h4 className="mt-3 text-base font-semibold text-textPrimary">{entry.title}</h4>
+                    <p className="mt-2 text-sm text-textSecondary">{entry.explanation.text ?? 'No narrative explanation attached.'}</p>
+                    <p className="mt-2 text-xs text-textSecondary">Score {entry.value.score ?? 'n/a'} · raw {entry.value.rawScore ?? 'n/a'} · descriptor {entry.value.descriptor ?? 'n/a'}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        </SurfaceSection>
+
+        <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+          <SurfaceSection
+            title="Report document structure"
+            eyebrow="Renderer-agnostic contract"
+            description="These sections and blocks are declarative report content contracts for later PDF/report rendering layers."
+          >
+            <div className="space-y-3">
+              {materialized.reportDocument.sections.map((section) => (
+                <article key={section.id} className="rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
+                  <div className="flex items-center gap-2">
+                    <Badge label={section.kind.replace(/_/g, ' ')} tone="slate" />
+                    <h4 className="text-base font-semibold text-textPrimary">{section.title}</h4>
+                  </div>
+                  <ul className="mt-3 space-y-2 text-sm leading-6 text-textPrimary">
+                    {section.blocks.map((block) => <li key={block.id}>• {block.title}{block.text ? ` · ${block.text}` : ''}</li>)}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          </SurfaceSection>
+
+          <SurfaceSection
+            title="Integrity notices + diagnostics"
+            eyebrow="Admin debug"
+            description="Missing bindings, limitations, and triggered integrity signals remain explicit in admin preview so downstream renderers do not fail late."
+          >
+            <div className="space-y-3">
+              {materialized.integrityNotices.map((warning) => (
+                <div key={warning.id} className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <TriangleAlert className="h-4 w-4 text-textSecondary" />
+                    <Badge label={warning.severity} tone={getWarningTone(warning.severity === 'info' ? 'warning' : warning.severity)} />
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-textPrimary">{warning.message}</p>
+                </div>
+              ))}
+              {materialized.diagnostics.map((diagnostic) => (
+                <div key={`${diagnostic.code}-${diagnostic.path}`} className={`rounded-2xl border px-4 py-3 ${diagnostic.severity === 'error' ? 'border-rose-400/20 bg-rose-400/[0.06]' : 'border-amber-400/20 bg-amber-400/[0.06]'}`}>
+                  <Badge label={diagnostic.severity} tone={diagnostic.severity === 'error' ? 'rose' : 'amber'} />
+                  <p className="mt-3 text-sm leading-6 text-textPrimary">{diagnostic.message}</p>
+                  <p className="mt-2 text-xs text-textSecondary">{diagnostic.path}</p>
+                </div>
+              ))}
+            </div>
+          </SurfaceSection>
+        </div>
+
+        <SurfaceSection
+          title="Debug output model"
+          eyebrow="Secondary disclosure"
+          description="Raw structured materialization output is available for QA and downstream contract inspection."
+        >
+          <details className="rounded-2xl border border-white/[0.07] bg-bg/50 p-4">
+            <summary className="cursor-pointer text-sm font-medium text-textPrimary">Show generated output JSON</summary>
+            <pre className="mt-4 overflow-x-auto rounded-2xl border border-white/[0.06] bg-panel/40 p-4 text-xs leading-6 text-textSecondary">{JSON.stringify(materialized, null, 2)}</pre>
+          </details>
+        </SurfaceSection>
+      </div>
+    )
+  }
 
   if (!version.normalizedPackage || !output) {
     return null

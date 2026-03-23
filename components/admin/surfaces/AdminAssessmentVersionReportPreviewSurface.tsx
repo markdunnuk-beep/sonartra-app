@@ -97,7 +97,7 @@ export function AdminAssessmentVersionReportPreviewSurface({
             { label: 'Questions', value: String(version.packageInfo.summary?.questionsCount ?? 0) },
             { label: 'Dimensions', value: String(version.packageInfo.summary?.dimensionsCount ?? 0) },
             { label: 'Output rules', value: String(version.packageInfo.summary?.outputRuleCount ?? 0) },
-            { label: 'Locale', value: version.normalizedPackage?.meta.defaultLocale ?? 'n/a' },
+            { label: 'Locale', value: (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.meta?.defaultLocale ?? (version.normalizedPackage as { meta?: { defaultLocale?: string }; metadata?: { locales?: { defaultLocale?: string } } } | null)?.metadata?.locales?.defaultLocale ?? 'n/a' },
             { label: 'Imported at', value: formatAdminTimestamp(version.packageInfo.importedAt) },
           ]}
         />
