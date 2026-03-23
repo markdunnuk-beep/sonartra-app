@@ -6,6 +6,14 @@ export interface UserFacingAssessmentResultViewModel {
   completedLabel: string | null
   statusLabel: string
   summary: string
+  report: {
+    state: 'available' | 'pending' | 'unavailable' | 'failed'
+    label: string
+    message: string
+    generatedLabel: string | null
+    downloadHref: string | null
+    viewHref: string | null
+  }
   cards: Array<{
     id: string
     title: string
@@ -57,6 +65,14 @@ export function buildUserFacingAssessmentResultViewModel(
     completedLabel: formatDate(result.resultMeta.completedAt),
     statusLabel: result.status === 'completed' ? 'Results ready' : 'Results unavailable',
     summary: result.statusMessage,
+    report: {
+      state: result.report.state,
+      label: result.report.label,
+      message: result.report.message,
+      generatedLabel: formatDate(result.report.generatedAt),
+      downloadHref: result.report.downloadHref,
+      viewHref: result.report.viewHref,
+    },
     cards: result.summaryCards.map((card) => ({
       id: card.id,
       title: card.title,

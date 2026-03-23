@@ -161,6 +161,15 @@ export interface PersistedSuccessfulAssessmentResult {
   responseQuality: Record<string, unknown> | null;
   signals: PersistedAssessmentResultSignal[];
   contractVersion?: 'legacy_v1' | 'package_contract_v2';
+  report?: {
+    state: 'available' | 'pending' | 'unavailable' | 'failed';
+    generatedAt: string | null;
+    format: 'html' | null;
+    downloadHref: string | null;
+    viewHref: string | null;
+    label: string;
+    message: string;
+  };
   liveRuntime?: {
     webSummaryOutputs: unknown[];
     integrityNotices: unknown[];

@@ -68,6 +68,7 @@ export interface AssessmentResultRow {
   status: 'pending' | 'complete' | 'failed';
   result_payload: Record<string, unknown> | null;
   response_quality_payload: Record<string, unknown> | null;
+  report_artifact_json?: Record<string, unknown> | null;
   completed_at: string | null;
   scored_at: string | null;
   created_at: string;

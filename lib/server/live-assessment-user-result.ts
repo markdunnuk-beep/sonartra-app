@@ -1,5 +1,6 @@
 import type { AssessmentResultRow, AssessmentRow } from '@/lib/assessment-types'
 import type { IntegrityOutputNoticeV2, WebSummaryOutputV2 } from '@/lib/admin/domain/assessment-package-v2-materialization'
+import { getUserFacingAssessmentReportViewModel, type UserFacingAssessmentReportViewModel } from '@/lib/server/assessment-report-artifacts'
 
 export type LiveAssessmentResultStatus =
   | 'not_started'
@@ -49,6 +50,7 @@ export interface LiveAssessmentUserResultContract {
     scoredAt: string | null
     availableAt: string | null
   }
+  report: UserFacingAssessmentReportViewModel
   summaryCards: LiveAssessmentSummaryCard[]
   notices: LiveAssessmentUserNotice[]
   statusMessage: string
@@ -180,6 +182,7 @@ export function buildLiveAssessmentUserResultContract(input: {
         scoredAt: null,
         availableAt: null,
       },
+      report: getUserFacingAssessmentReportViewModel(null),
       summaryCards: [],
       notices: [],
       statusMessage: assessment.status === 'in_progress'
@@ -207,6 +210,7 @@ export function buildLiveAssessmentUserResultContract(input: {
         scoredAt: null,
         availableAt: null,
       },
+      report: getUserFacingAssessmentReportViewModel(null),
       summaryCards: [],
       notices: [],
       statusMessage: assessment.scoring_status === 'pending'
@@ -240,6 +244,7 @@ export function buildLiveAssessmentUserResultContract(input: {
         scoredAt: result.scored_at,
         availableAt: result.updated_at,
       },
+      report: getUserFacingAssessmentReportViewModel(result),
       summaryCards: [],
       notices: [],
       statusMessage: 'Assessment completed, but the result could not be prepared safely.',
@@ -265,6 +270,7 @@ export function buildLiveAssessmentUserResultContract(input: {
         scoredAt: result.scored_at,
         availableAt: result.updated_at,
       },
+      report: getUserFacingAssessmentReportViewModel(result),
       summaryCards: [],
       notices: [],
       statusMessage: 'Assessment was submitted and results are still finalizing.',
@@ -290,6 +296,7 @@ export function buildLiveAssessmentUserResultContract(input: {
         scoredAt: result.scored_at,
         availableAt: result.updated_at,
       },
+      report: getUserFacingAssessmentReportViewModel(result),
       summaryCards: [],
       notices,
       statusMessage: 'Assessment completed, but no user-facing summary is available for this result yet.',
@@ -314,6 +321,7 @@ export function buildLiveAssessmentUserResultContract(input: {
       scoredAt: result.scored_at,
       availableAt: result.updated_at,
     },
+    report: getUserFacingAssessmentReportViewModel(result),
     summaryCards,
     notices,
     statusMessage: 'Assessment results are available.',
