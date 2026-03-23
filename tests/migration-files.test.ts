@@ -4,10 +4,10 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-// @ts-expect-error -- tests import small JS helpers used by the migration runner.
-import { resolveMigrationFiles } from '../scripts/migration-files.mjs'
-// @ts-expect-error -- tests import a small JS helper used by the migration runner.
-import { normalizeMigrationSql } from '../scripts/run-migrations.mjs'
+// @ts-ignore -- tests import small JS helpers used by the migration runner.
+import { compareMigrationFileNames, legacyDuplicateMigrationOrder, resolveMigrationFiles, validateMigrationFiles } from '../scripts/migration-files.mjs'
+// @ts-ignore -- tests import small JS helpers used by the migration runner.
+import { buildMigrationPlan, normalizeMigrationSql } from '../scripts/migration-runner-helpers.mjs'
 
 async function createTempMigrationsDir() {
   const dir = await mkdtemp(path.join(tmpdir(), 'sonartra-migrations-'))
@@ -31,6 +31,7 @@ test('migration resolver excludes seed migrations by default', async () => {
     '0008_assessment_version_packages.sql',
   ])
   assert.deepEqual(result.skippedSeedFiles, ['0007_admin_access_registry_seed.sql'])
+  assert.deepEqual(result.duplicateVersionGroups, [])
 })
 
 test('migration resolver includes seed migrations only when explicitly enabled', async () => {
@@ -43,6 +44,64 @@ test('migration resolver includes seed migrations only when explicitly enabled',
     '0008_assessment_version_packages.sql',
   ])
   assert.deepEqual(result.skippedSeedFiles, [])
+})
+
+test('migration resolver reports the grandfathered legacy duplicate versions in the repo', async () => {
+  const migrationsDir = path.join(process.cwd(), 'db', 'migrations')
+  const result = await resolveMigrationFiles(migrationsDir, {})
+
+  assert.deepEqual(result.legacyDuplicateVersionGroups, [
+    {
+      version: '0009',
+      fileNames: [...legacyDuplicateMigrationOrder['0009']],
+    },
+  ])
+  assert.ok(result.migrationFiles.includes('0011_migration_ordering_hardening_checkpoint.sql'))
+})
+
+test('migration resolver includes seed migrations only when explicitly enabled and preserves explicit legacy duplicate order', async () => {
+  const migrationsDir = path.join(process.cwd(), 'db', 'migrations')
+  const result = await resolveMigrationFiles(migrationsDir, { INCLUDE_SEED_MIGRATIONS: 'true' })
+
+  assert.deepEqual(result.legacyDuplicateVersionGroups, [
+    {
+      version: '0007',
+      fileNames: [...legacyDuplicateMigrationOrder['0007']],
+    },
+    {
+      version: '0009',
+      fileNames: [...legacyDuplicateMigrationOrder['0009']],
+    },
+  ])
+})
+
+test('migration ordering is deterministic by numeric version first and filename second', () => {
+  const unorderedFiles = [
+    '0010_zeta.sql',
+    '0009_bravo.sql',
+    '0002_alpha.sql',
+    '0010_alpha.sql',
+  ]
+
+  const orderedFiles = [...unorderedFiles].sort(compareMigrationFileNames)
+
+  assert.deepEqual(orderedFiles, [
+    '0002_alpha.sql',
+    '0009_bravo.sql',
+    '0010_alpha.sql',
+    '0010_zeta.sql',
+  ])
+})
+
+test('duplicate migration version validation fails fast for non-grandfathered duplicates', () => {
+  assert.throws(
+    () => validateMigrationFiles([
+      '0001_initial.sql',
+      '0002_add_users.sql',
+      '0002_add_roles.sql',
+    ]),
+    /Duplicate migration version prefixes detected: 0002: 0002_add_roles\.sql, 0002_add_users\.sql\./,
+  )
 })
 
 test('repo migration set for npm run db:migrate includes release governance migration 0010', async () => {
@@ -78,4 +137,29 @@ test('migration runner records schema_migrations in the public schema and logs r
   assert.match(runnerSource, /const schemaMigrationsTableName = 'public\.schema_migrations'/)
   assert.match(runnerSource, /to_regclass\('assessment_versions'\)::text AS assessment_versions_regclass/)
   assert.match(runnerSource, /to_regclass\('\$\{schemaMigrationsTableName\}'\)::text AS schema_migrations_regclass/)
+})
+
+test('migration runner plans pending work against full filenames so already-recorded legacy duplicates remain compatible', () => {
+  const migrationFiles = [
+    '0009_assessment_saved_scenarios.sql',
+    '0009_assessment_version_saved_scenarios.sql',
+    '0010_assessment_version_release_governance.sql',
+    '0011_migration_ordering_hardening_checkpoint.sql',
+  ]
+  const appliedMigrationIds = new Set([
+    '0009_assessment_saved_scenarios.sql',
+    '0010_assessment_version_release_governance.sql',
+  ])
+
+  const result = buildMigrationPlan(migrationFiles, appliedMigrationIds)
+
+  assert.deepEqual(result.alreadyAppliedMigrationFiles, [
+    '0009_assessment_saved_scenarios.sql',
+    '0010_assessment_version_release_governance.sql',
+  ])
+  assert.deepEqual(result.pendingMigrationFiles, [
+    '0009_assessment_version_saved_scenarios.sql',
+    '0011_migration_ordering_hardening_checkpoint.sql',
+  ])
+  assert.deepEqual(result.recordedButMissingMigrationFiles, [])
 })

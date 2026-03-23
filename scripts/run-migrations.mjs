@@ -3,58 +3,10 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Client } from 'pg';
 import { resolveMigrationFiles } from './migration-files.mjs';
+import { buildMigrationPlan, normalizeMigrationSql } from './migration-runner-helpers.mjs';
 
 const migrationsDir = path.join(process.cwd(), 'db', 'migrations');
 const schemaMigrationsTableName = 'public.schema_migrations';
-
-function isIgnorablePreambleLine(line) {
-  const trimmed = line.trim();
-  return trimmed === '' || trimmed.startsWith('--');
-}
-
-function findFirstMeaningfulLineIndex(lines) {
-  return lines.findIndex((line) => !isIgnorablePreambleLine(line));
-}
-
-function findLastMeaningfulLineIndex(lines) {
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    if (!isIgnorablePreambleLine(lines[index])) {
-      return index;
-    }
-  }
-
-  return -1;
-}
-
-export function normalizeMigrationSql(sql) {
-  const lines = sql.split(/\r?\n/);
-  const firstMeaningfulLineIndex = findFirstMeaningfulLineIndex(lines);
-  const lastMeaningfulLineIndex = findLastMeaningfulLineIndex(lines);
-
-  if (firstMeaningfulLineIndex === -1 || lastMeaningfulLineIndex === -1) {
-    return {
-      sql,
-      hadExplicitTransactionWrapper: false,
-    };
-  }
-
-  const firstMeaningfulLine = lines[firstMeaningfulLineIndex]?.trim().replace(/;$/, '').toUpperCase();
-  const lastMeaningfulLine = lines[lastMeaningfulLineIndex]?.trim().replace(/;$/, '').toUpperCase();
-
-  if (firstMeaningfulLine !== 'BEGIN' || lastMeaningfulLine !== 'COMMIT') {
-    return {
-      sql,
-      hadExplicitTransactionWrapper: false,
-    };
-  }
-
-  const normalizedLines = lines.filter((_, index) => index !== firstMeaningfulLineIndex && index !== lastMeaningfulLineIndex);
-
-  return {
-    sql: normalizedLines.join('\n'),
-    hadExplicitTransactionWrapper: true,
-  };
-}
 
 async function ensureMigrationTrackingTable(client) {
   await client.query(`
@@ -68,18 +20,6 @@ async function ensureMigrationTrackingTable(client) {
 async function getAppliedMigrationIds(client) {
   const result = await client.query(`SELECT id FROM ${schemaMigrationsTableName} ORDER BY id ASC`);
   return new Set(result.rows.map((row) => row.id));
-}
-
-function buildMigrationPlan(migrationFiles, appliedMigrationIds) {
-  const pendingMigrationFiles = migrationFiles.filter((fileName) => !appliedMigrationIds.has(fileName));
-  const alreadyAppliedMigrationFiles = migrationFiles.filter((fileName) => appliedMigrationIds.has(fileName));
-  const recordedButMissingMigrationFiles = [...appliedMigrationIds].filter((fileName) => !migrationFiles.includes(fileName));
-
-  return {
-    pendingMigrationFiles,
-    alreadyAppliedMigrationFiles,
-    recordedButMissingMigrationFiles,
-  };
 }
 
 export async function getMigrationDiagnostics(client) {
@@ -151,7 +91,7 @@ async function runMigrations() {
   await client.connect();
 
   try {
-    const { migrationFiles, skippedSeedFiles } = await resolveMigrationFiles(migrationsDir);
+    const { migrationFiles, skippedSeedFiles, legacyDuplicateVersionGroups } = await resolveMigrationFiles(migrationsDir);
 
     if (migrationFiles.length === 0) {
       throw new Error(`No migration files found in ${migrationsDir}`);
@@ -159,6 +99,12 @@ async function runMigrations() {
 
     if (skippedSeedFiles.length > 0) {
       console.log(`→ Skipping seed migrations (set INCLUDE_SEED_MIGRATIONS=true to include): ${skippedSeedFiles.join(', ')}`);
+    }
+
+    if (legacyDuplicateVersionGroups.length > 0) {
+      console.warn(
+        `→ Legacy duplicate migration versions detected and allowed in explicit order: ${legacyDuplicateVersionGroups.map(({ version, fileNames }) => `${version}=[${fileNames.join(' -> ')}]`).join(', ')}`,
+      );
     }
 
     await ensureMigrationTrackingTable(client);
