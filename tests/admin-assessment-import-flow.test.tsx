@@ -276,6 +276,7 @@ test('normalizeAdminAssessmentPackageImportState preserves version-aware validat
         structurallyValid: true,
         importable: true,
         compilable: true,
+        evaluatable: true,
         runtimeExecutable: false,
         publishable: false,
       },
