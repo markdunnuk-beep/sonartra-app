@@ -1,5 +1,6 @@
 import { SaveResponseRequest } from '@/lib/assessment-types'
 import { withTransaction } from '@/lib/db'
+import { saveV2AssessmentResponse } from '@/lib/server/live-assessment-v2'
 
 interface AssessmentProgressRow {
   id: string
@@ -20,13 +21,21 @@ export type SaveAssessmentResponseResult =
   | { status: 401 | 400 | 404 | 409; body: { error: string } }
   | {
       status: 200
-      body: {
-        assessmentId: string
-        questionId: number
-        responseValue: number
-        progressCount: number
-        progressPercent: number
-      }
+      body:
+        | {
+            assessmentId: string
+            questionId: number
+            responseValue: number
+            progressCount: number
+            progressPercent: number
+          }
+        | {
+            assessmentId: string
+            questionId: string
+            response: unknown
+            progressCount: number
+            progressPercent: number
+          }
     }
 
 type SaveAssessmentResponseTransactionResult =
@@ -56,6 +65,16 @@ export async function saveAssessmentResponse(
 
   if (!input.assessmentId) {
     return { status: 400, body: { error: 'assessmentId is required.' } }
+  }
+
+  if (typeof input.questionId === 'string') {
+    return saveV2AssessmentResponse({
+      assessmentId: input.assessmentId,
+      appUserId: input.appUserId,
+      questionId: input.questionId,
+      response: input.response,
+      responseTimeMs: input.responseTimeMs,
+    }) as Promise<SaveAssessmentResponseResult>
   }
 
   if (!input.questionId || !Number.isInteger(input.questionId) || input.questionId < 1 || input.questionId > 80) {
@@ -145,15 +164,15 @@ export async function saveAssessmentResponse(
     const progressPercent = Number(progressUpdate.rows[0]?.progress_percent ?? 100)
 
     return {
-        status: 200 as const,
-        payload: {
-          assessmentId,
-          questionId,
-          responseValue,
-          progressCount,
-          progressPercent,
-        },
-      }
+      status: 200 as const,
+      payload: {
+        assessmentId,
+        questionId,
+        responseValue,
+        progressCount,
+        progressPercent,
+      },
+    }
   })
 
   if (response.status !== 200) {

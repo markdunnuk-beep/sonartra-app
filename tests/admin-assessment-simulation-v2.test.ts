@@ -166,7 +166,7 @@ test('admin v2 view-model adapters retain debug details outside the materialized
 
   assert.equal(simulation.ok, true)
   assert.ok((simulation.result?.viewModel?.materializationDebug.triggeredOutputKeys.length ?? 0) >= 0)
-  assert.equal((simulation.result?.materializedOutputs as Record<string, unknown>)?.adminDebug, undefined)
+  assert.equal((simulation.result?.materializedOutputs as unknown as Record<string, unknown>)?.adminDebug, undefined)
   assert.deepEqual(
     simulation.result?.viewModel?.materializedReportSections,
     simulation.result?.materializedOutputs?.reportDocument.sections,

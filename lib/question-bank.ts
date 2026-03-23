@@ -1,4 +1,6 @@
 import { AssessmentRow, AssessmentVersionRow } from '@/lib/assessment-types';
+import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2';
+import { buildV2QuestionDeliveryContract } from '@/lib/server/live-assessment-v2';
 import { queryDb } from '@/lib/db';
 import {
   AssessmentQuestionSetRow,
@@ -9,6 +11,11 @@ import {
 
 interface QuestionBankDependencies {
   queryDb: typeof queryDb;
+}
+
+interface AssessmentRuntimeVersionRow extends AssessmentVersionRow {
+  package_schema_version: string | null
+  definition_payload: unknown
 }
 
 interface QuestionWithOptionRow {
@@ -223,8 +230,8 @@ export async function getQuestionsByAssessmentIdWithDependencies(
   const assessment = assessmentResult.rows[0];
   if (!assessment) return null;
 
-  const versionResult = await dependencies.queryDb<AssessmentVersionRow>(
-    `SELECT id, key, name, total_questions, is_active
+  const versionResult = await dependencies.queryDb<AssessmentRuntimeVersionRow>(
+    `SELECT id, key, name, total_questions, is_active, package_schema_version, definition_payload
      FROM assessment_versions
      WHERE id = $1`,
     [assessment.assessment_version_id]
@@ -232,6 +239,47 @@ export async function getQuestionsByAssessmentIdWithDependencies(
 
   const version = versionResult.rows[0];
   if (!version) return null;
+
+  if (version.package_schema_version === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
+    const pkg = parseStoredValidatedAssessmentPackageV2(version.definition_payload)
+    if (!pkg) return null
+
+    const runtime = buildV2QuestionDeliveryContract({
+      assessmentId: assessment.id,
+      assessmentVersionId: version.id,
+      assessmentVersionKey: version.key,
+      assessmentVersionName: version.name,
+      assessmentStatus: assessment.status,
+      metadataJson: assessment.metadata_json,
+      pkg,
+    })
+
+    return {
+      assessment: {
+        id: assessment.id,
+        status: assessment.status,
+        progressCount: assessment.progress_count,
+        progressPercent: Number(assessment.progress_percent),
+        currentQuestionIndex: assessment.current_question_index,
+      },
+      version: {
+        id: version.id,
+        key: version.key,
+        name: version.name,
+        totalQuestions: version.total_questions,
+        isActive: version.is_active,
+      },
+      questionSet: {
+        id: `package-contract-v2:${version.id}`,
+        key: `package-contract-v2:${version.key}`,
+        name: `${version.name} Live Runtime`,
+        description: 'Runtime question contract generated directly from Package Contract v2.',
+      },
+      questions: [],
+      responses: [],
+      runtime,
+    } as AssessmentQuestionsResponse & { runtime: ReturnType<typeof buildV2QuestionDeliveryContract> }
+  }
 
   const resolved = await resolveVersionAndActiveQuestionSetWithDependencies(version.key, dependencies);
   if (!resolved) return null;

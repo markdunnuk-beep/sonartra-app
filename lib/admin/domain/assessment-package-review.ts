@@ -5,7 +5,8 @@ import {
   type SonartraAssessmentPackageQuestion,
   type SonartraAssessmentPackageV1,
 } from '@/lib/admin/domain/assessment-package'
-import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 } from '@/lib/admin/domain/assessment-package-v2'
+import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
+import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
 import type {
   AdminAssessmentReleaseCheck,
   AdminAssessmentReleaseCheckStatus,
@@ -343,10 +344,12 @@ export function getAdminAssessmentPackagePreviewSummary(version: Pick<AdminAsses
 }
 
 export function getAdminAssessmentVersionReadiness(
-  version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage' | 'lifecycleStatus'> & Partial<Pick<AdminAssessmentVersionRecord, 'savedScenarios' | 'latestSuiteSnapshot'>>,
+  version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage' | 'storedDefinitionPayload' | 'lifecycleStatus'> & Partial<Pick<AdminAssessmentVersionRecord, 'savedScenarios' | 'latestSuiteSnapshot'>>,
 ): AdminAssessmentVersionReadiness {
   const packageInfo = normalizePackageInfoRuntime(version.packageInfo)
   const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
+  const pkgV2 = packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 ? parseStoredValidatedAssessmentPackageV2(version.storedDefinitionPayload ?? version.normalizedPackage) : null
+  const v2Compiled = pkgV2 ? compileAssessmentPackageV2(pkgV2) : null
   const checks: AdminAssessmentReadinessChecklistItem[] = []
   const blockingIssues: string[] = []
   const warnings = [...getPackageWarningMessages(packageInfo)]
@@ -377,7 +380,7 @@ export function getAdminAssessmentVersionReadiness(
 
   const isImportedV2Package = packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
     && (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings')
-  const structurallyValid = (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings') && Boolean(pkg)
+  const structurallyValid = (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings') && Boolean(pkg || pkgV2)
   addCheck(
     'package_valid',
     'Executable normalized package',
@@ -385,16 +388,18 @@ export function getAdminAssessmentVersionReadiness(
     structurallyValid
       ? 'The latest package validated and produced a normalized executable payload.'
       : isImportedV2Package
-        ? 'Package Contract v2 imported successfully, but there is no executable runtime package until the live execution path supports v2.'
+        ? (v2Compiled?.ok && v2Compiled.executablePackage ? 'Package Contract v2 validated and compiled into an executable live runtime package.' : 'Package Contract v2 imported successfully, but the executable live runtime package could not be compiled.')
         : 'The latest package is missing, invalid, or has no normalized payload.',
   )
 
   addCheck(
     'runtime_execution_path',
     'Current runtime can execute this contract version',
-    isImportedV2Package ? 'fail' : 'pass',
+    isImportedV2Package && !(v2Compiled?.ok && v2Compiled.executablePackage) ? 'fail' : 'pass',
     isImportedV2Package
-      ? 'Package Contract v2 is importable and structurally valid, but publish stays blocked until the live runtime supports v2 execution.'
+      ? (v2Compiled?.ok && v2Compiled.executablePackage
+          ? 'Current runtime execution path is compatible with Package Contract v2 for live execution.'
+          : 'Package Contract v2 is importable and structurally valid, but publish stays blocked until the live runtime can compile and execute it.')
       : 'Current runtime execution path is compatible with the stored package contract.',
   )
 
@@ -402,7 +407,9 @@ export function getAdminAssessmentVersionReadiness(
     const status: AdminAssessmentReleaseReadinessStatus = blockingIssues.length > 0 ? 'not_ready' : warnings.length > 0 ? 'ready_with_warnings' : 'ready'
     const verdict: AdminAssessmentPublishReadinessVerdict = status === 'not_ready' ? 'blocked' : status
     const summaryText = isImportedV2Package
-      ? 'Publish is blocked because this version uses Package Contract v2 and the live execution path is not enabled for v2 yet.'
+      ? (v2Compiled?.ok && v2Compiled.executablePackage
+          ? 'Package Contract v2 is ready for publish review through the live execution path.'
+          : 'Publish is blocked because this version uses Package Contract v2 and the live execution path is not ready for it yet.')
       : status === 'not_ready'
         ? 'Publish is blocked until a valid normalized package is attached.'
         : 'Review the package evidence before publish.'

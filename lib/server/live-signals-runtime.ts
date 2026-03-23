@@ -1,3 +1,8 @@
+import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
+import {
+  SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+  parseStoredValidatedAssessmentPackageV2,
+} from '@/lib/admin/domain/assessment-package-v2'
 import { queryDb } from '@/lib/db'
 
 const LIVE_SIGNALS_ASSESSMENT_KEY = 'sonartra_signals'
@@ -17,6 +22,9 @@ interface LiveSignalsPublishedVersionRow {
   active_question_set_id: string | null
   active_question_count: number
   questions_with_runtime_metadata: number
+  package_schema_version: string | null
+  package_status: string | null
+  definition_payload: unknown
 }
 
 export interface LiveSignalsPublishedVersionResolution {
@@ -29,6 +37,7 @@ export interface LiveSignalsPublishedVersionResolution {
   assessmentVersionName: string
   totalQuestions: number
   isActive: boolean
+  contractVersion?: 'legacy_v1' | 'package_contract_v2'
 }
 
 export type LiveSignalsPublishedVersionDiagnosticCode =
@@ -36,6 +45,9 @@ export type LiveSignalsPublishedVersionDiagnosticCode =
   | 'runtime_not_materialized'
   | 'runtime_question_count_mismatch'
   | 'runtime_metadata_mismatch'
+  | 'package_not_live_runtime_enabled'
+  | 'package_not_compilable'
+  | 'package_invalid'
 
 export interface LiveSignalsPublishedVersionDiagnostic {
   code: LiveSignalsPublishedVersionDiagnosticCode
@@ -73,6 +85,9 @@ export async function resolveLiveSignalsPublishedVersionState(
        av.name AS assessment_version_name,
        av.total_questions,
        av.is_active,
+       av.package_schema_version,
+       av.package_status,
+       av.definition_payload,
        qs.id AS active_question_set_id,
        COUNT(DISTINCT q.id)::int AS active_question_count,
        COUNT(DISTINCT CASE
@@ -105,6 +120,9 @@ export async function resolveLiveSignalsPublishedVersionState(
        av.name,
        av.total_questions,
        av.is_active,
+       av.package_schema_version,
+       av.package_status,
+       av.definition_payload,
        qs.id
      LIMIT 1`,
     [LIVE_SIGNALS_ASSESSMENT_KEY],
@@ -125,6 +143,44 @@ export async function resolveLiveSignalsPublishedVersionState(
       code: 'no_published_version',
       message: 'No active published Sonartra Signals version is available.',
     })
+  }
+
+  if (row.package_schema_version === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
+    const pkg = parseStoredValidatedAssessmentPackageV2(row.definition_payload)
+    if (!pkg || (row.package_status !== 'valid' && row.package_status !== 'valid_with_warnings')) {
+      return buildUnavailableState({
+        code: 'package_invalid',
+        message: 'The published Sonartra Signals Package Contract v2 payload is missing or invalid for live runtime use.',
+      })
+    }
+
+    const compiled = compileAssessmentPackageV2(pkg)
+    if (!compiled.ok || !compiled.executablePackage) {
+      return buildUnavailableState({
+        code: 'package_not_compilable',
+        message: compiled.diagnostics.find((entry) => entry.severity === 'error')?.message
+          ?? 'The published Sonartra Signals Package Contract v2 payload could not be compiled for live runtime use.',
+      })
+    }
+
+    return {
+      version: {
+        assessmentDefinitionId: row.assessment_definition_id,
+        assessmentDefinitionKey: row.assessment_definition_key,
+        assessmentDefinitionSlug: row.assessment_definition_slug,
+        currentPublishedVersionId: row.current_published_version_id,
+        assessmentVersionId: row.assessment_version_id,
+        assessmentVersionKey: row.assessment_version_key,
+        assessmentVersionName: row.assessment_version_name,
+        totalQuestions: pkg.questions.length,
+        isActive: row.is_active,
+        contractVersion: 'package_contract_v2',
+      },
+      diagnostic: {
+        code: 'no_published_version',
+        message: 'No active published Sonartra Signals version is available.',
+      },
+    }
   }
 
   if (!row.active_question_set_id) {
@@ -159,6 +215,7 @@ export async function resolveLiveSignalsPublishedVersionState(
       assessmentVersionName: row.assessment_version_name,
       totalQuestions: row.total_questions,
       isActive: row.is_active,
+      contractVersion: 'legacy_v1',
     },
     diagnostic: {
       code: 'no_published_version',

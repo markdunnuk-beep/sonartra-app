@@ -13,7 +13,9 @@ import {
   ScoringEngineInput,
   SignalMappingInput,
 } from '@/lib/scoring/types';
-import { getLatestAssessmentResultSnapshot, persistFailedAssessmentResult, persistSuccessfulAssessmentResult } from '@/lib/server/assessment-results';
+import { getLatestAssessmentResultSnapshot, persistFailedAssessmentResult, persistStructuredAssessmentResult, persistSuccessfulAssessmentResult } from '@/lib/server/assessment-results';
+import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 } from '@/lib/admin/domain/assessment-package-v2';
+import { evaluateCompletedV2Assessment } from '@/lib/server/live-assessment-v2';
 
 interface CompletionCheckRow {
   id: string;
@@ -162,6 +164,36 @@ export async function completeAssessmentWithResults(
   dependencies: CompletionDependencies = defaultDependencies,
   runtimeDependencies: CompletionRuntimeDependencies = defaultRuntimeDependencies
 ): Promise<CompleteAssessmentResult> {
+  const versionInfo = await queryDb<{ package_schema_version: string | null; user_id: string }>(
+    `SELECT av.package_schema_version, a.user_id
+     FROM assessments a
+     INNER JOIN assessment_versions av ON av.id = a.assessment_version_id
+     WHERE a.id = $1
+     LIMIT 1`,
+    [assessmentId]
+  );
+
+  const runtimeVersion = versionInfo.rows[0];
+
+  if (runtimeVersion?.package_schema_version === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
+    return evaluateCompletedV2Assessment({
+      assessmentId,
+      ownerUserId: runtimeVersion.user_id,
+      persistResult: async (input, client) => persistStructuredAssessmentResult({
+        assessmentId: input.assessmentId,
+        assessmentVersionId: input.assessmentVersionId,
+        versionKey: input.versionKey,
+        scoringModelKey: input.status === 'complete' ? 'package-contract-v2-runtime' : 'package-contract-v2-runtime',
+        snapshotVersion: 1,
+        status: input.status === 'complete' ? 'complete' : 'failed',
+        resultPayload: input.resultPayload,
+        responseQualityPayload: input.responseQualityPayload,
+        completedAt: input.completedAt,
+        scoredAt: input.scoredAt,
+      }, client),
+    }) as Promise<CompleteAssessmentResult>
+  }
+
   const lifecycle = await runtimeDependencies.runInTransaction(async (client) => {
     let stage = 'load_assessment';
 

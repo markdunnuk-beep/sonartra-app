@@ -5,8 +5,9 @@ export interface StartAssessmentRequest {
 
 export interface SaveResponseRequest {
   assessmentId: string;
-  questionId: number;
-  responseValue: number;
+  questionId: number | string;
+  responseValue?: number;
+  response?: unknown;
   responseTimeMs?: number;
 }
 
