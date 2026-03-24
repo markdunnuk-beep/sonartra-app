@@ -463,6 +463,14 @@ test('ready_hybrid state renders premium hybrid summary sections', () => {
               { signalId: 'signal-2', signalKey: 'Pacing', domainId: 'execution', rawScore: 4, normalizedScore: 0.24, rank: 2 },
             ],
             normalizedSignalScores: { 'signal-1': 0.66, 'signal-2': 0.24 },
+            normalizedSignalPercentages: { 'signal-1': 66, 'signal-2': 24 },
+            topSignal: {
+              signalId: 'signal-1',
+              signalKey: 'Drive',
+              signalLabel: 'Drive',
+              normalizedPercent: 66,
+              rank: 1,
+            },
             domainSummaries: [
               { domainId: 'execution', totalRawScore: 16, signalCount: 2, topSignalId: 'signal-1', topNormalizedScore: 0.66 },
             ],

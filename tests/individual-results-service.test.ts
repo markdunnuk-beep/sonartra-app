@@ -373,6 +373,31 @@ test('returns ready_hybrid for complete hybrid_mvp_v1 payloads using report-driv
         'signal-1': 0.66,
         'signal-2': 0.34,
       },
+      normalizedSignalPercentages: {
+        'signal-1': 66,
+        'signal-2': 34,
+      },
+      topSignal: {
+        signalId: 'signal-1',
+        signalKey: 'Drive',
+        signalLabel: 'Drive',
+        normalizedPercent: 66,
+        rank: 1,
+      },
+      overviewSummary: {
+        id: 'summary-1',
+        headline: 'Execution profile',
+        text: 'You show strong execution drive with focused follow-through.',
+      },
+      domainSummaries: [
+        {
+          domainId: 'execution',
+          totalRawScore: 18,
+          signalCount: 2,
+          topSignalId: 'signal-1',
+          topSignalNormalizedPercent: 66,
+        },
+      ],
       aggregationVectors: {
         global: { domainId: null, totalRawScore: 18, vector: [] },
         byDomain: [

@@ -221,8 +221,20 @@ test('completed hybrid_mvp_v1 snapshot resolves ready without signal rows', asyn
     ...completeSnapshot,
     result_payload: {
       contractVersion: 'hybrid_mvp_v1',
+      overviewSummary: { id: 'summary-1', headline: 'Execution profile', text: 'Strong execution profile.' },
+      normalizedSignalPercentages: { 'signal-1': 66 },
       rankedSignals: [
         { signalId: 'signal-1', signalKey: 'Drive', domainId: 'execution', rawScore: 12, normalizedScore: 0.66, rank: 1 },
+      ],
+      topSignal: { signalId: 'signal-1', signalKey: 'Drive', signalLabel: 'Drive', normalizedPercent: 66, rank: 1 },
+      domainSummaries: [
+        {
+          domainId: 'execution',
+          totalRawScore: 12,
+          signalCount: 1,
+          topSignalId: 'signal-1',
+          topSignalNormalizedPercent: 66,
+        },
       ],
       report: {
         summary: { id: 'summary-1', headline: 'Execution profile', text: 'Strong execution profile.' },
