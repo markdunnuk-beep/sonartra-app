@@ -173,7 +173,7 @@ export function AdminAssessmentVersionPackageImportForm({
             <textarea
               name="packageText"
               rows={18}
-              placeholder='Paste a Sonartra package JSON payload (legacy v1 or Package Contract v2), for example {"meta": {"schemaVersion": "sonartra-assessment-package/v1"}} or {"packageVersion":"2","schemaVersion":"sonartra-assessment-package/v2"}'
+              placeholder='Paste a Sonartra package JSON payload (legacy v1, Package Contract v2, or hybrid_mvp_v1), for example {"meta": {"schemaVersion": "sonartra-assessment-package/v1"}}, {"packageVersion":"2","schemaVersion":"sonartra-assessment-package/v2"}, or {"contractVersion":"hybrid_mvp_v1","assessmentId":"...","assessmentKey":"..."}'
               className="min-h-[28rem] w-full rounded-2xl border border-border/90 bg-panel/70 px-4 py-3 text-sm leading-6 text-textPrimary outline-none ring-accent/40 focus:border-accent/50 focus:ring"
             />
             {state.fieldErrors?.packageText ? <p className="text-sm text-rose-200">{state.fieldErrors.packageText}</p> : null}
@@ -199,6 +199,7 @@ export function AdminAssessmentVersionPackageImportForm({
                 <li>• Valid packages replace the current draft payload in-place.</li>
                 <li>• Legacy v1 packages can continue through the current simulation/publish workflow.</li>
                 <li>• Package Contract v2 imports validate and persist safely, but publish remains blocked until the runtime path supports v2 execution.</li>
+                <li>• hybrid_mvp_v1 imports validate against the fixed hybrid contract and can be published without the legacy package-engine path.</li>
                 <li>• Invalid imports are rejected and block publish until a valid package is attached.</li>
               </ul>
             </div>

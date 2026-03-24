@@ -9,6 +9,7 @@ import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPa
 import { evaluatePackageV2LiveRuntimeSupport } from '@/lib/package-contract-v2-live-runtime'
 import { preparePackageExecutionBundleForAssessmentVersion } from '@/lib/admin/domain/runtime-execution-adapter-v2'
 import { resolveLiveRuntimeRoutingDecision } from '@/lib/server/live-runtime-execution-adapter'
+import { HYBRID_MVP_CONTRACT_VERSION } from '@/lib/assessment/hybrid-mvp-scoring'
 import type {
   AdminAssessmentReleaseCheck,
   AdminAssessmentReleaseCheckStatus,
@@ -127,7 +128,7 @@ function normalizePackageInfoRuntime(packageInfo: AdminAssessmentVersionPackageI
     status: packageInfo?.status === 'valid' || packageInfo?.status === 'valid_with_warnings' || packageInfo?.status === 'invalid' || packageInfo?.status === 'missing'
       ? packageInfo.status
       : 'missing',
-    detectedVersion: packageInfo?.detectedVersion === 'legacy_v1' || packageInfo?.detectedVersion === 'package_contract_v2' || packageInfo?.detectedVersion === 'runtime_contract_v2' || packageInfo?.detectedVersion === 'unknown'
+    detectedVersion: packageInfo?.detectedVersion === 'legacy_v1' || packageInfo?.detectedVersion === 'package_contract_v2' || packageInfo?.detectedVersion === 'runtime_contract_v2' || packageInfo?.detectedVersion === 'hybrid_mvp_v1' || packageInfo?.detectedVersion === 'unknown'
       ? packageInfo.detectedVersion
       : null,
     schemaVersion: typeof packageInfo?.schemaVersion === 'string' && packageInfo.schemaVersion.trim() ? packageInfo.schemaVersion.trim() : null,
@@ -262,8 +263,10 @@ export function getAdminAssessmentPackagePreviewSummary(version: Pick<AdminAsses
   if (!pkg) {
     const isValidatedV2Package = packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
       && (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings')
+    const isValidatedHybridPackage = packageInfo.schemaVersion === HYBRID_MVP_CONTRACT_VERSION
+      && (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings')
     return {
-      state: packageInfo.status === 'missing' ? 'missing' : isValidatedV2Package ? 'ready' : 'invalid',
+      state: packageInfo.status === 'missing' ? 'missing' : (isValidatedV2Package || isValidatedHybridPackage) ? 'ready' : 'invalid',
       schemaVersion: packageInfo.schemaVersion,
       provenanceSummary: packageInfo.sourceFilename
         ? `Imported from ${packageInfo.sourceFilename}${packageInfo.sourceType ? ` via ${packageInfo.sourceType.replace(/_/g, ' ')}` : ''}.`
@@ -274,24 +277,36 @@ export function getAdminAssessmentPackagePreviewSummary(version: Pick<AdminAsses
         ? 'No package attached yet.'
         : isValidatedV2Package
           ? `${packageInfo.errors.length} blocking issue(s) · ${packageInfo.warnings.length} warning(s) · imported through the Package Contract v2 compatibility path.`
+          : isValidatedHybridPackage
+            ? `${packageInfo.errors.length} blocking issue(s) · ${packageInfo.warnings.length} warning(s) · imported through the hybrid_mvp_v1 runtime path.`
         : `${packageInfo.errors.length} blocking issue(s) · ${packageInfo.warnings.length} warning(s).`,
       lastImportedSummary: packageInfo.importedAt
         ? `${packageInfo.importedByName ?? 'Unknown admin'} imported the latest package.`
         : 'No import has been recorded.',
       dimensionsSummary: isValidatedV2Package
         ? `${formatCount(packageInfo.summary?.dimensionsCount ?? 0, 'dimension')} recorded in the compatibility summary across ${formatCount(packageInfo.summary?.sectionCount ?? 0, 'section')}.`
+        : isValidatedHybridPackage
+          ? `${formatCount(packageInfo.summary?.dimensionsCount ?? 0, 'domain')} recorded in the hybrid summary.`
         : 'No normalized dimensions available.',
       questionSummary: isValidatedV2Package
         ? `${formatCount(packageInfo.summary?.questionsCount ?? 0, 'question')} recorded in the compatibility summary.`
+        : isValidatedHybridPackage
+          ? `${formatCount(packageInfo.summary?.questionsCount ?? 0, 'question')} recorded in the hybrid summary.`
         : 'No normalized questions available.',
       scoringSummary: isValidatedV2Package
         ? 'Package Contract v2 imported successfully, but the current admin runtime cannot execute v2 scoring or simulation yet.'
+        : isValidatedHybridPackage
+          ? 'hybrid_mvp_v1 imported successfully and is executable in the deterministic hybrid runtime.'
         : 'Scoring coverage cannot be inspected until the package validates.',
       outputsSummary: isValidatedV2Package
         ? `${formatCount(packageInfo.summary?.outputRuleCount ?? 0, 'output rule')} recorded in the stored compatibility summary.`
+        : isValidatedHybridPackage
+          ? `${formatCount(packageInfo.summary?.outputRuleCount ?? 0, 'template grouping')} recorded in the hybrid summary.`
         : 'Output coverage is unavailable until the package validates.',
       languageSummary: isValidatedV2Package
         ? `${formatCount(packageInfo.summary?.localeCount ?? 0, 'locale')} recorded in the stored compatibility summary.`
+        : isValidatedHybridPackage
+          ? 'Hybrid contract uses inline deterministic templates and does not require locale bundles.'
         : 'Language coverage is unavailable until the package validates.',
       dimensions: [],
       questions: [],
@@ -396,13 +411,15 @@ export function getAdminAssessmentVersionReadiness(
     'Contract payload classified',
     classifiedPayload.classifier === 'unknown_or_invalid' ? 'fail' : 'pass',
     classifiedPayload.classifier === 'unknown_or_invalid'
-      ? 'Stored package payload could not be classified into legacy, canonical-v2, or runtime-v2 contract families.'
+      ? 'Stored package payload could not be classified into legacy, hybrid_mvp_v1, canonical-v2, or runtime-v2 contract families.'
       : `Behavioral branching uses classifier=${classifiedPayload.classifier} (schema ${classifiedPayload.schemaVersion ?? 'unknown'}).`,
   )
 
   const isImportedV2Package = packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
     && (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings')
-  const structurallyValid = (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings') && Boolean(pkg || pkgV2)
+  const isImportedHybridPackage = packageInfo.schemaVersion === HYBRID_MVP_CONTRACT_VERSION
+    && (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings')
+  const structurallyValid = (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings') && Boolean(pkg || pkgV2 || isImportedHybridPackage)
   addCheck(
     'package_valid',
     'Executable normalized package',
@@ -411,6 +428,8 @@ export function getAdminAssessmentVersionReadiness(
       ? 'The latest package validated and produced a normalized executable payload.'
       : isImportedV2Package
         ? (v2RuntimeSupport.supported ? 'Package Contract v2 validated into a live runtime-supported package.' : (v2RuntimeSupport.issues[0]?.message ?? 'Package Contract v2 imported successfully, but the executable live runtime package could not be prepared.'))
+        : isImportedHybridPackage
+          ? 'hybrid_mvp_v1 payload validated for deterministic hybrid runtime execution.'
         : 'The latest package is missing, invalid, or has no normalized payload.',
   )
 
@@ -422,12 +441,14 @@ export function getAdminAssessmentVersionReadiness(
       ? (liveRouting.liveRuntimeSupported
           ? 'Current runtime execution path is compatible with Package Contract v2 for live execution.'
           : `Package Contract v2 is importable and structurally valid, but publish stays blocked until the live runtime supports the full execution path. ${liveRouting.reason ?? v2RuntimeSupport.issues[0]?.message ?? ''}`.trim())
+      : isImportedHybridPackage
+        ? 'Current runtime execution path is compatible with the deterministic hybrid_mvp_v1 runtime.'
       : 'Current runtime execution path is compatible with the stored package contract.',
   )
   addCheck(
     'admin_compilable_to_runtime',
     'Compilable to runtime execution plan',
-    classifiedPayload.classifier === 'legacy_contract_v1'
+    classifiedPayload.classifier === 'legacy_contract_v1' || classifiedPayload.classifier === 'hybrid_mvp_contract_v1'
       ? 'pass'
       : runtimeFoundation.readiness.compilable
         ? 'pass'
@@ -436,6 +457,8 @@ export function getAdminAssessmentVersionReadiness(
           : 'fail',
     classifiedPayload.classifier === 'legacy_contract_v1'
       ? 'Legacy v1 package uses compatibility simulation semantics; runtime-v2 compile readiness is not required for legacy publish checks.'
+      : classifiedPayload.classifier === 'hybrid_mvp_contract_v1'
+        ? 'hybrid_mvp_v1 uses a fixed deterministic runtime path; runtime-v2 compilation is not required.'
       : runtimeFoundation.readiness.compilable
       ? 'Stored package compiles for admin runtime-v2 execution planning.'
       : runtimeFoundation.errors[0]?.message ?? 'Package is importable but is not currently compilable to runtime execution plan.',
@@ -443,7 +466,7 @@ export function getAdminAssessmentVersionReadiness(
   addCheck(
     'admin_compiled_plan_available',
     'Compiled runtime plan available',
-    classifiedPayload.classifier === 'legacy_contract_v1'
+    classifiedPayload.classifier === 'legacy_contract_v1' || classifiedPayload.classifier === 'hybrid_mvp_contract_v1'
       ? 'pass'
       : runtimeFoundation.bundle?.compiledRuntimePlan
         ? 'pass'
@@ -452,6 +475,8 @@ export function getAdminAssessmentVersionReadiness(
           : 'fail',
     classifiedPayload.classifier === 'legacy_contract_v1'
       ? 'Legacy v1 package does not emit a runtime-v2 compiled plan in this workflow.'
+      : classifiedPayload.classifier === 'hybrid_mvp_contract_v1'
+        ? 'hybrid_mvp_v1 does not emit a runtime-v2 compiled plan in this workflow.'
       : runtimeFoundation.bundle?.compiledRuntimePlan
       ? `Compiled runtime plan prepared from ${runtimeFoundation.bundle.source.replace(/_/g, ' ')}.`
       : 'No compiled runtime plan is available for admin preview/simulation execution.',
@@ -459,7 +484,7 @@ export function getAdminAssessmentVersionReadiness(
   addCheck(
     'admin_execution_ready',
     'Executable in admin runtime flows',
-    classifiedPayload.classifier === 'legacy_contract_v1'
+    classifiedPayload.classifier === 'legacy_contract_v1' || classifiedPayload.classifier === 'hybrid_mvp_contract_v1'
       ? 'pass'
       : runtimeFoundation.readiness.simulatable
         ? 'pass'
@@ -468,6 +493,8 @@ export function getAdminAssessmentVersionReadiness(
           : 'fail',
     classifiedPayload.classifier === 'legacy_contract_v1'
       ? 'Legacy package remains executable in admin flows via compatibility simulation.'
+      : classifiedPayload.classifier === 'hybrid_mvp_contract_v1'
+        ? 'hybrid_mvp_v1 remains executable in admin and live flows via deterministic hybrid runtime.'
       : runtimeFoundation.readiness.simulatable
       ? 'Package is executable in admin simulation/preview execution flows.'
       : runtimeFoundation.errors[0]?.message ?? 'Admin execution readiness is incomplete.',
@@ -475,7 +502,7 @@ export function getAdminAssessmentVersionReadiness(
   addCheck(
     'preview_simulation_ready',
     'Preview/simulation readiness',
-    classifiedPayload.classifier === 'legacy_contract_v1'
+    classifiedPayload.classifier === 'legacy_contract_v1' || classifiedPayload.classifier === 'hybrid_mvp_contract_v1'
       ? 'pass'
       : runtimeFoundation.readiness.simulatable
         ? 'pass'
@@ -484,18 +511,22 @@ export function getAdminAssessmentVersionReadiness(
           : 'fail',
     classifiedPayload.classifier === 'legacy_contract_v1'
       ? 'Preview and simulation remain available through the legacy compatibility path.'
+      : classifiedPayload.classifier === 'hybrid_mvp_contract_v1'
+        ? 'Preview and simulation remain available through the deterministic hybrid runtime path.'
       : runtimeFoundation.readiness.simulatable
       ? 'Preview and simulation share the same prepared runtime execution boundary.'
       : 'Preview and simulation remain blocked until execution-plan readiness is restored.',
   )
 
-  if (!pkg) {
+  if (!pkg && !isImportedHybridPackage) {
     const status: AdminAssessmentReleaseReadinessStatus = blockingIssues.length > 0 ? 'not_ready' : warnings.length > 0 ? 'ready_with_warnings' : 'ready'
     const verdict: AdminAssessmentPublishReadinessVerdict = status === 'not_ready' ? 'blocked' : status
     const summaryText = isImportedV2Package
       ? (liveRouting.liveRuntimeSupported
           ? 'Package Contract v2 is ready for publish review through the live execution path.'
           : 'Publish is blocked because this version uses Package Contract v2 and the live execution path is not ready for it yet.')
+      : isImportedHybridPackage
+        ? 'hybrid_mvp_v1 is ready for publish review through the deterministic runtime path.'
       : status === 'not_ready'
         ? 'Publish is blocked until a valid normalized package is attached.'
         : 'Review the package evidence before publish.'
@@ -511,23 +542,71 @@ export function getAdminAssessmentVersionReadiness(
     }
   }
 
+  if (isImportedHybridPackage && !pkg) {
+    addCheck('hybrid_contract', 'Hybrid contract payload accepted', 'pass', 'hybrid_mvp_v1 payload satisfies deterministic contract validation and can be published without legacy package materialization.')
+    addCheck(
+      'blocking_errors',
+      'No blocking validation issues',
+      packageInfo.errors.length === 0 ? 'pass' : 'fail',
+      packageInfo.errors.length === 0 ? 'No blocking validation errors remain.' : `${formatCount(packageInfo.errors.length, 'blocking error')} still recorded on the package.`,
+    )
+
+    const status: AdminAssessmentReleaseReadinessStatus = blockingIssues.length > 0
+      ? 'not_ready'
+      : warnings.length > 0
+        ? 'ready_with_warnings'
+        : 'ready'
+    const verdict: AdminAssessmentPublishReadinessVerdict = status === 'not_ready' ? 'blocked' : status
+    const summaryText = status === 'not_ready'
+      ? 'Publish is blocked until hybrid validation failures are resolved.'
+      : status === 'ready_with_warnings'
+        ? 'hybrid_mvp_v1 is publishable with warnings; review warnings before release.'
+        : 'hybrid_mvp_v1 is ready to publish.'
+
+    return {
+      status,
+      verdict,
+      blockingIssues: [...new Set([...blockingIssues, ...getPackageErrorMessages(packageInfo)])],
+      warnings: [...new Set(warnings)],
+      checks,
+      checklist: checks,
+      summaryText,
+      summary: summaryText,
+    }
+  }
+
+  if (!pkg) {
+    const summaryText = 'Publish is blocked until a valid normalized package is attached.'
+    return {
+      status: 'not_ready',
+      verdict: 'blocked',
+      blockingIssues: [...new Set([...blockingIssues, ...getPackageErrorMessages(packageInfo), summaryText])],
+      warnings: [...new Set(warnings)],
+      checks,
+      checklist: checks,
+      summaryText,
+      summary: summaryText,
+    }
+  }
+
+  const normalizedPkg = pkg
   addCheck('required_sections', 'Required sections present', 'pass', 'Meta, dimensions, questions, scoring, normalization, and language sections are present.')
 
   addCheck(
     'dimensions_exist',
     'Dimensions defined',
-    pkg.dimensions.length > 0 ? 'pass' : 'fail',
-    pkg.dimensions.length > 0 ? `${formatCount(pkg.dimensions.length, 'dimension')} defined.` : 'At least one dimension is required.',
+    normalizedPkg.dimensions.length > 0 ? 'pass' : 'fail',
+    normalizedPkg.dimensions.length > 0 ? `${formatCount(normalizedPkg.dimensions.length, 'dimension')} defined.` : 'At least one dimension is required.',
   )
 
   addCheck(
     'questions_exist',
     'Questions defined',
-    pkg.questions.length > 0 ? 'pass' : 'fail',
-    pkg.questions.length > 0 ? `${formatCount(pkg.questions.length, 'question')} defined.` : 'At least one question is required.',
+    normalizedPkg.questions.length > 0 ? 'pass' : 'fail',
+    normalizedPkg.questions.length > 0 ? `${formatCount(normalizedPkg.questions.length, 'question')} defined.` : 'At least one question is required.',
   )
 
-  const questionCoverage = getQuestionScoringCoverage(pkg)
+  const questionCoverage = getQuestionScoringCoverage(normalizedPkg)
   addCheck(
     'scoring_coverage',
     'Question scoring coverage',
@@ -537,7 +616,7 @@ export function getAdminAssessmentVersionReadiness(
       : `Scoring is incomplete for ${questionCoverage.missingQuestionIds.join(', ')}.`,
   )
 
-  const normalizationCoverage = getNormalizationCoverage(pkg)
+  const normalizationCoverage = getNormalizationCoverage(normalizedPkg)
   addCheck(
     'normalization_coverage',
     'Normalization coverage',
@@ -547,7 +626,7 @@ export function getAdminAssessmentVersionReadiness(
       : `Normalization is missing for ${normalizationCoverage.missingDimensionIds.join(', ')}.`,
   )
 
-  const localeCounts = getLocaleKeyCounts(pkg)
+  const localeCounts = getLocaleKeyCounts(normalizedPkg)
   addCheck(
     'language_coverage',
     'Language coverage',
@@ -567,7 +646,7 @@ export function getAdminAssessmentVersionReadiness(
       : 'No active saved QA scenarios are attached; publish may still be acceptable with manual judgement.',
   )
 
-  const outputCoverage = getOutputCoverage(pkg)
+  const outputCoverage = getOutputCoverage(normalizedPkg)
   addCheck(
     'output_consistency',
     'Outputs and rule references',

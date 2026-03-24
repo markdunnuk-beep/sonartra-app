@@ -199,6 +199,86 @@ test('publish is warning-gated until sign-off is recorded', async () => {
   assert.ok(auditEvents.includes('assessment_publish_blocked_release_governance'))
 })
 
+test('publish succeeds for hybrid_mvp_v1 without runtime question-bank schema materialization', async () => {
+  const hybridRow = makeVersionRow({
+    definition_payload: {
+      contractVersion: 'hybrid_mvp_v1',
+      assessmentId: 'hybrid-signals-v1',
+      assessmentKey: 'hybrid-signals',
+      signals: [{ id: 's1', key: 'adaptability', label: 'Adaptability', domainId: 'd1' }],
+      domains: [{ id: 'd1', key: 'delivery', label: 'Delivery' }],
+      questions: [{
+        id: 'q1',
+        prompt: 'When priorities shift, I usually:',
+        responseModel: 'single_select',
+        options: [{ id: 'q1_a', label: 'Re-plan quickly', signalWeights: [{ signalId: 's1', weight: 1 }] }],
+      }],
+      outputTemplates: { overview: { default: 'Summary.' } },
+    },
+    package_schema_version: 'hybrid_mvp_v1',
+    package_status: 'valid',
+    package_validation_report_json: {
+      analysis: {
+        classifier: 'hybrid_mvp_contract_v1',
+        readinessState: { capabilities: { liveRuntimeSupported: true } },
+      },
+      readiness: { publishable: true, liveRuntimeEnabled: true },
+      errors: [],
+      warnings: [],
+      summary: { dimensionsCount: 1, questionsCount: 1, optionsCount: 1, scoringRuleCount: 0, normalizationRuleCount: 0, outputRuleCount: 1, localeCount: 0 },
+    },
+    validation_status: 'valid',
+  })
+
+  const result = await publishAdminAssessmentVersion({ assessmentId: 'assessment-1', versionId: 'version-1', expectedUpdatedAt: '2026-03-21T08:00:00.000Z' }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    getAssessmentRuntimeSchemaCapabilities: async () => ({
+      tableExistsByName: new Map(),
+      relationExistsByName: new Map(),
+      columnsByTableName: new Map(),
+      missingTables: [...RUNTIME_TABLE_NAMES],
+      missingColumns: [],
+      checkedAt: '2026-03-21T10:00:00.000Z',
+    }),
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string) => {
+        if (/from assessment_versions av[\s\S]*where av.id = \$1[\s\S]*assessment_definition_id = \$2/i.test(sql)) {
+          return { rows: [hybridRow] }
+        }
+        if (/from assessment_versions av[\s\S]*where av.assessment_definition_id = \$1/i.test(sql)) {
+          return { rows: [hybridRow] }
+        }
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+        if (/update assessment_versions\s+set publish_readiness_status/i.test(sql)) {
+          return { rows: [] }
+        }
+        if (/update assessment_versions[\s\S]*set lifecycle_status = 'archived'/i.test(sql)) {
+          return { rows: [] }
+        }
+        if (/update assessment_versions[\s\S]*set lifecycle_status = 'published'/i.test(sql)) {
+          return { rows: [{ id: 'version-1' }] }
+        }
+        if (/update assessment_definitions[\s\S]*set lifecycle_status = 'published'/i.test(sql)) {
+          return { rows: [] }
+        }
+        if (/insert into access_audit_events/i.test(sql)) {
+          return { rows: [] }
+        }
+        throw new Error(`Unexpected query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-21T10:00:00.000Z'),
+    createId: (() => { let index = 1; return () => `audit-hybrid-${index++}` })(),
+  } as never)
+
+  assert.equal(result.ok, true)
+  assert.equal(result.code, 'published')
+})
+
 test('publish loader uses modern compatibility-safe assessment_versions queries when optional columns are available', async () => {
   const byIdQueries: string[] = []
   const assessmentQueries: string[] = []

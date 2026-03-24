@@ -32,6 +32,7 @@ import {
   parseStoredNormalizedAssessmentPackage,
 } from '@/lib/admin/domain/assessment-package'
 import {
+  classifyPackageContract,
   extractAssessmentPackageIdentity,
   importAssessmentPackagePayload,
   type AdminAssessmentPackageValidationSummary,
@@ -507,7 +508,7 @@ function normalisePackageSummary(value: unknown): SonartraAssessmentPackageSumma
 }
 
 function normaliseDetectedPackageVersion(value: unknown): AdminAssessmentPackageDetectedVersion | null {
-  return value === 'legacy_v1' || value === 'package_contract_v2' || value === 'runtime_contract_v2' || value === 'unknown'
+  return value === 'legacy_v1' || value === 'package_contract_v2' || value === 'runtime_contract_v2' || value === 'hybrid_mvp_v1' || value === 'unknown'
     ? value
     : null
 }
@@ -2743,6 +2744,10 @@ async function persistImportedPackageOnVersion(
       ? input.importedPackage.warnings.length > 0
         ? 'Package Contract v2 imported with warnings. The package is stored and previewable, but publish stays blocked until the v2 runtime path is supported.'
         : 'Package Contract v2 imported successfully. The package is stored and previewable, but publish stays blocked until the v2 runtime path is supported.'
+      : input.importedPackage.detectedVersion === 'hybrid_mvp_v1'
+        ? input.importedPackage.warnings.length > 0
+          ? 'hybrid_mvp_v1 definition imported with warnings. The version is stored and publishable after warning review.'
+          : 'hybrid_mvp_v1 definition imported successfully and is ready for publish review.'
       : input.importedPackage.warnings.length > 0
         ? 'Package imported with warnings. Publish remains allowed, but review the warnings first.'
         : 'Package imported successfully.',
@@ -3816,11 +3821,6 @@ export async function publishAdminAssessmentVersion(
           publishGovernanceMissingColumns,
         )
       }
-      await runPublishStage('runtime_schema_compatibility', {
-        assessmentId: input.assessmentId,
-        versionId: input.versionId,
-      }, () => assertAssessmentRuntimeSchemaCompatibility(client.query.bind(client), 'publishing assessment versions'))
-
       const versionRow = await runPublishStage('version_load', {
         assessmentId: input.assessmentId,
         versionId: input.versionId,
@@ -3834,6 +3834,15 @@ export async function publishAdminAssessmentVersion(
 
       if (!versionRow) {
         return { ok: false, code: 'not_found', message: 'Version not found.' }
+      }
+      const classifiedPayload = classifyPackageContract(versionRow.definition_payload)
+      const isHybridPayload = classifiedPayload.classifier === 'hybrid_mvp_contract_v1'
+
+      if (!isHybridPayload) {
+        await runPublishStage('runtime_schema_compatibility', {
+          assessmentId: input.assessmentId,
+          versionId: input.versionId,
+        }, () => assertAssessmentRuntimeSchemaCompatibility(client.query.bind(client), 'publishing assessment versions'))
       }
 
       if (versionRow.lifecycle_status !== 'draft') {
@@ -3936,7 +3945,9 @@ export async function publishAdminAssessmentVersion(
         }
       }
 
-      if (evaluatedVersion.packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
+      if (isHybridPayload) {
+        // Hybrid MVP payloads execute directly from stored definition payloads without runtime question-bank materialization.
+      } else if (evaluatedVersion.packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
         const runtimePackageV2 = parseStoredValidatedAssessmentPackageV2(evaluatedVersion.storedDefinitionPayload ?? null)
         const runtimeSupportV2 = evaluatePackageV2LiveRuntimeSupport(runtimePackageV2)
 
