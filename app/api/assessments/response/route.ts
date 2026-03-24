@@ -5,6 +5,7 @@ import { logDatabaseError } from '@/lib/db';
 import { SaveResponseRequest } from '@/lib/assessment-types';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 import { saveAssessmentResponse } from '@/lib/server/save-assessment-response';
+import { markAssignmentInProgressForAssessment } from '@/lib/server/assessment-assignments';
 
 export async function POST(request: Request) {
   try {
@@ -20,6 +21,10 @@ export async function POST(request: Request) {
       appUserId: appUser?.dbUserId ?? null,
       ...body,
     })
+
+    if (response.status === 200 && 'assessmentId' in response.body) {
+      await markAssignmentInProgressForAssessment(response.body.assessmentId)
+    }
 
     return NextResponse.json(response.body, { status: response.status });
   } catch (error) {

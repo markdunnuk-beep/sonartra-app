@@ -28,6 +28,14 @@ interface AssessmentInventoryAssessmentRow extends AssessmentRow {
   total_questions: number | null
 }
 
+interface AssignmentStateRow {
+  id: string
+  status: 'assigned' | 'in_progress' | 'completed_processing' | 'results_ready' | 'failed' | 'cancelled'
+  assessment_id: string | null
+  latest_result_id: string | null
+  assigned_at: string
+}
+
 interface AssessmentInventoryReadyResultRow extends AssessmentResultRow {
   assessment_started_at: string | null
   assessment_completed_at: string | null
@@ -90,10 +98,17 @@ function resolveLifecycleState(args: {
   latestAssessment: AssessmentInventoryAssessmentRow | null
   latestAssessmentResult: AssessmentResultRow | null
   latestAssessmentSignalCount: number
+  latestAssignmentStatus?: AssignmentStateRow['status'] | null
 }): AssessmentRepositoryLifecycleState {
-  const { latestAssessment, latestAssessmentResult, latestAssessmentSignalCount } = args
+  const { latestAssessment, latestAssessmentResult, latestAssessmentSignalCount, latestAssignmentStatus } = args
 
   if (!latestAssessment) {
+    if (latestAssignmentStatus === 'assigned') return 'not_started'
+    if (latestAssignmentStatus === 'in_progress') return 'in_progress'
+    if (latestAssignmentStatus === 'completed_processing') return 'completed_processing'
+    if (latestAssignmentStatus === 'results_ready') return 'ready'
+    if (latestAssignmentStatus === 'failed') return 'error'
+
     return 'not_started'
   }
 
@@ -206,6 +221,24 @@ async function getLatestReadyResultForUser(
   return result.rows[0] ?? null
 }
 
+async function getLatestAssignmentStateForUser(
+  query: typeof queryDb,
+  userId: string,
+  assessmentDefinitionId: string,
+): Promise<AssignmentStateRow | null> {
+  const result = await query<AssignmentStateRow>(
+    `SELECT id, status, assessment_id, latest_result_id, assigned_at
+     FROM assessment_repository_assignments
+     WHERE target_user_id = $1
+       AND assessment_definition_id = $2
+     ORDER BY assigned_at DESC
+     LIMIT 1`,
+    [userId, assessmentDefinitionId],
+  )
+
+  return result.rows[0] ?? null
+}
+
 async function getSignalCountByResultId(query: typeof queryDb, resultId: string): Promise<number> {
   const result = await query<{ signal_count: string }>(
     `SELECT COUNT(*)::int AS signal_count
@@ -220,6 +253,7 @@ async function getSignalCountByResultId(query: typeof queryDb, resultId: string)
 function buildStatusNoteForLifecycle(
   lifecycleState: AssessmentRepositoryLifecycleState,
   defaultStatusNote: string | undefined,
+  assignmentStatus?: AssignmentStateRow['status'] | null,
 ): string | undefined {
   switch (lifecycleState) {
     case 'in_progress':
@@ -267,6 +301,11 @@ export async function loadLiveAssessmentRepositoryInventory(
   const latestAssessmentSignalCount = latestAssessmentResult
     ? await getSignalCountByResultId(deps.queryDb, latestAssessmentResult.id)
     : 0
+  const latestAssignment = await getLatestAssignmentStateForUser(
+    deps.queryDb,
+    userId,
+    publishedVersion.assessmentDefinitionId,
+  )
   const latestReadyResult = await getLatestReadyResultForUser(
     deps.queryDb,
     userId,
@@ -277,6 +316,7 @@ export async function loadLiveAssessmentRepositoryInventory(
     latestAssessment,
     latestAssessmentResult,
     latestAssessmentSignalCount,
+    latestAssignmentStatus: latestAssignment?.status ?? null,
   })
   const status = mapLifecycleToStatus(lifecycleState)
   const defaultStatusNote = buildStatusNote(definition, status)
@@ -341,7 +381,7 @@ export async function loadLiveAssessmentRepositoryInventory(
     ),
     accessRows: buildAccessRows(definition, availability, context),
     outputRows: buildOutputRows(definition, availability, false),
-    statusNote: buildStatusNoteForLifecycle(lifecycleState, defaultStatusNote),
+    statusNote: buildStatusNoteForLifecycle(lifecycleState, defaultStatusNote, latestAssignment?.status ?? null),
     assessmentHref: lifecycleState === 'not_started' || lifecycleState === 'in_progress' || lifecycleState === 'ready'
       ? definition.assessmentHref
       : undefined,

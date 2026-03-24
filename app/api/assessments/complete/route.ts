@@ -4,6 +4,7 @@ import { CompleteAssessmentRequest } from '@/lib/assessment-types';
 import { logDatabaseError, queryDb } from '@/lib/db';
 import { completeAssessmentWithResults } from '@/lib/server/assessment-completion';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
+import { markAssignmentCompletionProcessing, markAssignmentFailed, markAssignmentResultReady } from '@/lib/server/assessment-assignments';
 
 export async function POST(request: Request) {
   try {
@@ -31,6 +32,15 @@ export async function POST(request: Request) {
     }
 
     const result = await completeAssessmentWithResults(body.assessmentId);
+
+    if (result.body.ok) {
+      await markAssignmentCompletionProcessing(body.assessmentId)
+      if (result.body.resultStatus === 'succeeded') {
+        await markAssignmentResultReady({ assessmentId: body.assessmentId, resultId: result.body.resultId })
+      } else if (result.body.resultStatus === 'failed') {
+        await markAssignmentFailed({ assessmentId: body.assessmentId, resultId: result.body.resultId })
+      }
+    }
 
     return NextResponse.json(result.body, { status: result.httpStatus });
   } catch (error) {
