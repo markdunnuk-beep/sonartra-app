@@ -1,0 +1,1163 @@
+{
+  "packageVersion": "2",
+  "schemaVersion": "sonartra-assessment-package/v2",
+  "identity": {
+    "assessmentKey": "wplp80-foundation-sample",
+    "slug": "wplp80-foundation-sample",
+    "versionLabel": "2.0.0-wplp-foundation",
+    "title": "WPLP-80 Foundation Sample",
+    "shortDescription": "Representative WPLP-80-style fixture that pressure-tests Package Contract v2 without encoding the full assessment.",
+    "category": "premium_workplace_profile",
+    "status": "draft",
+    "supportedLanguages": {
+      "defaultLanguage": "en-US",
+      "supportedLanguages": [
+        "en-US",
+        "en-GB"
+      ]
+    },
+    "authoring": {
+      "author": "OpenAI Codex",
+      "organization": "Sonartra",
+      "notes": "Package-contract validation fixture for the assessment engine rebuild."
+    },
+    "provenance": {
+      "sourcePackageId": "wplp80-blueprint",
+      "sourceRevision": "contract-v2-foundation",
+      "importedFrom": "internal-fixture"
+    },
+    "tags": [
+      "wplp80-first",
+      "validation",
+      "foundation"
+    ]
+  },
+  "structure": {
+    "sections": [
+      {
+        "id": "operating-rhythm",
+        "title": "Operating Rhythm",
+        "description": "How the respondent navigates pace and structure.",
+        "order": 1,
+        "presentation": {
+          "layout": "paged",
+          "runtimeIgnorable": true
+        }
+      },
+      {
+        "id": "collaboration-signals",
+        "title": "Collaboration Signals",
+        "description": "How the respondent engages others under pressure.",
+        "order": 2,
+        "presentation": {
+          "layout": "paged",
+          "runtimeIgnorable": true
+        }
+      },
+      {
+        "id": "decision-patterns",
+        "title": "Decision Patterns",
+        "description": "How the respondent approaches risk, evidence, and adaptation.",
+        "order": 3,
+        "presentation": {
+          "layout": "paged",
+          "runtimeIgnorable": true
+        }
+      }
+    ],
+    "questions": [
+      {
+        "id": "q1",
+        "key": "WPS-01",
+        "text": "I keep momentum high even when priorities are still moving.",
+        "helpText": "Think about a typical fast-moving week.",
+        "order": 1,
+        "sectionId": "operating-rhythm",
+        "type": "single_select",
+        "options": [
+          {
+            "id": "never",
+            "label": "Never",
+            "order": 1
+          },
+          {
+            "id": "rarely",
+            "label": "Rarely",
+            "order": 2
+          },
+          {
+            "id": "sometimes",
+            "label": "Sometimes",
+            "order": 3
+          },
+          {
+            "id": "often",
+            "label": "Often",
+            "order": 4
+          },
+          {
+            "id": "always",
+            "label": "Always",
+            "order": 5
+          }
+        ],
+        "tags": [
+          "pace",
+          "adaptation"
+        ]
+      },
+      {
+        "id": "q2",
+        "key": "WPS-02",
+        "text": "I slow work down until there is a clear plan and confirmed process.",
+        "order": 2,
+        "sectionId": "operating-rhythm",
+        "type": "single_select",
+        "options": [
+          {
+            "id": "never",
+            "label": "Never",
+            "order": 1
+          },
+          {
+            "id": "rarely",
+            "label": "Rarely",
+            "order": 2
+          },
+          {
+            "id": "sometimes",
+            "label": "Sometimes",
+            "order": 3
+          },
+          {
+            "id": "often",
+            "label": "Often",
+            "order": 4
+          },
+          {
+            "id": "always",
+            "label": "Always",
+            "order": 5
+          }
+        ],
+        "tags": [
+          "structure",
+          "reverse-keyed"
+        ]
+      },
+      {
+        "id": "q3",
+        "key": "WPS-03",
+        "text": "I openly pressure-test ideas with the group before moving ahead.",
+        "order": 3,
+        "sectionId": "collaboration-signals",
+        "type": "single_select",
+        "options": [
+          {
+            "id": "never",
+            "label": "Never",
+            "order": 1
+          },
+          {
+            "id": "rarely",
+            "label": "Rarely",
+            "order": 2
+          },
+          {
+            "id": "sometimes",
+            "label": "Sometimes",
+            "order": 3
+          },
+          {
+            "id": "often",
+            "label": "Often",
+            "order": 4
+          },
+          {
+            "id": "always",
+            "label": "Always",
+            "order": 5
+          }
+        ],
+        "tags": [
+          "challenge",
+          "dialogue"
+        ]
+      },
+      {
+        "id": "q4",
+        "key": "WPS-04",
+        "text": "I avoid disagreement so the team can stay aligned.",
+        "order": 4,
+        "sectionId": "collaboration-signals",
+        "type": "single_select",
+        "options": [
+          {
+            "id": "never",
+            "label": "Never",
+            "order": 1
+          },
+          {
+            "id": "rarely",
+            "label": "Rarely",
+            "order": 2
+          },
+          {
+            "id": "sometimes",
+            "label": "Sometimes",
+            "order": 3
+          },
+          {
+            "id": "often",
+            "label": "Often",
+            "order": 4
+          },
+          {
+            "id": "always",
+            "label": "Always",
+            "order": 5
+          }
+        ],
+        "tags": [
+          "harmony",
+          "reverse-keyed"
+        ]
+      },
+      {
+        "id": "q5",
+        "key": "WPS-05",
+        "text": "I decide quickly when enough evidence is available, even if some uncertainty remains.",
+        "order": 5,
+        "sectionId": "decision-patterns",
+        "type": "single_select",
+        "options": [
+          {
+            "id": "never",
+            "label": "Never",
+            "order": 1
+          },
+          {
+            "id": "rarely",
+            "label": "Rarely",
+            "order": 2
+          },
+          {
+            "id": "sometimes",
+            "label": "Sometimes",
+            "order": 3
+          },
+          {
+            "id": "often",
+            "label": "Often",
+            "order": 4
+          },
+          {
+            "id": "always",
+            "label": "Always",
+            "order": 5
+          }
+        ],
+        "tags": [
+          "decision",
+          "uncertainty"
+        ]
+      },
+      {
+        "id": "q6",
+        "key": "WPS-06",
+        "text": "I revisit assumptions when new information changes the picture.",
+        "order": 6,
+        "sectionId": "decision-patterns",
+        "type": "single_select",
+        "options": [
+          {
+            "id": "never",
+            "label": "Never",
+            "order": 1
+          },
+          {
+            "id": "rarely",
+            "label": "Rarely",
+            "order": 2
+          },
+          {
+            "id": "sometimes",
+            "label": "Sometimes",
+            "order": 3
+          },
+          {
+            "id": "often",
+            "label": "Often",
+            "order": 4
+          },
+          {
+            "id": "always",
+            "label": "Always",
+            "order": 5
+          }
+        ],
+        "tags": [
+          "adaptation",
+          "learning"
+        ]
+      }
+    ]
+  },
+  "dimensionCatalog": {
+    "dimensions": [
+      {
+        "key": "pace_drive",
+        "label": "Pace Drive",
+        "description": "Preference for speed and forward motion.",
+        "groupKey": "operating-style",
+        "family": "tempo",
+        "order": 1,
+        "visibility": "visible",
+        "reporting": {
+          "audience": "individual",
+          "blockHint": "operating-rhythm"
+        }
+      },
+      {
+        "key": "structure_anchor",
+        "label": "Structure Anchor",
+        "description": "Preference for planful clarity and process stability.",
+        "groupKey": "operating-style",
+        "family": "tempo",
+        "order": 2,
+        "visibility": "visible",
+        "reporting": {
+          "audience": "individual",
+          "blockHint": "operating-rhythm"
+        }
+      },
+      {
+        "key": "constructive_challenge",
+        "label": "Constructive Challenge",
+        "description": "Tendency to surface tension productively.",
+        "groupKey": "collaboration-style",
+        "family": "interaction",
+        "order": 3,
+        "visibility": "visible",
+        "reporting": {
+          "audience": "individual",
+          "blockHint": "collaboration-signals"
+        }
+      },
+      {
+        "key": "adaptive_judgement",
+        "label": "Adaptive Judgement",
+        "description": "Capacity to make grounded decisions and update them when needed.",
+        "groupKey": "decision-style",
+        "family": "decision",
+        "order": 4,
+        "visibility": "visible",
+        "reporting": {
+          "audience": "individual",
+          "blockHint": "decision-patterns"
+        }
+      }
+    ],
+    "derivedDimensions": [
+      {
+        "key": "operating_flexibility",
+        "label": "Operating Flexibility",
+        "description": "Balance between momentum, structure, and adaptive judgement.",
+        "groupKey": "composite-style",
+        "family": "composite",
+        "order": 5,
+        "rule": {
+          "kind": "weighted_average",
+          "inputs": [
+            {
+              "sourceType": "dimension",
+              "key": "pace_drive",
+              "weight": 1
+            },
+            {
+              "sourceType": "dimension",
+              "key": "structure_anchor",
+              "weight": 1
+            },
+            {
+              "sourceType": "dimension",
+              "key": "adaptive_judgement",
+              "weight": 2
+            }
+          ]
+        }
+      }
+    ],
+    "groups": [
+      {
+        "key": "operating-style",
+        "label": "Operating Style",
+        "description": "Primary rhythm dimensions.",
+        "dimensionKeys": [
+          "pace_drive",
+          "structure_anchor"
+        ]
+      },
+      {
+        "key": "collaboration-style",
+        "label": "Collaboration Style",
+        "description": "How tension is surfaced with others.",
+        "dimensionKeys": [
+          "constructive_challenge"
+        ]
+      },
+      {
+        "key": "decision-style",
+        "label": "Decision Style",
+        "description": "Decision posture and updating behaviour.",
+        "dimensionKeys": [
+          "adaptive_judgement"
+        ]
+      }
+    ]
+  },
+  "scoring": {
+    "optionMappings": [
+      {
+        "questionId": "q1",
+        "optionId": "never",
+        "targets": [
+          {
+            "dimensionKey": "pace_drive",
+            "weight": -2
+          },
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 0
+          }
+        ]
+      },
+      {
+        "questionId": "q1",
+        "optionId": "rarely",
+        "targets": [
+          {
+            "dimensionKey": "pace_drive",
+            "weight": -1
+          },
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 0
+          }
+        ]
+      },
+      {
+        "questionId": "q1",
+        "optionId": "sometimes",
+        "targets": [
+          {
+            "dimensionKey": "pace_drive",
+            "weight": 0
+          },
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 0
+          }
+        ]
+      },
+      {
+        "questionId": "q1",
+        "optionId": "often",
+        "targets": [
+          {
+            "dimensionKey": "pace_drive",
+            "weight": 1
+          },
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "questionId": "q1",
+        "optionId": "always",
+        "targets": [
+          {
+            "dimensionKey": "pace_drive",
+            "weight": 2
+          },
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 2
+          }
+        ]
+      },
+      {
+        "questionId": "q2",
+        "optionId": "never",
+        "targets": [
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": -2
+          },
+          {
+            "dimensionKey": "pace_drive",
+            "weight": 2
+          }
+        ]
+      },
+      {
+        "questionId": "q2",
+        "optionId": "rarely",
+        "targets": [
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": -1
+          },
+          {
+            "dimensionKey": "pace_drive",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "questionId": "q2",
+        "optionId": "sometimes",
+        "targets": [
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": 0
+          },
+          {
+            "dimensionKey": "pace_drive",
+            "weight": 0
+          }
+        ]
+      },
+      {
+        "questionId": "q2",
+        "optionId": "often",
+        "targets": [
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": 1
+          },
+          {
+            "dimensionKey": "pace_drive",
+            "weight": -1
+          }
+        ]
+      },
+      {
+        "questionId": "q2",
+        "optionId": "always",
+        "targets": [
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": 2
+          },
+          {
+            "dimensionKey": "pace_drive",
+            "weight": -2
+          }
+        ]
+      },
+      {
+        "questionId": "q3",
+        "optionId": "never",
+        "targets": [
+          {
+            "dimensionKey": "constructive_challenge",
+            "weight": -2
+          },
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": -1
+          }
+        ]
+      },
+      {
+        "questionId": "q3",
+        "optionId": "rarely",
+        "targets": [
+          {
+            "dimensionKey": "constructive_challenge",
+            "weight": -1
+          },
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": -1
+          }
+        ]
+      },
+      {
+        "questionId": "q3",
+        "optionId": "sometimes",
+        "targets": [
+          {
+            "dimensionKey": "constructive_challenge",
+            "weight": 0
+          },
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 0
+          }
+        ]
+      },
+      {
+        "questionId": "q3",
+        "optionId": "often",
+        "targets": [
+          {
+            "dimensionKey": "constructive_challenge",
+            "weight": 1
+          },
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "questionId": "q3",
+        "optionId": "always",
+        "targets": [
+          {
+            "dimensionKey": "constructive_challenge",
+            "weight": 2
+          },
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "questionId": "q4",
+        "optionId": "never",
+        "targets": [
+          {
+            "dimensionKey": "constructive_challenge",
+            "weight": 2
+          },
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": -1
+          }
+        ]
+      },
+      {
+        "questionId": "q4",
+        "optionId": "rarely",
+        "targets": [
+          {
+            "dimensionKey": "constructive_challenge",
+            "weight": 1
+          },
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": -1
+          }
+        ]
+      },
+      {
+        "questionId": "q4",
+        "optionId": "sometimes",
+        "targets": [
+          {
+            "dimensionKey": "constructive_challenge",
+            "weight": 0
+          },
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": 0
+          }
+        ]
+      },
+      {
+        "questionId": "q4",
+        "optionId": "often",
+        "targets": [
+          {
+            "dimensionKey": "constructive_challenge",
+            "weight": -1
+          },
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "questionId": "q4",
+        "optionId": "always",
+        "targets": [
+          {
+            "dimensionKey": "constructive_challenge",
+            "weight": -2
+          },
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "questionId": "q5",
+        "optionId": "never",
+        "targets": [
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": -2
+          },
+          {
+            "dimensionKey": "pace_drive",
+            "weight": 0
+          }
+        ]
+      },
+      {
+        "questionId": "q5",
+        "optionId": "rarely",
+        "targets": [
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": -1
+          },
+          {
+            "dimensionKey": "pace_drive",
+            "weight": 0
+          }
+        ]
+      },
+      {
+        "questionId": "q5",
+        "optionId": "sometimes",
+        "targets": [
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 0
+          },
+          {
+            "dimensionKey": "pace_drive",
+            "weight": 0
+          }
+        ]
+      },
+      {
+        "questionId": "q5",
+        "optionId": "often",
+        "targets": [
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 1
+          },
+          {
+            "dimensionKey": "pace_drive",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "questionId": "q5",
+        "optionId": "always",
+        "targets": [
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 2
+          },
+          {
+            "dimensionKey": "pace_drive",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "questionId": "q6",
+        "optionId": "never",
+        "targets": [
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": -2
+          },
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "questionId": "q6",
+        "optionId": "rarely",
+        "targets": [
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": -1
+          },
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "questionId": "q6",
+        "optionId": "sometimes",
+        "targets": [
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 0
+          },
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": 0
+          }
+        ]
+      },
+      {
+        "questionId": "q6",
+        "optionId": "often",
+        "targets": [
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 1
+          },
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": -1
+          }
+        ]
+      },
+      {
+        "questionId": "q6",
+        "optionId": "always",
+        "targets": [
+          {
+            "dimensionKey": "adaptive_judgement",
+            "weight": 2
+          },
+          {
+            "dimensionKey": "structure_anchor",
+            "weight": -1
+          }
+        ]
+      }
+    ],
+    "transforms": [
+      {
+        "id": "reverse-q4-presence",
+        "kind": "reverse_scale",
+        "target": {
+          "level": "item",
+          "questionId": "q4"
+        },
+        "config": {
+          "min": 1,
+          "max": 5
+        }
+      }
+    ],
+    "rules": [
+      {
+        "id": "operating-flexibility-boost",
+        "scope": "derived_dimension",
+        "predicate": {
+          "type": "group",
+          "operator": "and",
+          "conditions": [
+            {
+              "type": "comparison",
+              "operator": "gte",
+              "left": {
+                "type": "dimension_score",
+                "dimensionId": "pace_drive"
+              },
+              "right": {
+                "type": "constant",
+                "value": 1
+              }
+            },
+            {
+              "type": "comparison",
+              "operator": "gte",
+              "left": {
+                "type": "dimension_score",
+                "dimensionId": "adaptive_judgement"
+              },
+              "right": {
+                "type": "constant",
+                "value": 1
+              }
+            }
+          ]
+        },
+        "effect": {
+          "action": "add",
+          "targetId": "operating_flexibility",
+          "value": 0.5
+        }
+      }
+    ]
+  },
+  "integrity": {
+    "rules": [
+      {
+        "id": "pace-structure-contradiction",
+        "kind": "contradiction",
+        "severity": "warning",
+        "message": "High-speed and high-process responses were both strongly endorsed.",
+        "predicate": {
+          "type": "group",
+          "operator": "and",
+          "conditions": [
+            {
+              "type": "comparison",
+              "operator": "gte",
+              "left": {
+                "type": "question_answer",
+                "questionId": "q1"
+              },
+              "right": {
+                "type": "constant",
+                "value": 5
+              }
+            },
+            {
+              "type": "comparison",
+              "operator": "gte",
+              "left": {
+                "type": "question_answer",
+                "questionId": "q2"
+              },
+              "right": {
+                "type": "constant",
+                "value": 5
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "normalization": {
+    "groups": [
+      {
+        "id": "core-style-comparison",
+        "label": "Core Style Comparison",
+        "dimensionKeys": [
+          "pace_drive",
+          "structure_anchor",
+          "constructive_challenge",
+          "adaptive_judgement"
+        ],
+        "displayGroupKey": "individual-core-style",
+        "rankingGroupKey": "org-core-style",
+        "comparisonOrder": [
+          "pace_drive",
+          "structure_anchor",
+          "constructive_challenge",
+          "adaptive_judgement"
+        ]
+      },
+      {
+        "id": "composite-style-comparison",
+        "label": "Composite Style Comparison",
+        "derivedDimensionKeys": [
+          "operating_flexibility"
+        ],
+        "displayGroupKey": "individual-composite-style",
+        "rankingGroupKey": "org-composite-style",
+        "comparisonOrder": [
+          "operating_flexibility"
+        ]
+      }
+    ],
+    "rules": [
+      {
+        "id": "core-style-bands-v1",
+        "method": "band_table",
+        "appliesTo": {
+          "dimensionIds": [
+            "pace_drive",
+            "structure_anchor",
+            "constructive_challenge",
+            "adaptive_judgement"
+          ],
+          "groupKey": "core-style-comparison"
+        },
+        "version": "2026.03",
+        "table": [
+          {
+            "rawMin": -2,
+            "rawMax": -0.5,
+            "band": "low",
+            "label": "Low"
+          },
+          {
+            "rawMin": -0.49,
+            "rawMax": 0.49,
+            "band": "mid",
+            "label": "Balanced"
+          },
+          {
+            "rawMin": 0.5,
+            "rawMax": 2,
+            "band": "high",
+            "label": "High"
+          }
+        ]
+      },
+      {
+        "id": "operating-flexibility-bands-v1",
+        "method": "band_table",
+        "appliesTo": {
+          "derivedDimensionIds": [
+            "operating_flexibility"
+          ],
+          "groupKey": "composite-style-comparison"
+        },
+        "version": "2026.03",
+        "table": [
+          {
+            "rawMin": -2,
+            "rawMax": -0.25,
+            "band": "strained",
+            "label": "Strained"
+          },
+          {
+            "rawMin": -0.24,
+            "rawMax": 0.74,
+            "band": "mixed",
+            "label": "Mixed"
+          },
+          {
+            "rawMin": 0.75,
+            "rawMax": 2,
+            "band": "adaptive",
+            "label": "Adaptive"
+          }
+        ]
+      }
+    ]
+  },
+  "aggregation": {
+    "comparableGroups": [
+      {
+        "id": "team-core-style",
+        "label": "Team Core Style",
+        "dimensionKeys": [
+          "pace_drive",
+          "structure_anchor",
+          "constructive_challenge",
+          "adaptive_judgement"
+        ],
+        "comparisonBasis": "shared_scale"
+      },
+      {
+        "id": "team-composite-style",
+        "label": "Team Composite Style",
+        "dimensionKeys": [
+          "operating_flexibility"
+        ],
+        "comparisonBasis": "shared_construct"
+      }
+    ],
+    "distributionGroups": [
+      {
+        "id": "org-style-distribution",
+        "label": "Organisation Style Distribution",
+        "dimensionKeys": [
+          "pace_drive",
+          "structure_anchor",
+          "constructive_challenge",
+          "adaptive_judgement",
+          "operating_flexibility"
+        ]
+      }
+    ],
+    "rollupHints": [
+      {
+        "id": "team-core-style-rollup",
+        "label": "Team core style roll-up",
+        "comparableGroupId": "team-core-style",
+        "distributionGroupId": "org-style-distribution",
+        "teamRollup": "mean"
+      },
+      {
+        "id": "team-composite-style-rollup",
+        "label": "Team composite style roll-up",
+        "comparableGroupId": "team-composite-style",
+        "distributionGroupId": "org-style-distribution",
+        "teamRollup": "distribution"
+      }
+    ]
+  },
+  "outputs": {
+    "blocks": [
+      {
+        "id": "operating-flexibility-summary",
+        "key": "operating-flexibility-summary",
+        "title": "Operating Flexibility Summary",
+        "type": "summary",
+        "priority": 10,
+        "audience": "individual",
+        "condition": {
+          "type": "comparison",
+          "operator": "gte",
+          "left": {
+            "type": "derived_dimension_score",
+            "derivedDimensionId": "operating_flexibility"
+          },
+          "right": {
+            "type": "constant",
+            "value": 0.75
+          }
+        },
+        "derivedDimensionKeys": [
+          "operating_flexibility"
+        ],
+        "reportBindingKey": "operating-flexibility-summary",
+        "severity": "info"
+      },
+      {
+        "id": "integrity-attention-warning",
+        "key": "integrity-attention-warning",
+        "title": "Integrity Attention Warning",
+        "type": "warning",
+        "priority": 100,
+        "audience": "internal",
+        "condition": {
+          "type": "comparison",
+          "operator": "eq",
+          "left": {
+            "type": "integrity_flag",
+            "ruleId": "pace-structure-contradiction"
+          },
+          "right": {
+            "type": "constant",
+            "value": true
+          }
+        },
+        "integrityRuleIds": [
+          "pace-structure-contradiction"
+        ],
+        "reportBindingKey": "integrity-attention-warning",
+        "severity": "warning"
+      }
+    ],
+    "reportBindings": [
+      {
+        "key": "operating-flexibility-summary",
+        "label": "Operating Flexibility Summary",
+        "contentRef": "report.summary.operating-flexibility",
+        "audience": "individual",
+        "severity": "info",
+        "explanation": "Primary interpretation block for strong operating flexibility."
+      },
+      {
+        "key": "integrity-attention-warning",
+        "label": "Integrity Attention Warning",
+        "contentRef": "report.warning.integrity",
+        "audience": "internal",
+        "severity": "warning",
+        "explanation": "Internal-only warning block when contradiction checks fire."
+      }
+    ]
+  }
+}

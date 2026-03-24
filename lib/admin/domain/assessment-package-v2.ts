@@ -1,4 +1,5 @@
 import { isRecord } from '@/lib/admin/domain/assessment-package-content'
+import { normalizeCanonicalPackageContractV2 } from '@/lib/admin/domain/package-contract-v2-canonical'
 
 /**
  * Canonical schema id for additive Package Contract v2 payloads.
@@ -555,6 +556,35 @@ function validatePredicateExpression(
   return null
 }
 
+export function validateSonartraAssessmentPackageV2(input: unknown): SonartraAssessmentPackageV2ValidationResult {
+  const canonical = normalizeCanonicalPackageContractV2(input)
+  if (canonical) {
+    const legacyResult = validateLegacySonartraAssessmentPackageV2(canonical.legacyPayload)
+    const errors = [...canonical.errors, ...legacyResult.errors]
+    const warnings = [...canonical.warnings, ...legacyResult.warnings]
+
+    if (!canonical.ok || !legacyResult.ok || !legacyResult.normalizedPackage) {
+      return {
+        ok: false,
+        errors,
+        warnings,
+        summary: legacyResult.summary,
+        normalizedPackage: null,
+      }
+    }
+
+    return {
+      ok: true,
+      errors,
+      warnings,
+      summary: legacyResult.summary,
+      normalizedPackage: legacyResult.normalizedPackage,
+    }
+  }
+
+  return validateLegacySonartraAssessmentPackageV2(input)
+}
+
 export function parseStoredValidatedAssessmentPackageV2(input: unknown): SonartraAssessmentPackageV2ValidatedImport | null {
   if (!input) {
     return null
@@ -572,7 +602,7 @@ export function parseStoredValidatedAssessmentPackageV2(input: unknown): Sonartr
   return validation.ok ? validation.normalizedPackage : null
 }
 
-export function validateSonartraAssessmentPackageV2(input: unknown): SonartraAssessmentPackageV2ValidationResult {
+function validateLegacySonartraAssessmentPackageV2(input: unknown): SonartraAssessmentPackageV2ValidationResult {
   const errors: SonartraAssessmentPackageV2ValidationIssue[] = []
   const warnings: SonartraAssessmentPackageV2ValidationIssue[] = []
   const summary = createEmptySummary()
