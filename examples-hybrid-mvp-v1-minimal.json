@@ -1,0 +1,75 @@
+{
+  "contractVersion": "hybrid_mvp_v1",
+  "assessmentId": "asm_hybrid_demo_001",
+  "assessmentKey": "hybrid-demo",
+  "title": "Hybrid MVP Demo Assessment",
+  "category": "individual",
+  "domains": [
+    {
+      "id": "dom_execution",
+      "key": "execution",
+      "label": "Execution"
+    }
+  ],
+  "signals": [
+    {
+      "id": "sig_focus",
+      "key": "focus",
+      "label": "Focus",
+      "domainId": "dom_execution"
+    },
+    {
+      "id": "sig_adaptability",
+      "key": "adaptability",
+      "label": "Adaptability",
+      "domainId": "dom_execution"
+    }
+  ],
+  "questions": [
+    {
+      "id": "q1",
+      "prompt": "When priorities shift, what do you usually do first?",
+      "responseModel": "single_select",
+      "options": [
+        {
+          "id": "q1_opt_a",
+          "label": "Reconfirm goals and sequence the next steps.",
+          "signalWeights": [
+            {
+              "signalId": "sig_focus",
+              "weight": 2
+            }
+          ]
+        },
+        {
+          "id": "q1_opt_b",
+          "label": "Try a new approach and iterate quickly.",
+          "signalWeights": [
+            {
+              "signalId": "sig_adaptability",
+              "weight": 2
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "outputTemplates": {
+    "overview": {
+      "default": "This profile blends stable execution with flexibility under changing conditions."
+    },
+    "signalNarratives": {
+      "sig_focus": {
+        "default": "You maintain clarity and structure when demands increase."
+      },
+      "sig_adaptability": {
+        "default": "You adjust quickly and test alternatives when context changes."
+      }
+    },
+    "domainNarratives": {
+      "dom_execution": {
+        "summary": "Execution reflects how consistently you translate intent into action."
+      }
+    }
+  }
+}
