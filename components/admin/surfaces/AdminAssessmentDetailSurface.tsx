@@ -12,6 +12,7 @@ import {
   Tabs,
 } from '@/components/admin/surfaces/AdminWireframePrimitives'
 import { AdminAssessmentVersionsManager } from '@/components/admin/surfaces/AdminAssessmentVersionsManager'
+import { AdminAssessmentAssignmentsPanel } from '@/components/admin/surfaces/AdminAssessmentAssignmentsPanel'
 import { Button } from '@/components/ui/Button'
 import {
   getAdminAssessmentCategoryLabel,
@@ -38,6 +39,10 @@ function getFlashMessage(mutation?: string | null): string | null {
       return 'Version published and set as the current live version.'
     case 'version-archived':
       return 'Version archived successfully.'
+    case 'assignment-created':
+      return 'Assessment assigned successfully.'
+    case 'assignment-error':
+      return 'Assignment could not be created. Check published status and user email.'
     default:
       return null
   }
@@ -227,6 +232,7 @@ export function AdminAssessmentDetailSurface({
         items={[
           { label: 'Overview', href: getTabHref(assessment.id, 'overview'), current: activeTab === 'overview' },
           { label: 'Versions', href: getTabHref(assessment.id, 'versions'), current: activeTab === 'versions', count: versions.length },
+          { label: 'Assignments', href: getTabHref(assessment.id, 'assignments'), current: activeTab === 'assignments' },
           { label: 'Settings', href: getTabHref(assessment.id, 'settings'), current: activeTab === 'settings' },
           { label: 'Activity', href: getTabHref(assessment.id, 'activity'), current: activeTab === 'activity', count: detailData.activity.length },
         ]}
@@ -234,6 +240,7 @@ export function AdminAssessmentDetailSurface({
 
       {activeTab === 'overview' ? <OverviewTab detailData={detailData} /> : null}
       {activeTab === 'versions' ? <AdminAssessmentVersionsManager assessmentId={assessment.id} versions={versions} currentPublishedVersionId={assessment.currentPublishedVersionId} /> : null}
+      {activeTab === 'assignments' ? <AdminAssessmentAssignmentsPanel assessmentId={assessment.id} /> : null}
       {activeTab === 'settings' ? <SettingsTab detailData={detailData} /> : null}
       {activeTab === 'activity' ? <ActivityTab detailData={detailData} /> : null}
     </div>

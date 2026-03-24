@@ -2,9 +2,9 @@ import type { AdminAssessmentPackageDetectedVersion, AdminAssessmentVersionPacka
 
 export type AdminAssessmentLifecycleStatus = 'draft' | 'published' | 'archived'
 export type AdminAssessmentVersionSourceType = 'manual' | 'import' | 'system'
-export type AdminAssessmentDetailTab = 'overview' | 'versions' | 'settings' | 'activity'
+export type AdminAssessmentDetailTab = 'overview' | 'versions' | 'assignments' | 'settings' | 'activity'
 
-export const ADMIN_ASSESSMENT_DETAIL_TABS: AdminAssessmentDetailTab[] = ['overview', 'versions', 'settings', 'activity']
+export const ADMIN_ASSESSMENT_DETAIL_TABS: AdminAssessmentDetailTab[] = ['overview', 'versions', 'assignments', 'settings', 'activity']
 export const ADMIN_ASSESSMENT_CATEGORIES = [
   'behavioural_intelligence',
   'team_dynamics',
