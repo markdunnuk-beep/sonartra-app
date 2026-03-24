@@ -27,8 +27,9 @@ test('canonical WPLP-80-style v2 package parses successfully', () => {
 })
 
 test('canonical v2 package fails when required identity fields are missing', () => {
-  const missingTitle = cloneFixture()
-  delete missingTitle.identity.title
+  const fixtureWithTitle = cloneFixture()
+  const { title: _omittedTitle, ...identityWithoutTitle } = fixtureWithTitle.identity
+  const missingTitle = { ...fixtureWithTitle, identity: identityWithoutTitle }
 
   const missingTitleResult = validateSonartraAssessmentPackageV2(missingTitle)
 
