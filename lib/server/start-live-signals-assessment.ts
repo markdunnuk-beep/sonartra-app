@@ -1,4 +1,5 @@
 import { queryDb, withTransaction } from '@/lib/db'
+import { linkLatestAssignmentToAssessment } from '@/lib/server/assessment-assignments'
 import type { AuthenticatedAppUser } from '@/lib/server/auth'
 import {
   resolveLiveSignalsPublishedVersionState,
@@ -14,6 +15,15 @@ interface StartAssessmentInput {
   source?: string
 }
 
+interface AssignedVersionRow {
+  assignment_id: string
+  version_id: string
+  version_key: string
+  version_name: string
+  total_questions: number
+  assessment_definition_id: string
+}
+
 interface ExistingAssessmentRow {
   id: string
   version_id: string
@@ -26,6 +36,7 @@ interface StartAssessmentDependencies {
   queryDb: QueryDb
   withTransaction: WithTransaction
   resolveLiveSignalsPublishedVersionState: typeof resolveLiveSignalsPublishedVersionState
+  linkLatestAssignmentToAssessment: typeof linkLatestAssignmentToAssessment
 }
 
 export interface StartLiveSignalsAssessmentSuccess {
@@ -48,6 +59,7 @@ const defaultDependencies: StartAssessmentDependencies = {
   queryDb,
   withTransaction,
   resolveLiveSignalsPublishedVersionState,
+  linkLatestAssignmentToAssessment,
 }
 
 function buildVersionPayload(version: { id: string; key: string; name: string; totalQuestions: number }) {
@@ -84,6 +96,40 @@ export async function startLiveSignalsAssessment(
     }
   }
 
+  const assignedVersionResult = await deps.queryDb<AssignedVersionRow>(
+    `SELECT ara.id AS assignment_id,
+            av.id AS version_id,
+            av.key AS version_key,
+            av.name AS version_name,
+            av.total_questions,
+            av.assessment_definition_id
+     FROM assessment_repository_assignments ara
+     INNER JOIN assessment_versions av ON av.id = ara.assessment_version_id
+     WHERE ara.target_user_id = $1
+       AND ara.assessment_definition_id = $2
+       AND ara.status IN ('assigned', 'in_progress', 'completed_processing')
+     ORDER BY ara.assigned_at DESC
+     LIMIT 1`,
+    [appUser.dbUserId, currentPublishedVersion.assessmentDefinitionId],
+  )
+
+  const assignedVersion = assignedVersionResult.rows[0] ?? null
+  const selectedVersion = assignedVersion
+    ? {
+        id: assignedVersion.version_id,
+        key: assignedVersion.version_key,
+        name: assignedVersion.version_name,
+        totalQuestions: assignedVersion.total_questions,
+        assessmentDefinitionId: assignedVersion.assessment_definition_id,
+      }
+    : {
+        id: currentPublishedVersion.assessmentVersionId,
+        key: currentPublishedVersion.assessmentVersionKey,
+        name: currentPublishedVersion.assessmentVersionName,
+        totalQuestions: currentPublishedVersion.totalQuestions,
+        assessmentDefinitionId: currentPublishedVersion.assessmentDefinitionId,
+      }
+
   const existingAssessment = await deps.queryDb<ExistingAssessmentRow>(
     `SELECT a.id,
             av.id AS version_id,
@@ -95,14 +141,23 @@ export async function startLiveSignalsAssessment(
      WHERE a.user_id = $1
        AND av.assessment_definition_id = $2
        AND a.status IN ('not_started', 'in_progress')
-     ORDER BY a.last_activity_at DESC NULLS LAST, a.created_at DESC
+     ORDER BY CASE WHEN a.assessment_version_id = $3 THEN 0 ELSE 1 END,
+              a.last_activity_at DESC NULLS LAST,
+              a.created_at DESC
      LIMIT 1`,
-    [appUser.dbUserId, currentPublishedVersion.assessmentDefinitionId],
+    [appUser.dbUserId, selectedVersion.assessmentDefinitionId, selectedVersion.id],
   )
 
   const resumedAssessment = existingAssessment.rows[0]
 
   if (resumedAssessment) {
+    await deps.linkLatestAssignmentToAssessment({
+      userId: appUser.dbUserId,
+      assessmentDefinitionId: selectedVersion.assessmentDefinitionId,
+      assessmentVersionId: resumedAssessment.version_id,
+      assessmentId: resumedAssessment.id,
+    })
+
     return {
       kind: 'ok',
       status: 200,
@@ -135,10 +190,17 @@ export async function startLiveSignalsAssessment(
         source
       ) VALUES ($1, NULL, $2, 'not_started', NOW(), NOW(), 0, 0, 0, 'not_scored', $3)
       RETURNING id`,
-      [appUser.dbUserId, currentPublishedVersion.assessmentVersionId, input.source ?? 'direct'],
+      [appUser.dbUserId, selectedVersion.id, input.source ?? (assignedVersion ? 'assignment' : 'direct')],
     )
 
     return result.rows[0]
+  })
+
+  await deps.linkLatestAssignmentToAssessment({
+    userId: appUser.dbUserId,
+    assessmentDefinitionId: selectedVersion.assessmentDefinitionId,
+    assessmentVersionId: selectedVersion.id,
+    assessmentId: createdAssessment.id,
   })
 
   return {
@@ -148,10 +210,10 @@ export async function startLiveSignalsAssessment(
       assessmentId: createdAssessment.id,
       resumed: false,
       version: buildVersionPayload({
-        id: currentPublishedVersion.assessmentVersionId,
-        key: currentPublishedVersion.assessmentVersionKey,
-        name: currentPublishedVersion.assessmentVersionName,
-        totalQuestions: currentPublishedVersion.totalQuestions,
+        id: selectedVersion.id,
+        key: selectedVersion.key,
+        name: selectedVersion.name,
+        totalQuestions: selectedVersion.totalQuestions,
       }),
     },
   }
