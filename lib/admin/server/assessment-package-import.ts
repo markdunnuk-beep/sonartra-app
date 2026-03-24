@@ -1,5 +1,6 @@
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1, validateSonartraAssessmentPackage, type AssessmentPackageStatus, type SonartraAssessmentPackageSummary, type SonartraAssessmentPackageValidationIssue } from '@/lib/admin/domain/assessment-package'
 import { compileAssessmentPackageV2, type ExecutableAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
+import { compileRuntimeContractV2, compileRuntimeContractV2DiagnosticsToIssues, type CompiledRuntimePlanV2 } from '@/lib/admin/domain/runtime-plan-v2-compiler'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, validateSonartraAssessmentPackageV2, type SonartraAssessmentPackageV2ValidatedImport } from '@/lib/admin/domain/assessment-package-v2'
 import { compileCanonicalToRuntimeContractV2DiagnosticsToIssues, isRuntimeContractV2Payload, SONARTRA_RUNTIME_CONTRACT_V2, validateRuntimeContractV2 } from '@/lib/admin/domain/package-runtime-v2'
 import type { AssessmentImportConflict, AssessmentPackageIdentity } from '@/lib/admin/domain/assessment-management'
@@ -51,6 +52,7 @@ export interface ImportDiagnosticCollection {
   canonicalValidation: SonartraAssessmentPackageValidationIssue[]
   compilation: SonartraAssessmentPackageValidationIssue[]
   runtimeValidation: SonartraAssessmentPackageValidationIssue[]
+  planCompilation?: SonartraAssessmentPackageValidationIssue[]
   general: SonartraAssessmentPackageValidationIssue[]
 }
 
@@ -66,10 +68,12 @@ export interface AdminAssessmentImportAnalysis {
   compileRequired: boolean
   compilePerformed: boolean
   compiledRuntimeArtifactProduced: boolean
+  compiledRuntimePlanProduced?: boolean
   readinessSemantic: ImportReadinessSemantic
   diagnostics: ImportDiagnosticCollection
   compatibilityFlags: string[]
   compiledRuntimeArtifact: ExecutableAssessmentPackageV2 | null
+  compiledRuntimePlan?: CompiledRuntimePlanV2 | null
 }
 
 export interface ImportedAssessmentPackageResult {
@@ -227,6 +231,7 @@ interface ValidatedDetectedPackage {
   diagnostics: ImportDiagnosticCollection
   compilePerformed: boolean
   compileRequired: boolean
+  runtimePlan: CompiledRuntimePlanV2 | null
 }
 
 export function validateDetectedPackage(input: unknown, detected: PackageVersionDetectionResult): ValidatedDetectedPackage {
@@ -249,10 +254,12 @@ export function validateDetectedPackage(input: unknown, detected: PackageVersion
         canonicalValidation: [],
         compilation: [],
         runtimeValidation: [],
+        planCompilation: [],
         general: [...validation.errors, ...validation.warnings],
       },
       compilePerformed: false,
       compileRequired: false,
+      runtimePlan: null,
     }
   }
 
@@ -262,6 +269,7 @@ export function validateDetectedPackage(input: unknown, detected: PackageVersion
       canonicalValidation: [...canonicalValidation.errors, ...canonicalValidation.warnings],
       compilation: [],
       runtimeValidation: [],
+      planCompilation: [],
       general: [],
     }
 
@@ -270,6 +278,9 @@ export function validateDetectedPackage(input: unknown, detected: PackageVersion
     let runtimeValidationWarnings: SonartraAssessmentPackageValidationIssue[] = []
     let compileErrors: SonartraAssessmentPackageValidationIssue[] = []
     let compileWarnings: SonartraAssessmentPackageValidationIssue[] = []
+    let planCompileErrors: SonartraAssessmentPackageValidationIssue[] = []
+    let planCompileWarnings: SonartraAssessmentPackageValidationIssue[] = []
+    let runtimePlan: CompiledRuntimePlanV2 | null = null
 
     if (canonicalValidation.ok && canonicalValidation.normalizedPackage) {
       compileResult = compileAssessmentPackageV2(canonicalValidation.normalizedPackage)
@@ -283,6 +294,14 @@ export function validateDetectedPackage(input: unknown, detected: PackageVersion
         runtimeValidationErrors = runtimeValidation.errors
         runtimeValidationWarnings = runtimeValidation.warnings
         diagnostics.runtimeValidation = [...runtimeValidation.errors, ...runtimeValidation.warnings]
+        if (runtimeValidation.ok) {
+          const planCompilation = compileRuntimeContractV2(compileResult.executablePackage)
+          const planIssues = compileRuntimeContractV2DiagnosticsToIssues(planCompilation.diagnostics)
+          planCompileErrors = planIssues.errors
+          planCompileWarnings = planIssues.warnings
+          diagnostics.planCompilation = [...planCompileErrors, ...planCompileWarnings]
+          runtimePlan = planCompilation.compiledPlan
+        }
       }
     }
 
@@ -290,12 +309,14 @@ export function validateDetectedPackage(input: unknown, detected: PackageVersion
       ...canonicalValidation.errors,
       ...compileErrors,
       ...runtimeValidationErrors,
+      ...planCompileErrors,
     ]
 
     const warnings = [
       ...canonicalValidation.warnings,
       ...compileWarnings,
       ...runtimeValidationWarnings,
+      ...planCompileWarnings,
     ]
 
     return {
@@ -325,13 +346,18 @@ export function validateDetectedPackage(input: unknown, detected: PackageVersion
       diagnostics,
       compilePerformed: Boolean(canonicalValidation.ok && canonicalValidation.normalizedPackage),
       compileRequired: true,
+      runtimePlan,
     }
   }
 
   if (detected.classifier === 'runtime_contract_v2') {
     const runtimeValidation = validateRuntimeContractV2(input)
-    const errors = runtimeValidation.errors
-    const warnings = runtimeValidation.warnings
+    const planCompilation = runtimeValidation.ok && runtimeValidation.normalizedRuntimePackage
+      ? compileRuntimeContractV2(runtimeValidation.normalizedRuntimePackage)
+      : null
+    const planIssues = compileRuntimeContractV2DiagnosticsToIssues(planCompilation?.diagnostics ?? [])
+    const errors = [...runtimeValidation.errors, ...planIssues.errors]
+    const warnings = [...runtimeValidation.warnings, ...planIssues.warnings]
 
     return {
       status: statusFromIssues(errors, warnings),
@@ -350,11 +376,13 @@ export function validateDetectedPackage(input: unknown, detected: PackageVersion
       diagnostics: {
         canonicalValidation: [],
         compilation: [],
-        runtimeValidation: [...errors, ...warnings],
+        planCompilation: [...planIssues.errors, ...planIssues.warnings],
+        runtimeValidation: [...runtimeValidation.errors, ...runtimeValidation.warnings],
         general: [],
       },
       compilePerformed: false,
       compileRequired: false,
+      runtimePlan: planCompilation?.compiledPlan ?? null,
     }
   }
 
@@ -375,10 +403,12 @@ export function validateDetectedPackage(input: unknown, detected: PackageVersion
       canonicalValidation: [],
       compilation: [],
       runtimeValidation: [],
+      planCompilation: [],
       general: errors,
     },
     compilePerformed: false,
     compileRequired: false,
+    runtimePlan: null,
   }
 }
 
@@ -546,6 +576,7 @@ export function analyzePackageForImport(input: unknown): ImportedAssessmentPacka
     compileRequired: validated.compileRequired,
     compilePerformed: validated.compilePerformed,
     compiledRuntimeArtifactProduced: Boolean(validated.runtimePayload),
+    compiledRuntimePlanProduced: Boolean(validated.runtimePlan),
     readinessSemantic: readiness.semantic,
     diagnostics: validated.diagnostics,
     compatibilityFlags: [
@@ -553,6 +584,7 @@ export function analyzePackageForImport(input: unknown): ImportedAssessmentPacka
       ...(detected.classifier === 'canonical_contract_v2' && !validated.runtimePayload ? ['canonical_compile_incomplete'] : []),
     ],
     compiledRuntimeArtifact: validated.runtimePayload,
+    compiledRuntimePlan: validated.runtimePlan,
   }
 
   return withValidationSummary({
