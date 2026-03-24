@@ -6,9 +6,39 @@ import { completeAssessmentWithResults } from '@/lib/server/assessment-completio
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 import { markAssignmentCompletionProcessing, markAssignmentFailed, markAssignmentResultReady } from '@/lib/server/assessment-assignments';
 
-export async function POST(request: Request) {
+async function runAssignmentLifecycleUpdate(step: 'mark_completion_processing' | 'mark_result_ready' | 'mark_failed', assessmentId: string, work: () => Promise<void>) {
   try {
-    const appUser = await resolveAuthenticatedAppUser();
+    await work();
+  } catch (error) {
+    logDatabaseError(`[assessment.complete] assignment lifecycle update failed: ${step}`, error, {
+      route: '/api/assessments/complete',
+      assessmentId,
+      step,
+    });
+  }
+}
+
+interface CompleteRouteDependencies {
+  resolveAuthenticatedAppUser: typeof resolveAuthenticatedAppUser;
+  queryDb: typeof queryDb;
+  completeAssessmentWithResults: typeof completeAssessmentWithResults;
+  markAssignmentCompletionProcessing: typeof markAssignmentCompletionProcessing;
+  markAssignmentResultReady: typeof markAssignmentResultReady;
+  markAssignmentFailed: typeof markAssignmentFailed;
+}
+
+const defaultDependencies: CompleteRouteDependencies = {
+  resolveAuthenticatedAppUser,
+  queryDb,
+  completeAssessmentWithResults,
+  markAssignmentCompletionProcessing,
+  markAssignmentResultReady,
+  markAssignmentFailed,
+};
+
+export async function postCompleteAssessment(request: Request, dependencies: CompleteRouteDependencies = defaultDependencies) {
+  try {
+    const appUser = await dependencies.resolveAuthenticatedAppUser();
 
     if (!appUser) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
@@ -20,7 +50,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'assessmentId is required.' }, { status: 400 });
     }
 
-    const ownership = await queryDb<{ id: string }>(
+    const ownership = await dependencies.queryDb<{ id: string }>(
       `SELECT id
        FROM assessments
        WHERE id = $1 AND user_id = $2`,
@@ -31,14 +61,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'Assessment not found.' }, { status: 404 });
     }
 
-    const result = await completeAssessmentWithResults(body.assessmentId);
+    const result = await dependencies.completeAssessmentWithResults(body.assessmentId);
 
     if (result.body.ok) {
-      await markAssignmentCompletionProcessing(body.assessmentId)
+      await runAssignmentLifecycleUpdate('mark_completion_processing', body.assessmentId, async () => {
+        await dependencies.markAssignmentCompletionProcessing(body.assessmentId);
+      });
+
       if (result.body.resultStatus === 'succeeded') {
-        await markAssignmentResultReady({ assessmentId: body.assessmentId, resultId: result.body.resultId })
+        await runAssignmentLifecycleUpdate('mark_result_ready', body.assessmentId, async () => {
+          await dependencies.markAssignmentResultReady({ assessmentId: body.assessmentId, resultId: result.body.resultId });
+        });
       } else if (result.body.resultStatus === 'failed') {
-        await markAssignmentFailed({ assessmentId: body.assessmentId, resultId: result.body.resultId })
+        await runAssignmentLifecycleUpdate('mark_failed', body.assessmentId, async () => {
+          await dependencies.markAssignmentFailed({ assessmentId: body.assessmentId, resultId: result.body.resultId });
+        });
       }
     }
 
@@ -48,4 +85,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: false, error: 'Unable to complete assessment.' }, { status: 500 });
   }
+}
+
+export async function POST(request: Request) {
+  return postCompleteAssessment(request);
 }
