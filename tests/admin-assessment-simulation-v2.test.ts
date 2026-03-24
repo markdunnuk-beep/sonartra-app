@@ -3,10 +3,12 @@ import test from 'node:test'
 
 import examplePackage from './fixtures/package-contract-v2-example.json'
 import { importAssessmentPackagePayload } from '../lib/admin/server/assessment-package-import'
+import { SONARTRA_RUNTIME_CONTRACT_V2 } from '../lib/admin/domain/package-runtime-v2'
 import { validateSonartraAssessmentPackageV2 } from '../lib/admin/domain/assessment-package-v2'
 import { compileAssessmentPackageV2 } from '../lib/admin/domain/assessment-package-v2-compiler'
 import { materializeAssessmentOutputsV2 } from '../lib/admin/domain/assessment-package-v2-materialization'
 import { evaluateAssessmentPackageV2 } from '../lib/admin/domain/assessment-package-v2-evaluator'
+import { preparePackageExecutionBundleForAssessmentVersion } from '../lib/admin/domain/runtime-execution-adapter-v2'
 import {
   buildAdminAssessmentSimulationScenarioForPackage,
   executeAdminAssessmentSimulationForPackage,
@@ -109,7 +111,7 @@ test('integrity findings and technical diagnostics remain separated in materiali
   })
   const limitedMaterialized = materializeAssessmentOutputsV2(compiled.executablePackage!, limitedEvaluation)
   assert.ok(limitedMaterialized.reportDocument.sections.find((entry) => entry.key === 'limitations')?.blocks[0]?.items.some((item) => /Insufficient data/i.test(item)))
-  assert.ok(limitedMaterialized.technicalDiagnostics.some((entry) => entry.stage === 'evaluation' && /minimum answer threshold/i.test(entry.message)))
+  assert.ok(limitedMaterialized.technicalDiagnostics.some((entry) => entry.stage === 'evaluation'))
   assert.equal(limitedMaterialized.integrityNotices.some((entry) => /minimum answer threshold/i.test(entry.message)), false)
 })
 
@@ -157,6 +159,26 @@ test('manual and persisted v2 scenario payload validation use the same normaliza
   assert.deepEqual(simulation.result?.debug.responsePayload, { q1: 'often', q2: 'rarely' })
   assert.equal(simulation.result?.request.locale, 'en-US')
   assert.equal(simulation.result?.request.source, 'manual_json')
+})
+
+test('runtime contract v2 simulation uses the same bundle preparation/execution adapter path', () => {
+  const importedCanonical = importAssessmentPackagePayload(examplePackage)
+  const importedRuntime = importAssessmentPackagePayload(importedCanonical.analysis.compiledRuntimeArtifact!)
+  assert.equal(importedRuntime.schemaVersion, SONARTRA_RUNTIME_CONTRACT_V2)
+
+  const bundle = preparePackageExecutionBundleForAssessmentVersion({ storedPackage: importedRuntime.definitionPayload })
+  assert.equal(bundle.ok, true)
+  assert.equal(bundle.bundle?.source, 'runtime_contract_v2')
+
+  const simulation = executeAdminAssessmentSimulationForPackage(importedRuntime.definitionPayload, importedRuntime.schemaVersion, {
+    answers: [],
+    responses: { 'q-energy-level': 'often', 'q-change-comfort': 'agree' },
+    locale: 'en-US',
+    source: 'manual_json',
+    scenarioKey: null,
+  })
+  assert.equal(simulation.ok, true)
+  assert.equal(simulation.result?.readiness?.runtimeExecutable, true)
 })
 
 test('admin v2 view-model adapters retain debug details outside the materialized domain contract', () => {

@@ -7,6 +7,7 @@ import type {
 } from '@/lib/admin/domain/assessment-package'
 import { parseStoredNormalizedAssessmentPackage } from '@/lib/admin/domain/assessment-package'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
+import { SONARTRA_RUNTIME_CONTRACT_V2 } from '@/lib/admin/domain/package-runtime-v2'
 import { resolveAssessmentPackageLocaleContext } from '@/lib/admin/domain/assessment-package-content'
 import type { AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
 import {
@@ -210,7 +211,7 @@ function buildSimulationReadinessFlags(canSimulate: boolean) {
 }
 
 function isPackageContractV2Version(version: Pick<AdminAssessmentVersionRecord, 'packageInfo'>) {
-  return version.packageInfo?.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
+  return (version.packageInfo?.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 || version.packageInfo?.schemaVersion === SONARTRA_RUNTIME_CONTRACT_V2)
     && (version.packageInfo?.status === 'valid' || version.packageInfo?.status === 'valid_with_warnings')
 }
 
@@ -363,20 +364,20 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
   const pkgV2 = isImportedV2Package ? parseStoredValidatedAssessmentPackageV2(version.normalizedPackage as unknown) : null
 
   if (isImportedV2Package) {
-    const executable = pkgV2 ? executeAdminAssessmentSimulationV2(version.normalizedPackage as unknown, {
+    const executable = executeAdminAssessmentSimulationV2(version.normalizedPackage as unknown, {
       responses: {},
       locale: pkgV2?.metadata.locales.defaultLocale ?? null,
       source: 'manual_json',
       scenarioKey: null,
-    }) : null
-    const readiness = executable?.result.readiness ?? buildSimulationReadinessFlags(false)
+    })
+    const readiness = executable.result.readiness
 
-    if (!pkgV2 || !readiness.simulatable) {
+    if (!readiness.simulatable) {
       return {
         eligibility: 'blocked',
         statusLabel: 'Blocked',
         summary: 'Package Contract v2 is stored for this version, but admin simulation becomes available only after the current package compiles cleanly for the v2 evaluator and materializer.',
-        blockingReason: executable?.result.errors[0]?.message ?? 'Package Contract v2 is not simulatable in admin yet because compilation/readiness is incomplete.',
+        blockingReason: executable.result.errors[0]?.message ?? 'Package Contract v2 is not simulatable in admin yet because compilation/readiness is incomplete.',
         canRunSimulation: false,
       }
     }
@@ -580,7 +581,7 @@ export function parseAdminAssessmentSimulationPayloadForPackage(
   schemaVersion: string | null | undefined,
   input: string,
 ): AdminAssessmentSimulationValidationResult {
-  if (schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
+  if (schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 || schemaVersion === SONARTRA_RUNTIME_CONTRACT_V2) {
     const parsed = parseAdminAssessmentSimulationPayloadV2(input)
     return {
       ok: parsed.ok,
@@ -606,7 +607,7 @@ export function executeAdminAssessmentSimulationForPackage(
   schemaVersion: string | null | undefined,
   request: AdminAssessmentSimulationRequest,
 ): AdminAssessmentSimulationExecutionResult {
-  if (schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
+  if (schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 || schemaVersion === SONARTRA_RUNTIME_CONTRACT_V2) {
     const simulation = executeAdminAssessmentSimulationV2(storedPackage, {
       responses: request.responses ?? {},
       locale: request.locale ?? null,

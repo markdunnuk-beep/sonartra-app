@@ -341,6 +341,19 @@ export function executeCompiledRuntimePlanV2(
     stageIssueCount[issue.stage].count += 1
     if (issue.fatal) stageIssueCount[issue.stage].fatal += 1
   }
+  const hasFatalIssueForStage = (stage: RuntimeExecutionStage) => stageIssueCount[stage].fatal > 0
+  const stageOrder: RuntimeExecutionStage[] = ['scoring', 'derivation', 'normalization', 'aggregation', 'integrity', 'outputs']
+  const skippedStages = new Map<RuntimeExecutionStage, string>()
+  const markStageSkipped = (stage: RuntimeExecutionStage, reason: string) => {
+    skippedStages.set(stage, reason)
+    pushIssue({
+      code: 'skipped_due_to_upstream_failure',
+      stage,
+      fatal: false,
+      path: `stages.${stage}`,
+      message: reason,
+    })
+  }
 
   const context = {
     responsesByQuestionId: {} as Record<string, unknown>,
@@ -491,7 +504,14 @@ export function executeCompiledRuntimePlanV2(
     context.rawDimensionValues[dimensionId] = aggregated
   }
 
-  for (const derivedId of compiledPlan.executionOrder.derivedDimensionIds) {
+  if (hasFatalIssueForStage('scoring')) {
+    for (const stage of stageOrder.slice(1)) {
+      markStageSkipped(stage, `Stage "${stage}" was skipped because scoring produced fatal execution issues.`)
+    }
+  }
+
+  if (!skippedStages.has('derivation')) {
+    for (const derivedId of compiledPlan.executionOrder.derivedDimensionIds) {
     const derivedPlan = compiledPlan.derivedDimensions[derivedId]
     const derivedRuntime = options.executablePackage.derivedDimensionsById[derivedId]
     if (!derivedRuntime) {
@@ -551,10 +571,12 @@ export function executeCompiledRuntimePlanV2(
     }
 
     context.derivedDimensionValues[derivedId] = nextValue
+    }
   }
 
   const normalizationEntries: RuntimeNormalizationEntryV2[] = []
-  for (const instruction of compiledPlan.normalizationInstructions) {
+  if (!skippedStages.has('normalization')) {
+    for (const instruction of compiledPlan.normalizationInstructions) {
     const rule = options.executablePackage.normalizationRulesById[instruction.ruleId]
     if (!rule) {
       pushIssue({ code: 'unresolved_runtime_input', stage: 'normalization', fatal: true, path: `normalization.${instruction.ruleId}`, message: `Normalization rule "${instruction.ruleId}" is missing.` })
@@ -580,10 +602,12 @@ export function executeCompiledRuntimePlanV2(
 
     const normalized = evaluateNormalization(rule, rawScore)
     normalizationEntries.push({ ruleId: rule.id, target: instruction.target, ...normalized })
+    }
   }
 
   const aggregationEntries: RuntimeAggregationEntryV2[] = []
-  for (const aggregationId of compiledPlan.executionOrder.aggregationIds) {
+  if (!skippedStages.has('aggregation')) {
+    for (const aggregationId of compiledPlan.executionOrder.aggregationIds) {
     const aggregationPlan = compiledPlan.aggregations[aggregationId]
     const value = aggregationPlan.source.kind === 'raw_dimension'
       ? context.rawDimensionValues[aggregationPlan.source.id]
@@ -595,10 +619,12 @@ export function executeCompiledRuntimePlanV2(
       continue
     }
     aggregationEntries.push({ aggregationId, source: aggregationPlan.source, status: 'computed', value })
+    }
   }
 
   const integrityEntries: RuntimeIntegrityEntryV2[] = []
-  for (const ruleId of compiledPlan.executionOrder.integrityRuleIds) {
+  if (!skippedStages.has('integrity')) {
+    for (const ruleId of compiledPlan.executionOrder.integrityRuleIds) {
     const runtimeRule = options.executablePackage.integrityRulesById[ruleId]
     if (!runtimeRule) {
       pushIssue({ code: 'unresolved_runtime_input', stage: 'integrity', fatal: true, path: `integrity.${ruleId}`, message: `Integrity rule "${ruleId}" is missing.` })
@@ -624,12 +650,14 @@ export function executeCompiledRuntimePlanV2(
     const entry: RuntimeIntegrityEntryV2 = { ruleId, status, triggered, severity: runtimeRule.severity, message: runtimeRule.message }
     integrityEntries.push(entry)
     context.integrityByRuleId[ruleId] = entry
+    }
   }
 
   const matchedRuleIds: string[] = []
   const unmetRuleIds: string[] = []
   const outputByRuleId: RuntimeOutputsResultV2['byRuleId'] = {}
-  for (const ruleId of compiledPlan.executionOrder.outputRuleIds) {
+  if (!skippedStages.has('outputs')) {
+    for (const ruleId of compiledPlan.executionOrder.outputRuleIds) {
     const runtimeRule = options.executablePackage.outputRulesById[ruleId]
     if (!runtimeRule) {
       pushIssue({ code: 'unresolved_runtime_input', stage: 'outputs', fatal: true, path: `outputs.${ruleId}`, message: `Output rule "${ruleId}" is missing.` })
@@ -645,9 +673,19 @@ export function executeCompiledRuntimePlanV2(
       status: status ? 'matched' : 'unmet',
       targetReportKeys: [...compiledPlan.outputInstructions[ruleId].targetReportKeys],
     }
+    }
   }
 
   const toStageResult = (stage: RuntimeExecutionStage): RuntimeExecutionStageResultV2 => {
+    if (skippedStages.has(stage)) {
+      return {
+        stage,
+        status: 'skipped',
+        issueCount: stageIssueCount[stage].count,
+        fatalIssueCount: stageIssueCount[stage].fatal,
+        skippedReason: skippedStages.get(stage) ?? null,
+      }
+    }
     const stats = stageIssueCount[stage]
     if (stats.fatal > 0) return { stage, status: 'failed', issueCount: stats.count, fatalIssueCount: stats.fatal, skippedReason: null }
     if (stats.count > 0) return { stage, status: 'completed_with_issues', issueCount: stats.count, fatalIssueCount: stats.fatal, skippedReason: null }

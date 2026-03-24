@@ -58,12 +58,16 @@ test('scoring reports missing runtime inputs explicitly', () => {
 
 test('derived stage computes in dependency order and skips deterministically on upstream failures', () => {
   const { executable, plan } = compileFixture()
-  const responses = normalizeRuntimeResponsesForExecutionV2({ responses: {} })
+  const firstQuestionId = plan.executionOrder.questionIds[0]!
+  delete executable.responseModels.modelsById[plan.itemMap[firstQuestionId]!.responseModelId]
+  const responses = normalizeRuntimeResponsesForExecutionV2({ responses: { [firstQuestionId]: 'often' } })
 
   const result = executeCompiledRuntimePlanV2(plan, responses, { executablePackage: executable })
 
   assert.equal(plan.executionOrder.derivedDimensionIds[0], 'adaptive-balance')
   assert.equal(result.issues.some((issue) => issue.stage === 'derivation' && issue.code === 'skipped_due_to_upstream_failure'), true)
+  assert.equal(result.stages.derivation.status, 'skipped')
+  assert.equal(result.stages.outputs.status, 'skipped')
 })
 
 test('normalization emits unsupported_execution_pattern when method is unsupported', () => {

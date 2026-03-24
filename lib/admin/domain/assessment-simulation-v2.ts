@@ -1,6 +1,6 @@
 import type { AdminAssessmentPackageReadinessFlags } from '@/lib/admin/server/assessment-package-import'
 import type { AdminAssessmentSimulationInputMode, AdminAssessmentSimulationIssue, AdminAssessmentSimulationScenarioKey } from '@/lib/admin/domain/assessment-simulation'
-import { compileAssessmentPackageV2, type ExecutableAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
+import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import { evaluateAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
 import {
   materializeAssessmentOutputsV2,
@@ -8,6 +8,11 @@ import {
   type MaterializedAssessmentOutputsV2,
 } from '@/lib/admin/domain/assessment-package-v2-materialization'
 import { parseStoredValidatedAssessmentPackageV2, type SonartraAssessmentPackageV2ValidatedImport } from '@/lib/admin/domain/assessment-package-v2'
+import {
+  executePreparedRuntimeExecutionBundleV2,
+  mapExecutionResultToLegacyScoreSummary,
+  preparePackageExecutionBundleForAssessmentVersion,
+} from '@/lib/admin/domain/runtime-execution-adapter-v2'
 
 export type SimulationReadinessStatus = 'not_ready' | 'simulatable' | 'simulatable_with_warnings'
 export type V2SimulationCompileStatus = 'ready' | 'failed'
@@ -111,25 +116,6 @@ export interface ExecuteAdminAssessmentSimulationV2Result {
 
 function toIssue(path: string, message: string): AdminAssessmentSimulationIssue {
   return { path, message }
-}
-
-function detectReadiness(
-  pkg: SonartraAssessmentPackageV2ValidatedImport | null,
-  executablePackage: ExecutableAssessmentPackageV2 | null,
-  compileErrors: AdminAssessmentSimulationIssue[],
-): AdminAssessmentPackageReadinessFlags {
-  const structurallyValid = Boolean(pkg)
-  const compilable = Boolean(executablePackage) && compileErrors.length === 0
-  return {
-    structurallyValid,
-    importable: structurallyValid,
-    compilable,
-    evaluatable: compilable,
-    simulatable: compilable,
-    runtimeExecutable: false,
-    liveRuntimeEnabled: false,
-    publishable: false,
-  }
 }
 
 function selectScenarioResponse(questionId: string, optionIds: string[], key: AdminAssessmentSimulationScenarioKey) {
@@ -261,24 +247,10 @@ export function executeAdminAssessmentSimulationV2(
   storedPackage: unknown,
   request: AdminAssessmentSimulationRequestV2,
 ): ExecuteAdminAssessmentSimulationV2Result {
-  const pkg = parseStoredValidatedAssessmentPackageV2(storedPackage)
-  const pkgErrors: AdminAssessmentSimulationIssue[] = []
-  const compileErrors: AdminAssessmentSimulationIssue[] = []
-
-  if (!pkg) {
-    pkgErrors.push(toIssue('package', 'Package Contract v2 simulation is unavailable because the stored package is missing or invalid.'))
-  }
-
-  const compileResult = pkg ? compileAssessmentPackageV2(pkg) : null
-  if (compileResult && !compileResult.ok) {
-    for (const diagnostic of compileResult.diagnostics.filter((entry) => entry.severity === 'error')) {
-      compileErrors.push(toIssue(diagnostic.path, diagnostic.message))
-    }
-  }
-
-  const readiness = detectReadiness(pkg, compileResult?.executablePackage ?? null, compileErrors)
+  const bundleResult = preparePackageExecutionBundleForAssessmentVersion({ storedPackage })
+  const readiness = bundleResult.readiness
   const notReady = !readiness.simulatable
-  if (!pkg || !compileResult?.executablePackage || notReady) {
+  if (!bundleResult.bundle || notReady) {
     return {
       ok: false,
       result: {
@@ -287,11 +259,11 @@ export function executeAdminAssessmentSimulationV2(
         readinessStatus: 'not_ready',
         compileStatus: 'failed',
         evaluationStatus: 'not_run',
-        errors: [...pkgErrors, ...compileErrors],
-        warnings: [],
+        errors: bundleResult.errors.map((entry) => toIssue(entry.path, entry.message)),
+        warnings: bundleResult.warnings.map((entry) => toIssue(entry.path, entry.message)),
         summaryMetrics: {
           answeredCount: Object.keys(request.responses).length,
-          totalQuestions: pkg?.questions.length ?? 0,
+          totalQuestions: bundleResult.bundle?.compiledRuntimePlan.executionOrder.questionIds.length ?? 0,
           scoredDimensions: 0,
           insufficientDimensions: 0,
           triggeredOutputCount: 0,
@@ -308,28 +280,39 @@ export function executeAdminAssessmentSimulationV2(
     }
   }
 
-  const evaluation = evaluateAssessmentPackageV2(compileResult.executablePackage, request.responses, {
+  const runtimeExecution = executePreparedRuntimeExecutionBundleV2({
+    bundle: bundleResult.bundle,
+    responses: request.responses,
+  })
+  const pkg = parseStoredValidatedAssessmentPackageV2(storedPackage)
+  const compileResult = pkg ? compileAssessmentPackageV2(pkg) : null
+  const executableForMaterialization = compileResult?.executablePackage ?? bundleResult.bundle.runtimeArtifact
+
+  const evaluation = evaluateAssessmentPackageV2(executableForMaterialization, request.responses, {
     includeTrace: true,
     evaluationId: 'admin-simulation-v2',
   })
 
-  const materializedOutputs = materializeAssessmentOutputsV2(compileResult.executablePackage, evaluation)
+  const materializedOutputs = materializeAssessmentOutputsV2(executableForMaterialization, evaluation)
   const warnings = toIssuesFromTechnicalDiagnostics(materializedOutputs.technicalDiagnostics.filter((entry) => entry.severity === 'warning'))
   const errors = toIssuesFromTechnicalDiagnostics(materializedOutputs.technicalDiagnostics.filter((entry) => entry.severity === 'error'))
+  warnings.push(...runtimeExecution.warnings.map((entry) => toIssue(entry.path, entry.message)))
+  errors.push(...runtimeExecution.errors.map((entry) => toIssue(entry.path, entry.message)))
 
   const answeredQuestionIds = Object.keys(request.responses).filter((questionId) => request.responses[questionId] !== undefined)
-  const missingQuestionIds = compileResult.executablePackage.executionPlan.questionIds.filter((questionId) => !answeredQuestionIds.includes(questionId))
+  const missingQuestionIds = bundleResult.bundle.compiledRuntimePlan.executionOrder.questionIds.filter((questionId) => !answeredQuestionIds.includes(questionId))
+  const runtimeSummary = runtimeExecution.executionResult ? mapExecutionResultToLegacyScoreSummary(runtimeExecution.executionResult) : null
 
   const viewModel: AdminSimulationViewModelV2 = {
     packageSummary: {
-      assessmentKey: compileResult.executablePackage.metadata.assessmentKey,
-      assessmentName: compileResult.executablePackage.metadata.assessmentName,
-      packageSemver: compileResult.executablePackage.metadata.compatibility.packageSemver,
-      questionCount: compileResult.executablePackage.executionPlan.questionIds.length,
+      assessmentKey: bundleResult.bundle.runtimeArtifact.metadata.assessmentKey,
+      assessmentName: bundleResult.bundle.runtimeArtifact.metadata.assessmentName,
+      packageSemver: bundleResult.bundle.runtimeArtifact.metadata.compatibility.packageSemver,
+      questionCount: bundleResult.bundle.compiledRuntimePlan.executionOrder.questionIds.length,
     },
     responseSummary: {
       answeredCount: answeredQuestionIds.length,
-      totalQuestions: compileResult.executablePackage.executionPlan.questionIds.length,
+      totalQuestions: bundleResult.bundle.compiledRuntimePlan.executionOrder.questionIds.length,
       answeredQuestionIds,
       missingQuestionIds,
     },
@@ -378,28 +361,28 @@ export function executeAdminAssessmentSimulationV2(
   }
 
   return {
-    ok: evaluation.status !== 'failed' && errors.length === 0,
+    ok: runtimeExecution.ok && evaluation.status !== 'failed' && errors.length === 0,
     result: {
       contractVersion: 'package_contract_v2',
       readiness,
       readinessStatus: warnings.length > 0 ? 'simulatable_with_warnings' : 'simulatable',
       compileStatus: 'ready',
-      evaluationStatus: evaluation.status,
+      evaluationStatus: runtimeExecution.executionResult?.status === 'failed' ? 'failed' : evaluation.status,
       errors,
       warnings,
       summaryMetrics: {
         answeredCount: answeredQuestionIds.length,
-        totalQuestions: compileResult.executablePackage.executionPlan.questionIds.length,
+        totalQuestions: bundleResult.bundle.compiledRuntimePlan.executionOrder.questionIds.length,
         scoredDimensions: Object.values(evaluation.rawDimensions).filter((entry) => entry.status === 'scored').length,
         insufficientDimensions: Object.values(evaluation.rawDimensions).filter((entry) => entry.status !== 'scored').length,
-        triggeredOutputCount: evaluation.outputRuleFindings.filter((entry) => entry.status === 'triggered').length,
+        triggeredOutputCount: runtimeSummary?.triggeredOutputCount ?? evaluation.outputRuleFindings.filter((entry) => entry.status === 'triggered').length,
         triggeredIntegrityCount: evaluation.integrityFindings.filter((entry) => entry.status === 'triggered').length,
       },
       materializedOutputs,
       viewModel,
       debug: {
-        compiledPackageKey: compileResult.executablePackage.metadata.assessmentKey,
-        evaluationId: evaluation.executionMetadata.evaluationId,
+        compiledPackageKey: bundleResult.bundle.runtimeArtifact.metadata.assessmentKey,
+        evaluationId: runtimeExecution.executionResult?.summary.timestamp ?? evaluation.executionMetadata.evaluationId,
         responsePayload: { ...request.responses },
       },
     },
