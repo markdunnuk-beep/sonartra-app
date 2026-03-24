@@ -32,6 +32,14 @@ interface AssessmentInventoryAssessmentRow extends AssessmentRow {
 interface AssignmentStateRow {
   id: string
   status: 'assigned' | 'in_progress' | 'completed_processing' | 'results_ready' | 'failed' | 'cancelled'
+  assessment_definition_id: string
+  assessment_definition_key: string
+  assessment_definition_slug: string
+  assessment_version_id: string
+  assessment_version_key: string
+  assessment_version_name: string
+  total_questions: number
+  is_active: boolean
   assessment_id: string | null
   latest_result_id: string | null
   assigned_at: string
@@ -222,19 +230,33 @@ async function getLatestReadyResultForUser(
   return result.rows[0] ?? null
 }
 
-async function getLatestAssignmentStateForUser(
+async function getLatestSignalsAssignmentStateForUser(
   query: typeof queryDb,
   userId: string,
-  assessmentDefinitionId: string,
 ): Promise<AssignmentStateRow | null> {
   const result = await query<AssignmentStateRow>(
-    `SELECT id, status, assessment_id, latest_result_id, assigned_at
-     FROM assessment_repository_assignments
-     WHERE target_user_id = $1
-       AND assessment_definition_id = $2
-     ORDER BY assigned_at DESC
+    `SELECT ara.id,
+            ara.status,
+            ad.id AS assessment_definition_id,
+            ad.key AS assessment_definition_key,
+            ad.slug AS assessment_definition_slug,
+            av.id AS assessment_version_id,
+            av.key AS assessment_version_key,
+            av.name AS assessment_version_name,
+            av.total_questions,
+            av.is_active,
+            ara.assessment_id,
+            ara.latest_result_id,
+            ara.assigned_at
+     FROM assessment_repository_assignments ara
+     INNER JOIN assessment_definitions ad ON ad.id = ara.assessment_definition_id
+     INNER JOIN assessment_versions av ON av.id = ara.assessment_version_id
+     WHERE ara.target_user_id = $1
+       AND ad.key = 'sonartra_signals'
+       AND av.lifecycle_status = 'published'
+     ORDER BY ara.assigned_at DESC
      LIMIT 1`,
-    [userId, assessmentDefinitionId],
+    [userId],
   )
 
   return result.rows[0] ?? null
@@ -276,10 +298,25 @@ export async function loadLiveAssessmentRepositoryInventory(
   dependencies: Partial<InventoryDependencies> = {},
 ): Promise<AssessmentRepositoryItem[]> {
   const deps = { ...defaultDependencies, ...dependencies }
+  const latestAssignment = await getLatestSignalsAssignmentStateForUser(deps.queryDb, userId)
   const publishedVersionState = await deps.resolveLiveSignalsPublishedVersionState()
   const publishedVersion = publishedVersionState.version
+  const assignedVersion = latestAssignment?.is_active
+    ? {
+        assessmentDefinitionId: latestAssignment.assessment_definition_id,
+        assessmentDefinitionKey: latestAssignment.assessment_definition_key,
+        assessmentDefinitionSlug: latestAssignment.assessment_definition_slug,
+        currentPublishedVersionId: latestAssignment.assessment_version_id,
+        assessmentVersionId: latestAssignment.assessment_version_id,
+        assessmentVersionKey: latestAssignment.assessment_version_key,
+        assessmentVersionName: latestAssignment.assessment_version_name,
+        totalQuestions: latestAssignment.total_questions,
+        isActive: latestAssignment.is_active,
+      }
+    : null
+  const selectedVersion = publishedVersion?.isActive ? publishedVersion : assignedVersion
 
-  if (!publishedVersion?.isActive) {
+  if (!selectedVersion?.isActive) {
     if (publishedVersionState.diagnostic.code !== 'no_published_version') {
       console.warn('[signals.inventory] live Signals version hidden because runtime is not executable', publishedVersionState.diagnostic)
     }
@@ -293,7 +330,7 @@ export async function loadLiveAssessmentRepositoryInventory(
   const latestAssessment = await getLatestSignalsAssessmentForUser(
     deps.queryDb,
     userId,
-    publishedVersion.assessmentDefinitionId,
+    selectedVersion.assessmentDefinitionId,
   )
 
   const latestAssessmentResult = latestAssessment
@@ -302,15 +339,10 @@ export async function loadLiveAssessmentRepositoryInventory(
   const latestAssessmentSignalCount = latestAssessmentResult
     ? await getSignalCountByResultId(deps.queryDb, latestAssessmentResult.id)
     : 0
-  const latestAssignment = await getLatestAssignmentStateForUser(
-    deps.queryDb,
-    userId,
-    publishedVersion.assessmentDefinitionId,
-  )
   const latestReadyResult = await getLatestReadyResultForUser(
     deps.queryDb,
     userId,
-    publishedVersion.assessmentDefinitionId,
+    selectedVersion.assessmentDefinitionId,
   )
 
   const lifecycleState = resolveLifecycleState({
@@ -321,7 +353,7 @@ export async function loadLiveAssessmentRepositoryInventory(
   })
   const status = mapLifecycleToStatus(lifecycleState)
   const defaultStatusNote = buildStatusNote(definition, status)
-  const questionCount = latestAssessment?.total_questions ?? publishedVersion.totalQuestions
+  const questionCount = latestAssessment?.total_questions ?? selectedVersion.totalQuestions
 
   const item: AssessmentRepositoryItem = {
     id: definition.id,
@@ -334,12 +366,12 @@ export async function loadLiveAssessmentRepositoryInventory(
     lifecycleState,
     inventorySource: 'server',
     availability: {
-      definitionId: publishedVersion.assessmentDefinitionId,
-      definitionKey: publishedVersion.assessmentDefinitionKey,
-      definitionSlug: publishedVersion.assessmentDefinitionSlug,
-      versionId: publishedVersion.assessmentVersionId,
-      versionKey: publishedVersion.assessmentVersionKey,
-      versionName: publishedVersion.assessmentVersionName,
+      definitionId: selectedVersion.assessmentDefinitionId,
+      definitionKey: selectedVersion.assessmentDefinitionKey,
+      definitionSlug: selectedVersion.assessmentDefinitionSlug,
+      versionId: selectedVersion.assessmentVersionId,
+      versionKey: selectedVersion.assessmentVersionKey,
+      versionName: selectedVersion.assessmentVersionName,
     },
     hasAdvancedOutputs: definition.hasAdvancedOutputs,
     questionCount,
@@ -358,7 +390,7 @@ export async function loadLiveAssessmentRepositoryInventory(
         ...definition,
         questionCount,
         defaultOperationalDetails: [
-          { label: 'Live version', value: `${publishedVersion.assessmentVersionName} (${publishedVersion.assessmentVersionKey})` },
+          { label: 'Live version', value: `${selectedVersion.assessmentVersionName} (${selectedVersion.assessmentVersionKey})` },
           ...definition.defaultOperationalDetails.slice(1),
         ],
       },

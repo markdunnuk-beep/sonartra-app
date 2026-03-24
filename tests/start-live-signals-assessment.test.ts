@@ -55,6 +55,52 @@ test('blocks starts when no active published Signals version is available', asyn
   assert.equal(transactionCalled, false)
 })
 
+test('starts from an explicitly assigned published version when live runtime resolution is unavailable', async () => {
+  const result = await startLiveSignalsAssessment(
+    { appUser, source: 'workspace' },
+    {
+      queryDb: async (sql) => {
+        if (/FROM assessment_repository_assignments/i.test(sql)) {
+          return {
+            rows: [{
+              assignment_id: 'assignment-1',
+              version_id: 'version-assigned',
+              version_key: 'signals-hybrid-v1',
+              version_name: 'Assigned Signals Hybrid v1',
+              total_questions: 64,
+              assessment_definition_id: 'definition-signals',
+              is_active: true,
+            }],
+          } as never
+        }
+
+        return { rows: [] } as never
+      },
+      resolveLiveSignalsPublishedVersionState: async () => ({
+        version: null,
+        diagnostic: {
+          code: 'runtime_not_materialized',
+          message: 'The published Sonartra Signals version is not runnable yet because runtime materialization has not completed.',
+        },
+      }),
+      withTransaction: async (work) =>
+        work({
+          query: async () => ({ rows: [{ id: 'assessment-new' }] }),
+        } as never),
+      linkLatestAssignmentToAssessment: async () => {},
+    },
+  )
+
+  assert.equal(result.kind, 'ok')
+  assert.equal(result.status, 201)
+  assert.deepEqual(result.body.version, {
+    id: 'version-assigned',
+    key: 'signals-hybrid-v1',
+    name: 'Assigned Signals Hybrid v1',
+    totalQuestions: 64,
+  })
+})
+
 test('start helper blocks launches when the published live Signals version is not materialized for runtime execution', async () => {
   const response = await startLiveSignalsAssessment(
     {
@@ -125,6 +171,7 @@ test('resumes the latest unfinished Signals attempt across versions under the sa
       withTransaction: async () => {
         throw new Error('transaction should not be called when resuming')
       },
+      linkLatestAssignmentToAssessment: async () => {},
     },
   )
 
@@ -138,9 +185,9 @@ test('resumes the latest unfinished Signals attempt across versions under the sa
     name: 'WPLP-80 v1',
     totalQuestions: 80,
   })
-  assert.equal(calls.length, 1)
-  assert.match(calls[0]!.sql, /av\.assessment_definition_id = \$2/i)
-  assert.deepEqual(calls[0]!.params, ['user-1', 'definition-signals'])
+  assert.equal(calls.length, 2)
+  assert.match(calls[1]!.sql, /av\.assessment_definition_id = \$2/i)
+  assert.deepEqual(calls[1]!.params, ['user-1', 'definition-signals', 'version-current'])
 })
 
 test('creates a new attempt against the current published version when no unfinished attempt exists', async () => {
@@ -175,6 +222,7 @@ test('creates a new attempt against the current published version when no unfini
             return { rows: [{ id: 'assessment-new' }] }
           },
         } as never),
+      linkLatestAssignmentToAssessment: async () => {},
     },
   )
 
@@ -188,7 +236,7 @@ test('creates a new attempt against the current published version when no unfini
     name: 'WPLP-80 v2',
     totalQuestions: 80,
   })
-  assert.equal(queryCalls.length, 1)
+  assert.equal(queryCalls.length, 2)
   assert.equal(insertCalls.length, 1)
   assert.match(insertCalls[0]!.sql, /insert into assessments/i)
   assert.deepEqual(insertCalls[0]!.params, ['user-1', 'version-current', 'workspace'])

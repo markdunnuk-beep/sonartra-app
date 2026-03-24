@@ -22,6 +22,7 @@ interface AssignedVersionRow {
   version_name: string
   total_questions: number
   assessment_definition_id: string
+  is_active: boolean
 }
 
 interface ExistingAssessmentRow {
@@ -82,10 +83,49 @@ export async function startLiveSignalsAssessment(
   const deps = { ...defaultDependencies, ...dependencies }
   const appUser = input.appUser
 
+  const assignedVersionResult = await deps.queryDb<AssignedVersionRow>(
+    `SELECT ara.id AS assignment_id,
+            av.id AS version_id,
+            av.key AS version_key,
+            av.name AS version_name,
+            av.total_questions,
+            av.assessment_definition_id,
+            av.is_active
+     FROM assessment_repository_assignments ara
+     INNER JOIN assessment_definitions ad ON ad.id = ara.assessment_definition_id
+     INNER JOIN assessment_versions av ON av.id = ara.assessment_version_id
+     WHERE ara.target_user_id = $1
+       AND ad.key = 'sonartra_signals'
+       AND av.lifecycle_status = 'published'
+       AND ara.status IN ('assigned', 'in_progress', 'completed_processing')
+     ORDER BY ara.assigned_at DESC
+     LIMIT 1`,
+    [appUser.dbUserId],
+  )
+  const assignedVersion = assignedVersionResult.rows[0] ?? null
+
   const publishedVersionState = await deps.resolveLiveSignalsPublishedVersionState({ queryDb: deps.queryDb })
   const currentPublishedVersion = publishedVersionState.version
 
-  if (!currentPublishedVersion || !currentPublishedVersion.isActive) {
+  const selectedVersion = assignedVersion?.is_active
+    ? {
+        id: assignedVersion.version_id,
+        key: assignedVersion.version_key,
+        name: assignedVersion.version_name,
+        totalQuestions: assignedVersion.total_questions,
+        assessmentDefinitionId: assignedVersion.assessment_definition_id,
+      }
+    : currentPublishedVersion?.isActive
+      ? {
+          id: currentPublishedVersion.assessmentVersionId,
+          key: currentPublishedVersion.assessmentVersionKey,
+          name: currentPublishedVersion.assessmentVersionName,
+          totalQuestions: currentPublishedVersion.totalQuestions,
+          assessmentDefinitionId: currentPublishedVersion.assessmentDefinitionId,
+        }
+      : null
+
+  if (!selectedVersion) {
     return {
       kind: 'unavailable',
       status: 404,
@@ -95,40 +135,6 @@ export async function startLiveSignalsAssessment(
       },
     }
   }
-
-  const assignedVersionResult = await deps.queryDb<AssignedVersionRow>(
-    `SELECT ara.id AS assignment_id,
-            av.id AS version_id,
-            av.key AS version_key,
-            av.name AS version_name,
-            av.total_questions,
-            av.assessment_definition_id
-     FROM assessment_repository_assignments ara
-     INNER JOIN assessment_versions av ON av.id = ara.assessment_version_id
-     WHERE ara.target_user_id = $1
-       AND ara.assessment_definition_id = $2
-       AND ara.status IN ('assigned', 'in_progress', 'completed_processing')
-     ORDER BY ara.assigned_at DESC
-     LIMIT 1`,
-    [appUser.dbUserId, currentPublishedVersion.assessmentDefinitionId],
-  )
-
-  const assignedVersion = assignedVersionResult.rows[0] ?? null
-  const selectedVersion = assignedVersion
-    ? {
-        id: assignedVersion.version_id,
-        key: assignedVersion.version_key,
-        name: assignedVersion.version_name,
-        totalQuestions: assignedVersion.total_questions,
-        assessmentDefinitionId: assignedVersion.assessment_definition_id,
-      }
-    : {
-        id: currentPublishedVersion.assessmentVersionId,
-        key: currentPublishedVersion.assessmentVersionKey,
-        name: currentPublishedVersion.assessmentVersionName,
-        totalQuestions: currentPublishedVersion.totalQuestions,
-        assessmentDefinitionId: currentPublishedVersion.assessmentDefinitionId,
-      }
 
   const existingAssessment = await deps.queryDb<ExistingAssessmentRow>(
     `SELECT a.id,

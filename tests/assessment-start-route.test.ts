@@ -213,6 +213,7 @@ test('start helper prefers active assignment version when present', async () => 
               version_name: 'Assigned Signals v9',
               total_questions: 72,
               assessment_definition_id: 'definition-signals',
+              is_active: true,
             }],
           } as never
         }
