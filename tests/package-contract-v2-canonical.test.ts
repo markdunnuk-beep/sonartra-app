@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import canonicalFixture from './fixtures/package-contract-v2-wplp80-foundation.json'
+import { compileAssessmentPackageV2 } from '../lib/admin/domain/assessment-package-v2-compiler'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, validateSonartraAssessmentPackageV2 } from '../lib/admin/domain/assessment-package-v2'
 import { detectAssessmentPackageVersion } from '../lib/admin/server/assessment-package-import'
 
@@ -141,7 +142,25 @@ test('legacy and canonical package paths stay clearly separated', () => {
   const legacyDetected = detectAssessmentPackageVersion(legacyLike)
 
   assert.equal(canonicalDetected.detectedVersion, 'package_contract_v2')
+  assert.equal(canonicalDetected.classifier, 'canonical_contract_v2')
   assert.equal(canonicalDetected.packageName, 'WPLP-80 Foundation Sample')
   assert.equal(canonicalDetected.versionLabel, '2.0.0-wplp-foundation')
   assert.equal(legacyDetected.detectedVersion, 'legacy_v1')
+  assert.equal(legacyDetected.classifier, 'legacy_contract_v1')
+})
+
+test('runtime contract detection takes precedence over generic packageVersion v2 classification', () => {
+  const canonicalValidated = validateSonartraAssessmentPackageV2(cloneFixture())
+  assert.equal(canonicalValidated.ok, true)
+  const compiled = compileAssessmentPackageV2(canonicalValidated.normalizedPackage!)
+  assert.equal(compiled.ok, true)
+
+  const detected = detectAssessmentPackageVersion({
+    ...compiled.executablePackage,
+    packageVersion: '2',
+    schemaVersion: 'sonartra-assessment-package/v2',
+  })
+
+  assert.equal(detected.detectedVersion, 'package_contract_v2')
+  assert.equal(detected.classifier, 'runtime_contract_v2')
 })

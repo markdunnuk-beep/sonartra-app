@@ -397,6 +397,7 @@ export function normalizeAdminAssessmentPackageImportState(
   const readiness = state?.validationResult?.readiness
   const detectedVersion = state?.validationResult?.detectedVersion === 'legacy_v1'
     || state?.validationResult?.detectedVersion === 'package_contract_v2'
+    || state?.validationResult?.detectedVersion === 'runtime_contract_v2'
     || state?.validationResult?.detectedVersion === 'unknown'
     ? state.validationResult.detectedVersion
     : null
