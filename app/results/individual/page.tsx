@@ -15,8 +15,19 @@ function normaliseStatePayload(model: IndividualResultApiResponse): IndividualRe
   return { state: 'unexpected', message: 'Received unsupported result state.' }
 }
 
-export default async function IndividualResultsPage() {
-  const model = normaliseStatePayload(await getLatestIndividualResultForUser())
+interface IndividualResultsPageProps {
+  searchParams?: {
+    definitionId?: string | string[]
+  }
+}
+
+function getSearchParamValue(value: string | string[] | undefined): string | null {
+  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null)
+}
+
+export default async function IndividualResultsPage({ searchParams }: IndividualResultsPageProps) {
+  const definitionId = getSearchParamValue(searchParams?.definitionId)
+  const model = normaliseStatePayload(await getLatestIndividualResultForUser({ assessmentDefinitionId: definitionId }))
 
   if (model.state === 'unauthenticated') {
     redirect('/sign-in')

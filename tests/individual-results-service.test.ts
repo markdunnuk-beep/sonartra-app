@@ -423,3 +423,26 @@ test('returns ready_hybrid for complete hybrid_mvp_v1 payloads using report-driv
     assert.equal(response.data.hybrid.sections[0]?.id, 'strengths')
   }
 })
+
+test('selection input scopes ready-result lookup to the requested definition id', async () => {
+  let requestedDefinitionId: string | null = null
+
+  const response = await getLatestIndividualResultForUser(
+    { assessmentDefinitionId: 'definition-hybrid' },
+    {
+      resolveAuthenticatedUserId: async () => 'user-1',
+      getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext, version_key: 'hybrid-v1' }),
+      getLatestResultForAssessment: async () => completeResult,
+      getLatestReadyResultForUser: async (_userId, definitionId) => {
+        requestedDefinitionId = definitionId ?? null
+        return readyResultForUser
+      },
+      getResultById: async () => completeResult,
+      getSignalsByResultId: async () => unsortedSignals,
+    },
+  )
+
+  assert.equal(requestedDefinitionId, 'definition-hybrid')
+  assert.equal(response.ok, true)
+  assert.equal(response.state, 'ready')
+})
