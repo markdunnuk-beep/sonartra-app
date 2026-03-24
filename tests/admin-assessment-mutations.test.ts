@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import examplePackageV2 from './fixtures/package-contract-v2-example.json'
+import wplp80CanonicalCandidate from './fixtures/package-contract-v2-wplp80-canonical-candidate.json'
 import {
   archiveAdminAssessmentVersion,
   cloneAdminAssessmentSavedScenario,
@@ -218,6 +219,8 @@ const packageFirstCreatePayload = JSON.stringify({
   outputs: { rules: [] },
   report: { content: [] },
 })
+
+const wplp80CanonicalPayload = JSON.stringify(wplp80CanonicalCandidate)
 
 
 function makeManagedVersionRow(overrides: Record<string, unknown> = {}) {
@@ -537,6 +540,95 @@ test('package-first import auto-creates a new assessment and first version when 
   assert.ok(auditEvents.includes('assessment_created'))
   assert.ok(auditEvents.includes('assessment_version_created'))
   assert.ok(auditEvents.includes('assessment_package_imported'))
+})
+
+test('WPLP-80 canonical candidate runs through package-first admin import and persists classifier/readiness metadata', async () => {
+  const assessmentVersionUpdateParams: unknown[][] = []
+  const auditEvents: string[] = []
+
+  const result = await createOrAttachAdminAssessmentPackage({
+    packageText: wplp80CanonicalPayload,
+    sourceFilename: 'package-contract-v2-wplp80-canonical-candidate.json',
+    confirmation: 'confirm',
+  }, {
+    resolveAdminAccess: async () => createBaseAccess(),
+    getActorIdentity: async () => ({ id: 'admin-1', email: 'rina.patel@sonartra.com', full_name: 'Rina Patel' }),
+    getAssessmentVersionSchemaCapabilities: async () => MODERN_ASSESSMENT_VERSION_CAPABILITIES,
+    withTransaction: async <T,>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+      query: async (sql: string, params: unknown[] = []) => {
+        if (/from assessment_definitions\s+where key = \$1/i.test(sql) || /from assessment_definitions\s+where slug = \$1/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/insert into assessment_definitions/i.test(sql) || /insert into assessment_versions/i.test(sql) || /update assessment_definitions/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/select id, key, slug, name, category, description\s+from assessment_definitions\s+where id = \$1/i.test(sql)) {
+          return { rows: [{ id: 'assessment-wplp80', key: 'wplp80-canonical-candidate', slug: 'wplp80-canonical-candidate', name: 'WPLP-80 Workplace Pattern & Leadership Profile', category: 'behavioural_intelligence', description: 'Canonical package candidate for controlled admin workflow rehearsals.' }] }
+        }
+
+        if (/from assessment_versions av/i.test(sql)) {
+          return { rows: [makeManagedVersionRow({
+            id: 'version-wplp80',
+            assessment_definition_id: 'assessment-wplp80',
+            version_label: '2.0.0-wplp80-candidate.1',
+            package_status: 'missing',
+            package_source_filename: null,
+            assessment_name: 'WPLP-80 Workplace Pattern & Leadership Profile',
+          })] }
+        }
+
+        if (/from assessment_version_saved_scenarios scenarios/i.test(sql)) {
+          return { rows: [] }
+        }
+
+        if (/update assessment_versions/i.test(sql)) {
+          assessmentVersionUpdateParams.push(params)
+          return { rows: [] }
+        }
+
+        if (/insert into access_audit_events/i.test(sql)) {
+          auditEvents.push(String(params[1]))
+          return { rows: [] }
+        }
+
+        throw new Error(`Unexpected transactional query: ${sql}`)
+      },
+    } as never),
+    now: () => new Date('2026-03-24T10:00:00.000Z'),
+    createId: (() => {
+      const ids = ['assessment-wplp80', 'audit-1', 'version-wplp80', 'audit-2', 'audit-3', 'audit-4']
+      return () => ids.shift() ?? 'audit-fallback'
+    })(),
+  } as never)
+
+  assert.equal(result.ok, true)
+  assert.equal(result.code, 'imported')
+  assert.equal(result.versionLabel, '2.0.0-wplp80-candidate.1')
+  assert.equal(result.review?.validationResult.detectedVersion, 'package_contract_v2')
+  assert.equal(result.review?.validationResult.summary?.questionsCount, 80)
+  assert.equal(result.review?.validationResult.readiness.simulatable, true)
+  assert.equal(result.review?.validationResult.readiness.runtimeExecutable, false)
+  assert.equal(result.review?.validationResult.readiness.publishable, false)
+  assert.ok((result.review?.validationResult.warnings.length ?? 0) > 0)
+  assert.ok(auditEvents.includes('assessment_package_imported'))
+  assert.ok(auditEvents.includes('assessment_release_readiness_evaluated'))
+
+  const persistedPayload = assessmentVersionUpdateParams
+    .flatMap((params) => params)
+    .find((value) => typeof value === 'string' && value.includes('"detectedVersion"'))
+  assert.equal(typeof persistedPayload, 'string')
+  const validationReport = JSON.parse(String(persistedPayload)) as {
+    detectedVersion?: string
+    analysis?: { classifier?: string }
+    readiness?: { simulatable?: boolean; runtimeExecutable?: boolean; publishable?: boolean }
+  }
+  assert.equal(validationReport.detectedVersion, 'package_contract_v2')
+  assert.equal(validationReport.analysis?.classifier, 'canonical_contract_v2')
+  assert.equal(validationReport.readiness?.simulatable, true)
+  assert.equal(validationReport.readiness?.runtimeExecutable, false)
+  assert.equal(validationReport.readiness?.publishable, false)
 })
 
 test('package-first import attaches a new version when the assessment key already exists', async () => {
