@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import examplePackage from './fixtures/package-contract-v2-example.json'
+import { compileAssessmentPackageV2 } from '../lib/admin/domain/assessment-package-v2-compiler'
+import { validateSonartraAssessmentPackageV2 } from '../lib/admin/domain/assessment-package-v2'
 import { normalizeAdminAssessmentPackageImportState } from '../lib/admin/domain/assessment-management'
 import { extractAssessmentPackageIdentity, importAssessmentPackagePayload, detectAssessmentPackageVersion } from '../lib/admin/server/assessment-package-import'
 
@@ -9,6 +11,7 @@ test('v2 package detection identifies Package Contract v2 payloads', () => {
   const detected = detectAssessmentPackageVersion(examplePackage)
 
   assert.equal(detected.detectedVersion, 'package_contract_v2')
+  assert.equal(detected.classifier, 'canonical_contract_v2')
   assert.equal(detected.schemaVersion, 'sonartra-assessment-package/v2')
   assert.equal(detected.packageName, 'Adaptive Workstyle Sample')
   assert.equal(detected.versionLabel, '2.0.0')
@@ -19,6 +22,10 @@ test('valid v2 package import artifact produces admin-compatible summary and rea
 
   assert.equal(result.validationSummary.success, true)
   assert.equal(result.detectedVersion, 'package_contract_v2')
+  assert.equal(result.classifier, 'canonical_contract_v2')
+  assert.equal(result.analysis.payloadKind, 'canonical_authoring_payload')
+  assert.equal(result.analysis.compileRequired, true)
+  assert.equal(result.analysis.compiledRuntimeArtifactProduced, true)
   assert.equal(result.summary?.questionsCount, 4)
   assert.equal(result.summary?.dimensionsCount, 2)
   assert.equal(result.summary?.sectionCount, 2)
@@ -28,6 +35,22 @@ test('valid v2 package import artifact produces admin-compatible summary and rea
   assert.equal(result.readiness.compilable, true)
   assert.equal(result.readiness.runtimeExecutable, false)
   assert.equal(result.readiness.publishable, false)
+})
+
+test('runtime v2 payloads classify and validate as executable runtime packages without canonical transform assumptions', () => {
+  const validated = validateSonartraAssessmentPackageV2(examplePackage)
+  assert.equal(validated.ok, true)
+  const compiled = compileAssessmentPackageV2(validated.normalizedPackage!)
+  assert.equal(compiled.ok, true)
+
+  const result = importAssessmentPackagePayload(compiled.executablePackage)
+  assert.equal(result.detectedVersion, 'package_contract_v2')
+  assert.equal(result.classifier, 'runtime_contract_v2')
+  assert.equal(result.analysis.payloadKind, 'runtime_executable_payload')
+  assert.equal(result.analysis.compileRequired, false)
+  assert.equal(result.analysis.compilePerformed, false)
+  assert.equal(result.readiness.runtimeExecutable, true)
+  assert.equal(result.analysis.executableReady, true)
 })
 
 test('malformed v2 package returns normalized validation errors', () => {

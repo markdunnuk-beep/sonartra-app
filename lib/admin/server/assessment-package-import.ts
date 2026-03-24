@@ -1,9 +1,11 @@
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1, validateSonartraAssessmentPackage, type AssessmentPackageStatus, type SonartraAssessmentPackageSummary, type SonartraAssessmentPackageValidationIssue } from '@/lib/admin/domain/assessment-package'
-import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
-import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, validateSonartraAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
+import { compileAssessmentPackageV2, type ExecutableAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
+import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, validateSonartraAssessmentPackageV2, type SonartraAssessmentPackageV2ValidatedImport } from '@/lib/admin/domain/assessment-package-v2'
+import { compileCanonicalToRuntimeContractV2DiagnosticsToIssues, isRuntimeContractV2Payload, SONARTRA_RUNTIME_CONTRACT_V2, validateRuntimeContractV2 } from '@/lib/admin/domain/package-runtime-v2'
 import type { AssessmentImportConflict, AssessmentPackageIdentity } from '@/lib/admin/domain/assessment-management'
 
 export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contract_v2' | 'unknown'
+export type AssessmentPackageContractClassifier = 'legacy_contract_v1' | 'canonical_contract_v2' | 'runtime_contract_v2' | 'unknown_or_invalid'
 
 export interface AdminAssessmentPackageReadinessFlags {
   structurallyValid: boolean
@@ -26,17 +28,53 @@ export interface AdminAssessmentPackageValidationSummary {
   warnings: SonartraAssessmentPackageValidationIssue[]
   summary: SonartraAssessmentPackageSummary | null
   readiness: AdminAssessmentPackageReadinessFlags
+  analysis?: AdminAssessmentImportAnalysis
 }
 
 export interface PackageVersionDetectionResult {
   detectedVersion: AdminAssessmentPackageDetectedVersion
+  classifier: AssessmentPackageContractClassifier
   schemaVersion: string | null
   packageName: string | null
   versionLabel: string | null
 }
 
+export type ImportReadinessSemantic =
+  | 'structurally_invalid'
+  | 'valid_with_warnings'
+  | 'importable_not_publish_ready'
+  | 'executable_ready'
+  | 'authoring_valid_requires_compile'
+  | 'unsupported_or_unknown'
+
+export interface ImportDiagnosticCollection {
+  canonicalValidation: SonartraAssessmentPackageValidationIssue[]
+  compilation: SonartraAssessmentPackageValidationIssue[]
+  runtimeValidation: SonartraAssessmentPackageValidationIssue[]
+  general: SonartraAssessmentPackageValidationIssue[]
+}
+
+export interface AdminAssessmentImportAnalysis {
+  classifier: AssessmentPackageContractClassifier
+  contractFamily: 'legacy' | 'canonical' | 'runtime' | 'unknown'
+  packageVersion: '1' | '2' | null
+  payloadKind: 'legacy_payload' | 'canonical_authoring_payload' | 'runtime_executable_payload' | 'unknown_payload'
+  structurallyValid: boolean
+  importable: boolean
+  executableReady: boolean
+  authoringOnly: boolean
+  compileRequired: boolean
+  compilePerformed: boolean
+  compiledRuntimeArtifactProduced: boolean
+  readinessSemantic: ImportReadinessSemantic
+  diagnostics: ImportDiagnosticCollection
+  compatibilityFlags: string[]
+  compiledRuntimeArtifact: ExecutableAssessmentPackageV2 | null
+}
+
 export interface ImportedAssessmentPackageResult {
   detectedVersion: AdminAssessmentPackageDetectedVersion
+  classifier: AssessmentPackageContractClassifier
   schemaVersion: string | null
   packageName: string | null
   versionLabel: string | null
@@ -48,6 +86,7 @@ export interface ImportedAssessmentPackageResult {
   readiness: AdminAssessmentPackageReadinessFlags
   definitionPayload: unknown | null
   validationSummary: AdminAssessmentPackageValidationSummary
+  analysis: AdminAssessmentImportAnalysis
 }
 
 export interface AssessmentPackageIdentityExtractionResult {
@@ -115,6 +154,333 @@ function buildGenericSummary(input: Partial<SonartraAssessmentPackageSummary> & 
   }
 }
 
+function statusFromIssues(errors: SonartraAssessmentPackageValidationIssue[], warnings: SonartraAssessmentPackageValidationIssue[]): AssessmentPackageStatus {
+  if (errors.length > 0) {
+    return 'invalid'
+  }
+
+  return warnings.length > 0 ? 'valid_with_warnings' : 'valid'
+}
+
+export function classifyPackageContract(input: unknown): PackageVersionDetectionResult {
+  if (!isRecord(input)) {
+    return { detectedVersion: 'unknown', classifier: 'unknown_or_invalid', schemaVersion: null, packageName: null, versionLabel: null }
+  }
+
+  if (isRuntimeContractV2Payload(input)) {
+    const metadata = isRecord(input.metadata) ? input.metadata : null
+    const compatibility = metadata && isRecord(metadata.compatibility) ? metadata.compatibility : null
+    return {
+      detectedVersion: 'package_contract_v2',
+      classifier: 'runtime_contract_v2',
+      schemaVersion: SONARTRA_RUNTIME_CONTRACT_V2,
+      packageName: metadata ? asTrimmedString(metadata.assessmentName) : null,
+      versionLabel: compatibility ? asTrimmedString(compatibility.packageSemver) : null,
+    }
+  }
+
+  const topLevelSchemaVersion = asTrimmedString(input.schemaVersion)
+  if (input.packageVersion === '2' || topLevelSchemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
+    const metadata = isRecord(input.metadata) ? input.metadata : null
+    const compatibility = metadata && isRecord(metadata.compatibility) ? metadata.compatibility : null
+    const identity = isRecord(input.identity) ? input.identity : null
+    return {
+      detectedVersion: 'package_contract_v2',
+      classifier: 'canonical_contract_v2',
+      schemaVersion: topLevelSchemaVersion ?? SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+      packageName: (metadata ? asTrimmedString(metadata.assessmentName) : null) ?? (identity ? asTrimmedString(identity.title) : null),
+      versionLabel: (compatibility ? asTrimmedString(compatibility.packageSemver) : null) ?? (identity ? asTrimmedString(identity.versionLabel) : null),
+    }
+  }
+
+  const meta = isRecord(input.meta) ? input.meta : null
+  const metaSchemaVersion = meta ? asTrimmedString(meta.schemaVersion) : null
+  if (metaSchemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1) {
+    return {
+      detectedVersion: 'legacy_v1',
+      classifier: 'legacy_contract_v1',
+      schemaVersion: metaSchemaVersion,
+      packageName: meta ? asTrimmedString(meta.assessmentTitle) : null,
+      versionLabel: meta ? asTrimmedString(meta.versionLabel) : null,
+    }
+  }
+
+  return {
+    detectedVersion: 'unknown',
+    classifier: 'unknown_or_invalid',
+    schemaVersion: topLevelSchemaVersion ?? metaSchemaVersion,
+    packageName: (meta ? asTrimmedString(meta.assessmentTitle) : null) ?? (isRecord(input.metadata) ? asTrimmedString(input.metadata.assessmentName) : null),
+    versionLabel: (meta ? asTrimmedString(meta.versionLabel) : null) ?? (isRecord(input.metadata) && isRecord(input.metadata.compatibility) ? asTrimmedString(input.metadata.compatibility.packageSemver) : null),
+  }
+}
+
+export const detectAssessmentPackageVersion = classifyPackageContract
+
+interface ValidatedDetectedPackage {
+  status: AssessmentPackageStatus
+  errors: SonartraAssessmentPackageValidationIssue[]
+  warnings: SonartraAssessmentPackageValidationIssue[]
+  summary: SonartraAssessmentPackageSummary
+  definitionPayload: unknown | null
+  canonicalPayload: SonartraAssessmentPackageV2ValidatedImport | null
+  runtimePayload: ExecutableAssessmentPackageV2 | null
+  diagnostics: ImportDiagnosticCollection
+  compilePerformed: boolean
+  compileRequired: boolean
+}
+
+export function validateDetectedPackage(input: unknown, detected: PackageVersionDetectionResult): ValidatedDetectedPackage {
+  if (detected.classifier === 'legacy_contract_v1') {
+    const validation = validateSonartraAssessmentPackage(input)
+    return {
+      status: validation.status,
+      errors: validation.errors,
+      warnings: validation.warnings,
+      summary: buildGenericSummary({
+        ...validation.summary,
+        packageName: validation.normalizedPackage?.meta.assessmentTitle ?? detected.packageName,
+        versionLabel: validation.normalizedPackage?.meta.versionLabel ?? detected.versionLabel,
+        assessmentKey: validation.normalizedPackage?.meta.assessmentKey ?? null,
+      }),
+      definitionPayload: validation.normalizedPackage,
+      canonicalPayload: null,
+      runtimePayload: null,
+      diagnostics: {
+        canonicalValidation: [],
+        compilation: [],
+        runtimeValidation: [],
+        general: [...validation.errors, ...validation.warnings],
+      },
+      compilePerformed: false,
+      compileRequired: false,
+    }
+  }
+
+  if (detected.classifier === 'canonical_contract_v2') {
+    const canonicalValidation = validateSonartraAssessmentPackageV2(input)
+    const diagnostics: ImportDiagnosticCollection = {
+      canonicalValidation: [...canonicalValidation.errors, ...canonicalValidation.warnings],
+      compilation: [],
+      runtimeValidation: [],
+      general: [],
+    }
+
+    let compileResult: ReturnType<typeof compileAssessmentPackageV2> | null = null
+    let runtimeValidationErrors: SonartraAssessmentPackageValidationIssue[] = []
+    let runtimeValidationWarnings: SonartraAssessmentPackageValidationIssue[] = []
+    let compileErrors: SonartraAssessmentPackageValidationIssue[] = []
+    let compileWarnings: SonartraAssessmentPackageValidationIssue[] = []
+
+    if (canonicalValidation.ok && canonicalValidation.normalizedPackage) {
+      compileResult = compileAssessmentPackageV2(canonicalValidation.normalizedPackage)
+      const compileDiagnostics = compileCanonicalToRuntimeContractV2DiagnosticsToIssues(compileResult.diagnostics)
+      compileErrors = compileDiagnostics.errors
+      compileWarnings = compileDiagnostics.warnings
+      diagnostics.compilation = [...compileDiagnostics.errors, ...compileDiagnostics.warnings]
+
+      if (compileResult.ok && compileResult.executablePackage) {
+        const runtimeValidation = validateRuntimeContractV2(compileResult.executablePackage)
+        runtimeValidationErrors = runtimeValidation.errors
+        runtimeValidationWarnings = runtimeValidation.warnings
+        diagnostics.runtimeValidation = [...runtimeValidation.errors, ...runtimeValidation.warnings]
+      }
+    }
+
+    const errors = [
+      ...canonicalValidation.errors,
+      ...compileErrors,
+      ...runtimeValidationErrors,
+    ]
+
+    const warnings = [
+      ...canonicalValidation.warnings,
+      ...compileWarnings,
+      ...runtimeValidationWarnings,
+    ]
+
+    return {
+      status: statusFromIssues(errors, warnings),
+      errors,
+      warnings,
+      summary: buildGenericSummary({
+        questionsCount: canonicalValidation.summary.questionCount,
+        dimensionsCount: canonicalValidation.summary.dimensionCount,
+        optionsCount: 0,
+        scoringRuleCount: canonicalValidation.summary.transformCount,
+        normalizationRuleCount: canonicalValidation.summary.normalizationRuleCount,
+        outputRuleCount: canonicalValidation.summary.outputRuleCount,
+        localeCount: canonicalValidation.normalizedPackage?.metadata.locales.supportedLocales.length ?? 0,
+        packageName: canonicalValidation.normalizedPackage?.metadata.assessmentName ?? detected.packageName,
+        versionLabel: canonicalValidation.normalizedPackage?.metadata.compatibility.packageSemver ?? detected.versionLabel,
+        assessmentKey: canonicalValidation.normalizedPackage?.metadata.assessmentKey ?? null,
+        sectionCount: canonicalValidation.summary.sectionCount,
+        derivedDimensionCount: canonicalValidation.summary.derivedDimensionCount,
+        responseModelCount: canonicalValidation.summary.responseModelCount,
+        transformCount: canonicalValidation.summary.transformCount,
+        integrityRuleCount: canonicalValidation.summary.integrityRuleCount,
+      }),
+      definitionPayload: canonicalValidation.normalizedPackage,
+      canonicalPayload: canonicalValidation.normalizedPackage,
+      runtimePayload: compileResult?.ok ? compileResult.executablePackage : null,
+      diagnostics,
+      compilePerformed: Boolean(canonicalValidation.ok && canonicalValidation.normalizedPackage),
+      compileRequired: true,
+    }
+  }
+
+  if (detected.classifier === 'runtime_contract_v2') {
+    const runtimeValidation = validateRuntimeContractV2(input)
+    const errors = runtimeValidation.errors
+    const warnings = runtimeValidation.warnings
+
+    return {
+      status: statusFromIssues(errors, warnings),
+      errors,
+      warnings,
+      summary: buildGenericSummary({
+        questionsCount: runtimeValidation.normalizedRuntimePackage ? Object.keys(runtimeValidation.normalizedRuntimePackage.questionsById).length : 0,
+        dimensionsCount: runtimeValidation.normalizedRuntimePackage ? Object.keys(runtimeValidation.normalizedRuntimePackage.dimensionsById).length : 0,
+        packageName: runtimeValidation.normalizedRuntimePackage?.metadata.assessmentName ?? detected.packageName,
+        versionLabel: runtimeValidation.normalizedRuntimePackage?.metadata.compatibility.packageSemver ?? detected.versionLabel,
+        assessmentKey: runtimeValidation.normalizedRuntimePackage?.metadata.assessmentKey ?? null,
+      }),
+      definitionPayload: runtimeValidation.normalizedRuntimePackage,
+      canonicalPayload: null,
+      runtimePayload: runtimeValidation.normalizedRuntimePackage,
+      diagnostics: {
+        canonicalValidation: [],
+        compilation: [],
+        runtimeValidation: [...errors, ...warnings],
+        general: [],
+      },
+      compilePerformed: false,
+      compileRequired: false,
+    }
+  }
+
+  const errors: SonartraAssessmentPackageValidationIssue[] = [{
+    path: 'schemaVersion',
+    message: 'Unknown or unsupported package contract version. Upload a legacy/v1 package, canonical Package Contract v2 payload, or runtime contract v2 payload.',
+  }]
+
+  return {
+    status: 'invalid',
+    errors,
+    warnings: [],
+    summary: buildGenericSummary({ packageName: detected.packageName, versionLabel: detected.versionLabel }),
+    definitionPayload: null,
+    canonicalPayload: null,
+    runtimePayload: null,
+    diagnostics: {
+      canonicalValidation: [],
+      compilation: [],
+      runtimeValidation: [],
+      general: errors,
+    },
+    compilePerformed: false,
+    compileRequired: false,
+  }
+}
+
+export function summarizeImportReadiness(input: {
+  classifier: AssessmentPackageContractClassifier
+  validationStatus: AssessmentPackageStatus
+  compileRequired: boolean
+  compilePerformed: boolean
+  runtimeArtifactProduced: boolean
+}): { readiness: AdminAssessmentPackageReadinessFlags; semantic: ImportReadinessSemantic; executableReady: boolean; authoringOnly: boolean } {
+  const structurallyValid = input.validationStatus === 'valid' || input.validationStatus === 'valid_with_warnings'
+  const importable = structurallyValid
+
+  if (!importable) {
+    return {
+      readiness: {
+        structurallyValid: false,
+        importable: false,
+        compilable: false,
+        evaluatable: false,
+        simulatable: false,
+        runtimeExecutable: false,
+        liveRuntimeEnabled: false,
+        publishable: false,
+      },
+      semantic: input.classifier === 'unknown_or_invalid' ? 'unsupported_or_unknown' : 'structurally_invalid',
+      executableReady: false,
+      authoringOnly: input.classifier === 'canonical_contract_v2',
+    }
+  }
+
+  if (input.classifier === 'runtime_contract_v2') {
+    return {
+      readiness: {
+        structurallyValid: true,
+        importable: true,
+        compilable: false,
+        evaluatable: true,
+        simulatable: true,
+        runtimeExecutable: true,
+        liveRuntimeEnabled: true,
+        publishable: false,
+      },
+      semantic: input.validationStatus === 'valid_with_warnings' ? 'valid_with_warnings' : 'executable_ready',
+      executableReady: true,
+      authoringOnly: false,
+    }
+  }
+
+  if (input.classifier === 'canonical_contract_v2') {
+    if (input.runtimeArtifactProduced) {
+      return {
+        readiness: {
+          structurallyValid: true,
+          importable: true,
+          compilable: input.compilePerformed,
+          evaluatable: true,
+          simulatable: true,
+          runtimeExecutable: false,
+          liveRuntimeEnabled: false,
+          publishable: false,
+        },
+        semantic: input.validationStatus === 'valid_with_warnings' ? 'valid_with_warnings' : 'importable_not_publish_ready',
+        executableReady: false,
+        authoringOnly: true,
+      }
+    }
+
+    return {
+      readiness: {
+        structurallyValid: true,
+        importable: true,
+        compilable: false,
+        evaluatable: false,
+        simulatable: false,
+        runtimeExecutable: false,
+        liveRuntimeEnabled: false,
+        publishable: false,
+      },
+      semantic: 'authoring_valid_requires_compile',
+      executableReady: false,
+      authoringOnly: true,
+    }
+  }
+
+  return {
+    readiness: {
+      structurallyValid: true,
+      importable: true,
+      compilable: false,
+      evaluatable: false,
+      simulatable: false,
+      runtimeExecutable: false,
+      liveRuntimeEnabled: false,
+      publishable: false,
+    },
+    semantic: input.validationStatus === 'valid_with_warnings' ? 'valid_with_warnings' : 'importable_not_publish_ready',
+    executableReady: false,
+    authoringOnly: false,
+  }
+}
+
 function buildValidationSummary(input: Omit<ImportedAssessmentPackageResult, 'validationSummary'>): AdminAssessmentPackageValidationSummary {
   return {
     success: input.packageStatus === 'valid' || input.packageStatus === 'valid_with_warnings',
@@ -126,6 +492,7 @@ function buildValidationSummary(input: Omit<ImportedAssessmentPackageResult, 'va
     warnings: input.warnings,
     summary: input.summary,
     readiness: input.readiness,
+    analysis: input.analysis,
   }
 }
 
@@ -136,166 +503,80 @@ function withValidationSummary(input: Omit<ImportedAssessmentPackageResult, 'val
   }
 }
 
-export function detectAssessmentPackageVersion(input: unknown): PackageVersionDetectionResult {
-  if (!isRecord(input)) {
-    return { detectedVersion: 'unknown', schemaVersion: null, packageName: null, versionLabel: null }
-  }
-
-  const topLevelSchemaVersion = asTrimmedString(input.schemaVersion)
-  if (input.packageVersion === '2' || topLevelSchemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
-    const metadata = isRecord(input.metadata) ? input.metadata : null
-    const compatibility = metadata && isRecord(metadata.compatibility) ? metadata.compatibility : null
-    const identity = isRecord(input.identity) ? input.identity : null
-    return {
-      detectedVersion: 'package_contract_v2',
-      schemaVersion: topLevelSchemaVersion,
-      packageName: (metadata ? asTrimmedString(metadata.assessmentName) : null) ?? (identity ? asTrimmedString(identity.title) : null),
-      versionLabel: (compatibility ? asTrimmedString(compatibility.packageSemver) : null) ?? (identity ? asTrimmedString(identity.versionLabel) : null),
-    }
-  }
-
-  const meta = isRecord(input.meta) ? input.meta : null
-  const metaSchemaVersion = meta ? asTrimmedString(meta.schemaVersion) : null
-  if (metaSchemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1) {
-    return {
-      detectedVersion: 'legacy_v1',
-      schemaVersion: metaSchemaVersion,
-      packageName: meta ? asTrimmedString(meta.assessmentTitle) : null,
-      versionLabel: meta ? asTrimmedString(meta.versionLabel) : null,
-    }
-  }
-
-  return {
-    detectedVersion: 'unknown',
-    schemaVersion: topLevelSchemaVersion ?? metaSchemaVersion,
-    packageName: (meta ? asTrimmedString(meta.assessmentTitle) : null) ?? (isRecord(input.metadata) ? asTrimmedString(input.metadata.assessmentName) : null),
-    versionLabel: (meta ? asTrimmedString(meta.versionLabel) : null) ?? (isRecord(input.metadata) && isRecord(input.metadata.compatibility) ? asTrimmedString(input.metadata.compatibility.packageSemver) : null),
-  }
-}
-
-export function importAssessmentPackagePayload(input: unknown): ImportedAssessmentPackageResult {
-  const detected = detectAssessmentPackageVersion(input)
-  console.info('[admin-assessment-import] Detected package payload version.', {
-    detectedVersion: detected.detectedVersion,
-    schemaVersion: detected.schemaVersion,
-    packageName: detected.packageName,
-    versionLabel: detected.versionLabel,
+export function analyzePackageForImport(input: unknown): ImportedAssessmentPackageResult {
+  const detected = classifyPackageContract(input)
+  const validated = validateDetectedPackage(input, detected)
+  const readiness = summarizeImportReadiness({
+    classifier: detected.classifier,
+    validationStatus: validated.status,
+    compileRequired: validated.compileRequired,
+    compilePerformed: validated.compilePerformed,
+    runtimeArtifactProduced: Boolean(validated.runtimePayload),
   })
 
-  switch (detected.detectedVersion) {
-    case 'legacy_v1': {
-      const validation = validateSonartraAssessmentPackage(input)
-      const readiness: AdminAssessmentPackageReadinessFlags = {
-        structurallyValid: validation.ok,
-        importable: validation.ok,
-        compilable: validation.ok,
-        evaluatable: validation.ok,
-        simulatable: validation.ok,
-        runtimeExecutable: validation.ok,
-        liveRuntimeEnabled: validation.ok,
-        publishable: validation.ok,
-      }
-      return withValidationSummary({
-        detectedVersion: detected.detectedVersion,
-        schemaVersion: validation.schemaVersion ?? detected.schemaVersion,
-        packageName: validation.normalizedPackage?.meta.assessmentTitle ?? detected.packageName,
-        versionLabel: validation.normalizedPackage?.meta.versionLabel ?? detected.versionLabel,
-        packageStatus: validation.status,
-        validationStatus: validation.status,
-        errors: validation.errors,
-        warnings: validation.warnings,
-        summary: buildGenericSummary({
-          ...validation.summary,
-          packageName: validation.normalizedPackage?.meta.assessmentTitle ?? detected.packageName,
-          versionLabel: validation.normalizedPackage?.meta.versionLabel ?? detected.versionLabel,
-          assessmentKey: validation.normalizedPackage?.meta.assessmentKey ?? null,
-        }),
-        readiness,
-        definitionPayload: validation.normalizedPackage,
-      })
-    }
-    case 'package_contract_v2': {
-      const validation = validateSonartraAssessmentPackageV2(input)
-      const packageStatus: AssessmentPackageStatus = !validation.ok ? 'invalid' : validation.warnings.length > 0 ? 'valid_with_warnings' : 'valid'
-      const compileResult = validation.normalizedPackage ? compileAssessmentPackageV2(validation.normalizedPackage) : null
-      const readiness: AdminAssessmentPackageReadinessFlags = {
-        structurallyValid: validation.ok,
-        importable: validation.ok,
-        compilable: Boolean(compileResult?.ok),
-        evaluatable: Boolean(compileResult?.ok),
-        simulatable: Boolean(compileResult?.ok),
-        runtimeExecutable: false,
-        liveRuntimeEnabled: false,
-        publishable: false,
-      }
-      return withValidationSummary({
-        detectedVersion: detected.detectedVersion,
-        schemaVersion: validation.normalizedPackage?.schemaVersion ?? detected.schemaVersion ?? SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
-        packageName: validation.normalizedPackage?.metadata.assessmentName ?? detected.packageName,
-        versionLabel: validation.normalizedPackage?.metadata.compatibility.packageSemver ?? detected.versionLabel,
-        packageStatus,
-        validationStatus: packageStatus,
-        errors: validation.errors,
-        warnings: validation.warnings,
-        summary: buildGenericSummary({
-          questionsCount: validation.summary.questionCount,
-          dimensionsCount: validation.summary.dimensionCount,
-          optionsCount: 0,
-          scoringRuleCount: validation.summary.transformCount,
-          normalizationRuleCount: validation.summary.normalizationRuleCount,
-          outputRuleCount: validation.summary.outputRuleCount,
-          localeCount: validation.normalizedPackage?.metadata.locales.supportedLocales.length ?? 0,
-          packageName: validation.normalizedPackage?.metadata.assessmentName ?? detected.packageName,
-          versionLabel: validation.normalizedPackage?.metadata.compatibility.packageSemver ?? detected.versionLabel,
-          assessmentKey: validation.normalizedPackage?.metadata.assessmentKey ?? null,
-          sectionCount: validation.summary.sectionCount,
-          derivedDimensionCount: validation.summary.derivedDimensionCount,
-          responseModelCount: validation.summary.responseModelCount,
-          transformCount: validation.summary.transformCount,
-          integrityRuleCount: validation.summary.integrityRuleCount,
-        }),
-        readiness,
-        definitionPayload: validation.normalizedPackage,
-      })
-    }
-    default: {
-      const errors: SonartraAssessmentPackageValidationIssue[] = [{
-        path: 'schemaVersion',
-        message: 'Unknown or unsupported package contract version. Upload a legacy/v1 package or a Package Contract v2 payload.',
-      }]
-      const result = withValidationSummary({
-        detectedVersion: 'unknown',
-        schemaVersion: detected.schemaVersion,
-        packageName: detected.packageName,
-        versionLabel: detected.versionLabel,
-        packageStatus: 'invalid',
-        validationStatus: 'invalid',
-        errors,
-        warnings: [],
-        summary: buildGenericSummary({
-          packageName: detected.packageName,
-          versionLabel: detected.versionLabel,
-        }),
-        readiness: {
-          structurallyValid: false,
-          importable: false,
-          compilable: false,
-          evaluatable: false,
-          simulatable: false,
-          runtimeExecutable: false,
-          liveRuntimeEnabled: false,
-          publishable: false,
-        },
-        definitionPayload: null,
-      })
-      console.warn('[admin-assessment-import] Unsupported package contract version encountered.', {
-        schemaVersion: detected.schemaVersion,
-        packageName: detected.packageName,
-      })
-      return result
-    }
+  const packageName = detected.classifier === 'legacy_contract_v1'
+    ? (isRecord(validated.definitionPayload) && isRecord(validated.definitionPayload.meta) ? asTrimmedString(validated.definitionPayload.meta.assessmentTitle) : null) ?? detected.packageName
+    : (validated.canonicalPayload?.metadata.assessmentName ?? validated.runtimePayload?.metadata.assessmentName ?? detected.packageName)
+
+  const versionLabel = detected.classifier === 'legacy_contract_v1'
+    ? (isRecord(validated.definitionPayload) && isRecord(validated.definitionPayload.meta) ? asTrimmedString(validated.definitionPayload.meta.versionLabel) : null) ?? detected.versionLabel
+    : (validated.canonicalPayload?.metadata.compatibility.packageSemver ?? validated.runtimePayload?.metadata.compatibility.packageSemver ?? detected.versionLabel)
+
+  const analysis: AdminAssessmentImportAnalysis = {
+    classifier: detected.classifier,
+    contractFamily: detected.classifier === 'legacy_contract_v1'
+      ? 'legacy'
+      : detected.classifier === 'canonical_contract_v2'
+        ? 'canonical'
+        : detected.classifier === 'runtime_contract_v2'
+          ? 'runtime'
+          : 'unknown',
+    packageVersion: detected.classifier === 'legacy_contract_v1' ? '1' : detected.classifier === 'unknown_or_invalid' ? null : '2',
+    payloadKind: detected.classifier === 'legacy_contract_v1'
+      ? 'legacy_payload'
+      : detected.classifier === 'canonical_contract_v2'
+        ? 'canonical_authoring_payload'
+        : detected.classifier === 'runtime_contract_v2'
+          ? 'runtime_executable_payload'
+          : 'unknown_payload',
+    structurallyValid: readiness.readiness.structurallyValid,
+    importable: readiness.readiness.importable,
+    executableReady: readiness.executableReady,
+    authoringOnly: readiness.authoringOnly,
+    compileRequired: validated.compileRequired,
+    compilePerformed: validated.compilePerformed,
+    compiledRuntimeArtifactProduced: Boolean(validated.runtimePayload),
+    readinessSemantic: readiness.semantic,
+    diagnostics: validated.diagnostics,
+    compatibilityFlags: [
+      ...(detected.classifier === 'runtime_contract_v2' ? ['runtime_payload_upload'] : []),
+      ...(detected.classifier === 'canonical_contract_v2' && !validated.runtimePayload ? ['canonical_compile_incomplete'] : []),
+    ],
+    compiledRuntimeArtifact: validated.runtimePayload,
   }
+
+  return withValidationSummary({
+    detectedVersion: detected.detectedVersion,
+    classifier: detected.classifier,
+    schemaVersion: detected.classifier === 'runtime_contract_v2'
+      ? SONARTRA_RUNTIME_CONTRACT_V2
+      : detected.classifier === 'canonical_contract_v2'
+        ? validated.canonicalPayload?.schemaVersion ?? detected.schemaVersion ?? SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
+        : detected.schemaVersion,
+    packageName,
+    versionLabel,
+    packageStatus: validated.status,
+    validationStatus: validated.status,
+    errors: validated.errors,
+    warnings: validated.warnings,
+    summary: validated.summary,
+    readiness: readiness.readiness,
+    definitionPayload: validated.definitionPayload,
+    analysis,
+  })
 }
+
+export const importAssessmentPackagePayload = analyzePackageForImport
 
 export function extractAssessmentPackageIdentity(
   input: unknown,
@@ -394,7 +675,7 @@ export function extractAssessmentPackageIdentity(
   }
 
   if (imported.detectedVersion === 'package_contract_v2') {
-    const metadata = isRecord(input.metadata) ? input.metadata : {}
+    const metadata = isRecord(input.metadata) ? input.metadata : (isRecord(imported.definitionPayload) && isRecord(imported.definitionPayload.metadata) ? imported.definitionPayload.metadata : {})
     const locales = isRecord(metadata.locales) ? metadata.locales : {}
     const authoring = isRecord(metadata.authoring) ? metadata.authoring : {}
     const compatibility = isRecord(metadata.compatibility) ? metadata.compatibility : {}

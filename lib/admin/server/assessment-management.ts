@@ -506,7 +506,7 @@ function normalisePackageSummary(value: unknown): SonartraAssessmentPackageSumma
 }
 
 function normaliseDetectedPackageVersion(value: unknown): AdminAssessmentPackageDetectedVersion | null {
-  return value === 'legacy_v1' || value === 'package_contract_v2' || value === 'unknown'
+  return value === 'legacy_v1' || value === 'package_contract_v2' || value === 'runtime_contract_v2' || value === 'unknown'
     ? value
     : null
 }
@@ -1893,9 +1893,12 @@ function buildPackageValidationReport(input: {
     importable: boolean
     compilable: boolean
     evaluatable: boolean
+    simulatable?: boolean
     runtimeExecutable: boolean
+    liveRuntimeEnabled?: boolean
     publishable: boolean
   }
+  analysis?: unknown
   summary: SonartraAssessmentPackageSummary | null
   errors: SonartraAssessmentPackageValidationIssue[]
   warnings: SonartraAssessmentPackageValidationIssue[]
@@ -1907,6 +1910,7 @@ function buildPackageValidationReport(input: {
     packageName: input.packageName ?? null,
     versionLabel: input.versionLabel ?? null,
     readiness: input.readiness ?? null,
+    analysis: input.analysis ?? null,
     summary: input.summary,
     errors: input.errors,
     warnings: input.warnings,
@@ -2623,6 +2627,7 @@ async function persistImportedPackageOnVersion(
         packageName: input.importedPackage.packageName,
         versionLabel: input.importedPackage.versionLabel,
         readiness: input.importedPackage.readiness,
+        analysis: input.importedPackage.analysis,
         summary: input.importedPackage.summary,
         errors: input.importedPackage.errors,
         warnings: input.importedPackage.warnings,

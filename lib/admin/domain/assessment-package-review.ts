@@ -124,7 +124,7 @@ function normalizePackageInfoRuntime(packageInfo: AdminAssessmentVersionPackageI
     status: packageInfo?.status === 'valid' || packageInfo?.status === 'valid_with_warnings' || packageInfo?.status === 'invalid' || packageInfo?.status === 'missing'
       ? packageInfo.status
       : 'missing',
-    detectedVersion: packageInfo?.detectedVersion === 'legacy_v1' || packageInfo?.detectedVersion === 'package_contract_v2' || packageInfo?.detectedVersion === 'unknown'
+    detectedVersion: packageInfo?.detectedVersion === 'legacy_v1' || packageInfo?.detectedVersion === 'package_contract_v2' || packageInfo?.detectedVersion === 'runtime_contract_v2' || packageInfo?.detectedVersion === 'unknown'
       ? packageInfo.detectedVersion
       : null,
     schemaVersion: typeof packageInfo?.schemaVersion === 'string' && packageInfo.schemaVersion.trim() ? packageInfo.schemaVersion.trim() : null,
