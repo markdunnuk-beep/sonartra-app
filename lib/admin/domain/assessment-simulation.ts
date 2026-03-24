@@ -166,6 +166,7 @@ export interface AdminAssessmentSimulationWorkspaceStatus {
   summary: string
   blockingReason: string | null
   canRunSimulation: boolean
+  publishNotSupported: boolean
 }
 
 export interface AdminAssessmentSimulationActionState {
@@ -362,19 +363,24 @@ function selectScenarioOption(question: SonartraAssessmentPackageQuestion, scena
   return orderedOptions[0]
 }
 
-export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage'>): AdminAssessmentSimulationWorkspaceStatus {
+export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage' | 'storedDefinitionPayload'>): AdminAssessmentSimulationWorkspaceStatus {
   const status = version.packageInfo?.status === 'valid' || version.packageInfo?.status === 'valid_with_warnings' || version.packageInfo?.status === 'invalid' || version.packageInfo?.status === 'missing'
     ? version.packageInfo.status
     : 'missing'
+  const storedPackage = version.storedDefinitionPayload ?? version.normalizedPackage
   const rawQuestionCount = Array.isArray((version.normalizedPackage as { questions?: unknown[] } | null)?.questions)
     ? ((version.normalizedPackage as { questions?: unknown[] } | null)?.questions?.length ?? 0)
     : null
   const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
-  const isImportedV2Package = isRuntimeFoundationPackage(version)
-  const pkgV2 = isImportedV2Package ? parseStoredValidatedAssessmentPackageV2(version.normalizedPackage as unknown) : null
+  const storedNormalizedPackage = parseStoredNormalizedAssessmentPackage(storedPackage)
+  const isImportedV2Package = isRuntimeFoundationPackage({
+    packageInfo: version.packageInfo,
+    normalizedPackage: storedNormalizedPackage ?? pkg,
+  })
+  const pkgV2 = isImportedV2Package ? parseStoredValidatedAssessmentPackageV2(storedPackage as unknown) : null
 
   if (isImportedV2Package) {
-    const executable = executeAdminAssessmentSimulationV2(version.normalizedPackage as unknown, {
+    const executable = executeAdminAssessmentSimulationV2(storedPackage as unknown, {
       responses: {},
       locale: pkgV2?.metadata.locales.defaultLocale ?? null,
       source: 'manual_json',
@@ -389,15 +395,20 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
         summary: 'Package Contract v2 is stored for this version, but admin simulation becomes available only after the current package compiles cleanly for the v2 evaluator and materializer.',
         blockingReason: executable.result.errors[0]?.message ?? 'Package Contract v2 is not simulatable in admin yet because compilation/readiness is incomplete.',
         canRunSimulation: false,
+        publishNotSupported: false,
       }
     }
 
+    const publishNotSupported = !readiness.publishable
     return {
       eligibility: 'eligible',
       statusLabel: status === 'valid_with_warnings' ? 'Eligible with warnings' : 'Eligible',
-      summary: 'Package Contract v2 can run through the admin-only simulation/compiler/evaluator/materialization path. This does not imply live runtime or publish readiness.',
+      summary: publishNotSupported
+        ? 'Simulation is available for this version, but publishing is not yet supported.'
+        : 'Package Contract v2 can run through the admin-only simulation/compiler/evaluator/materialization path.',
       blockingReason: null,
       canRunSimulation: true,
+      publishNotSupported,
     }
   }
 
@@ -408,6 +419,7 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
       summary: 'No simulation run yet for this version because a valid normalized package has not been attached.',
       blockingReason: 'Import and validate a package to make simulation available for this version.',
       canRunSimulation: false,
+      publishNotSupported: false,
     }
   }
 
@@ -418,6 +430,7 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
       summary: 'Simulation is not yet available for the current package state because the latest import is invalid.',
       blockingReason: 'Resolve the package validation errors, then run simulation from this workspace.',
       canRunSimulation: false,
+      publishNotSupported: false,
     }
   }
 
@@ -428,6 +441,7 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
       summary: 'Simulation is not supported for the current normalized package because it does not contain answerable questions.',
       blockingReason: 'At least one normalized question is required before you can run simulation.',
       canRunSimulation: false,
+      publishNotSupported: false,
     }
   }
 
@@ -439,6 +453,7 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
       : 'Simulation is ready to run for deterministic score, normalization, and output-rule verification.',
     blockingReason: null,
     canRunSimulation: true,
+    publishNotSupported: false,
   }
 }
 

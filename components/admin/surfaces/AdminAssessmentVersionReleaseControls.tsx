@@ -9,6 +9,7 @@ import {
 } from '@/app/admin/assessments/[assessmentId]/actions'
 import { Button } from '@/components/ui/Button'
 import type { AdminAssessmentVersionMutationState, AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
+import { getAdminAssessmentSimulationWorkspaceStatus } from '@/lib/admin/domain/assessment-simulation'
 
 const INITIAL_STATE: AdminAssessmentVersionMutationState = { status: 'idle' }
 
@@ -40,6 +41,7 @@ export function AdminAssessmentVersionReleaseControls({
   const [publishState, publishAction] = supportsFormState ? useFormState(submitAdminAssessmentPublishVersionAction, INITIAL_STATE) : [INITIAL_STATE, undefined as unknown as never]
   const [notesState, notesAction] = supportsFormState ? useFormState(submitAdminAssessmentReleaseNotesAction, INITIAL_STATE) : [INITIAL_STATE, undefined as unknown as never]
   const publishDisabled = version.lifecycleStatus !== 'draft'
+  const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(version)
 
   if (mode === 'notes') {
     if (!supportsFormState) {
@@ -111,9 +113,11 @@ export function AdminAssessmentVersionReleaseControls({
       <div className="rounded-2xl border border-accent/25 bg-accent/[0.08] p-4">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Step 1</p>
         <p className="mt-2 text-base font-semibold text-textPrimary">Run test</p>
-        <p className="mt-2 text-sm leading-6 text-textSecondary">Complete a test run and preview the output.</p>
+        <p className="mt-2 text-sm leading-6 text-textSecondary">{simulationStatus.canRunSimulation ? 'Complete a test run and preview the output.' : (simulationStatus.blockingReason ?? 'Import and validate a package before running tests.')}</p>
         <div className="mt-4">
-          <Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}/simulate`} variant="primary">Run test</Button>
+          {simulationStatus.canRunSimulation
+            ? <Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}/simulate`} variant="primary">Run test</Button>
+            : <Button variant="primary" disabled>Run test</Button>}
         </div>
       </div>
 
