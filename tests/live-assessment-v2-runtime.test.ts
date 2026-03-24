@@ -103,6 +103,7 @@ test('getQuestionsByAssessmentIdWithDependencies returns a safe v2 live delivery
             total_questions: 4,
             is_active: true,
             package_schema_version: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+            package_raw_payload: pkg,
             definition_payload: pkg,
             package_validation_report_json: {
               analysis: {
@@ -118,7 +119,10 @@ test('getQuestionsByAssessmentIdWithDependencies returns a safe v2 live delivery
   })
 
   assert.ok(response)
-  assert.equal(response?.questions.length, 0)
+  assert.equal(response?.questions.length, 4)
+  assert.equal(response?.questions[0]?.question_number, 1)
+  assert.equal(response?.responses[0]?.question_id, 1)
+  assert.equal(response?.responses[0]?.response_value, 4)
   assert.equal((response as unknown as { runtime: { contractVersion: string } }).runtime.contractVersion, 'package_contract_v2')
   assert.equal((response as unknown as { runtime: { questions: Array<{ id: string; responseModel: { options: unknown[] } }> } }).runtime.questions[0]?.id, 'q1')
   assert.equal((response as unknown as { runtime: { responses: Array<{ questionId: string; value: unknown }> } }).runtime.responses[0]?.questionId, 'q1')
