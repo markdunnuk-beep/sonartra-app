@@ -1,5 +1,7 @@
 import { AssessmentRow } from '@/lib/assessment-types'
+import type { AssessmentRepositoryItem } from '@/lib/assessment/assessment-repository-types'
 import { queryDb } from '@/lib/db'
+import { loadLiveAssessmentRepositoryInventory } from '@/lib/server/assessment-repository-inventory'
 import { resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness'
 import { DatabaseUserResolutionError, resolveAuthenticatedAppUser } from '@/lib/server/auth'
 import { checkDatabaseHealth, DbHealthCheckResult } from '@/lib/server/db-health'
@@ -24,6 +26,7 @@ export interface DashboardState {
 
 interface DashboardStateDependencies {
   resolveAuthenticatedUserId: () => Promise<string | null>
+  getAssessmentInventory: (dbUserId: string) => Promise<AssessmentRepositoryItem[]>
   getLatestAssessment: (dbUserId: string) => Promise<AssessmentRow | null>
   getResult: (dbUserId: string) => Promise<IndividualIntelligenceResultContract>
   resolveLifecycle: typeof resolveIndividualLifecycleState
@@ -56,6 +59,9 @@ const defaultDependencies: DashboardStateDependencies = {
     )
 
     return result.rows[0] ?? null
+  },
+  async getAssessmentInventory(dbUserId) {
+    return loadLiveAssessmentRepositoryInventory(dbUserId)
   },
   resolveLifecycle: resolveIndividualLifecycleState,
   async getResult(dbUserId) {
@@ -93,6 +99,15 @@ function deriveStatusFromAssessment(assessment: AssessmentRow | null): Dashboard
   if (normalisedPercent >= 100) return 'completed_processing'
 
   return 'in_progress'
+}
+
+function mapInventoryLifecycleStatus(item: AssessmentRepositoryItem | null): DashboardAssessmentStatus | null {
+  if (!item?.lifecycleState) return null
+  if (item.lifecycleState === 'ready') return 'ready'
+  if (item.lifecycleState === 'completed_processing') return 'completed_processing'
+  if (item.lifecycleState === 'in_progress') return 'in_progress'
+  if (item.lifecycleState === 'error') return 'error'
+  return 'not_started'
 }
 
 function buildUnauthenticatedDashboardState(): DashboardState {
@@ -152,16 +167,27 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
   }
 
   let assessment: AssessmentRow | null = null
+  let inventoryItem: AssessmentRepositoryItem | null = null
+
+  try {
+    const inventory = await deps.getAssessmentInventory(userId)
+    inventoryItem = inventory[0] ?? null
+  } catch (error) {
+    console.error('getAuthenticatedDashboardState inventory lookup failed:', error)
+  }
+
   try {
     assessment = await deps.getLatestAssessment(userId)
   } catch (error) {
     console.error('getAuthenticatedDashboardState latest assessment lookup failed:', error)
   }
 
-  let lifecycleStatus: DashboardAssessmentStatus = deriveStatusFromAssessment(assessment)
+  let lifecycleStatus: DashboardAssessmentStatus = mapInventoryLifecycleStatus(inventoryItem) ?? deriveStatusFromAssessment(assessment)
   try {
-    const lifecycle = await deps.resolveLifecycle({ resolveAuthenticatedUserId: async () => userId })
-    lifecycleStatus = lifecycle.authState === 'authenticated' ? lifecycle.lifecycle.state : lifecycleStatus
+    if (!inventoryItem) {
+      const lifecycle = await deps.resolveLifecycle({ resolveAuthenticatedUserId: async () => userId })
+      lifecycleStatus = lifecycle.authState === 'authenticated' ? lifecycle.lifecycle.state : lifecycleStatus
+    }
   } catch (error) {
     console.error('getAuthenticatedDashboardState lifecycle resolution failed; preserving assessment metrics:', error)
   }
