@@ -12,6 +12,7 @@ import {
 } from '@/lib/results/individual-results-presentation'
 import { IndividualResultsExperience } from '@/components/results/IndividualResultsExperience'
 import { UserFacingAssessmentResultView } from '@/components/results/UserFacingAssessmentResultView'
+import { HybridMvpIndividualResultView } from '@/components/results/HybridMvpIndividualResultView'
 
 type ViewModel = IndividualResultApiResponse | { state: string; message?: string }
 
@@ -59,6 +60,10 @@ export function IndividualIntelligenceResultView({ model, firstName }: { model: 
 
   if (model.state === 'ready_v2' && 'data' in model) {
     return <UserFacingAssessmentResultView result={model.data} />
+  }
+
+  if (model.state === 'ready_hybrid' && 'data' in model) {
+    return <HybridMvpIndividualResultView data={model.data} />
   }
 
   if (model.state === 'empty') {

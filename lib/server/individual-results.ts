@@ -2,6 +2,7 @@ import { AssessmentResultRow, AssessmentResultSignalRow, AssessmentRow } from '@
 import { queryDb } from '@/lib/db';
 import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants';
 import { resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness';
+import { parseHybridMvpResultPayload, type HybridMvpResultPayloadViewModel } from '@/lib/server/hybrid-mvp-result';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 import {
   buildLiveAssessmentUserResultContract,
@@ -17,6 +18,7 @@ export type IndividualResultsState =
   | 'results_unavailable'
   | 'ready'
   | 'ready_v2'
+  | 'ready_hybrid'
   | 'error';
 
 export interface IndividualResultAssessmentMetadata {
@@ -56,6 +58,13 @@ export interface IndividualResultSignalSummary {
   isSecondary: boolean;
 }
 
+
+export interface IndividualHybridResultReadyData {
+  assessment: IndividualResultAssessmentMetadata;
+  snapshot: IndividualResultSnapshotMetadata;
+  hybrid: HybridMvpResultPayloadViewModel;
+}
+
 export interface IndividualResultReadyData {
   assessment: IndividualResultAssessmentMetadata;
   snapshot: IndividualResultSnapshotMetadata;
@@ -76,6 +85,7 @@ export type IndividualResultApiResponse =
     }
   | { ok: true; state: 'ready'; data: IndividualResultReadyData }
   | { ok: true; state: 'ready_v2'; data: LiveAssessmentUserResultContract }
+  | { ok: true; state: 'ready_hybrid'; data: IndividualHybridResultReadyData }
   | { ok: false; state: 'error'; message: string };
 
 interface AssessmentContextRow extends AssessmentRow {
@@ -161,7 +171,7 @@ const defaultDependencies: IndividualResultsDependencies = {
            EXISTS (
              SELECT 1 FROM assessment_result_signals ars WHERE ars.assessment_result_id = ar.id
            )
-           OR COALESCE(ar.result_payload->>'contractVersion', '') = 'package_contract_v2'
+           OR COALESCE(ar.result_payload->>'contractVersion', '') IN ('package_contract_v2', 'hybrid_mvp_v1')
          )
        ORDER BY a.completed_at DESC NULLS LAST, ar.created_at DESC
        LIMIT 1`,
@@ -303,6 +313,27 @@ export async function getLatestIndividualResultForUser(
     const snapshot = await resolvedDependencies.getResultById(readySnapshot.resultId);
     if (!snapshot || snapshot.status !== 'complete') {
       return { ok: false, state: 'error', message: 'Ready result metadata could not be loaded.' };
+    }
+
+    const hybridPayload = parseHybridMvpResultPayload(snapshot.result_payload);
+    if (hybridPayload) {
+      return {
+        ok: true,
+        state: 'ready_hybrid',
+        data: {
+          assessment: toAssessmentMetadata(readySnapshot, snapshot),
+          snapshot: {
+            resultId: snapshot.id,
+            status: snapshot.status,
+            scoringModelKey: snapshot.scoring_model_key,
+            snapshotVersion: snapshot.snapshot_version,
+            createdAt: snapshot.created_at,
+            updatedAt: snapshot.updated_at,
+            scoredAt: snapshot.scored_at,
+          },
+          hybrid: hybridPayload,
+        },
+      };
     }
 
     if (isPackageContractV2Result(snapshot)) {
