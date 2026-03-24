@@ -332,10 +332,10 @@ test('assessment import surface renders inline fallback content when optional fi
     />,
   )
 
-  assert.match(html, /Assessment package imported successfully\./)
+  assert.match(html, /Assessment package uploaded successfully\./)
   assert.match(html, /Import assessment package/)
-  assert.match(html, /Package preview unavailable|No package attached/)
-  assert.match(html, /No internal release notes recorded yet\./)
+  assert.match(html, /No package uploaded/)
+  assert.match(html, /Internal notes/)
 })
 
 test('WPLP-80 canonical candidate import keeps post-import admin readiness and reachability coherent', () => {
@@ -367,7 +367,7 @@ test('WPLP-80 canonical candidate import keeps post-import admin readiness and r
     normalizedPackage: imported.definitionPayload as never,
   })
   assert.equal(simulationStatus.canRunSimulation, true)
-  assert.match(simulationStatus.summary, /can run/i)
+  assert.match(simulationStatus.summary, /simulation is available for this version, but publishing is not yet supported/i)
 
   const previewStatus = getAdminAssessmentReportPreviewWorkspaceStatus({
     packageInfo: {

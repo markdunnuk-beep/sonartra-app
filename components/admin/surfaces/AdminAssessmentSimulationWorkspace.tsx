@@ -196,7 +196,9 @@ export function AdminAssessmentSimulationWorkspace({
       >
         <EmptyState
           title="Simulation is blocked"
-          detail={eligibility.blockingReason ?? 'Attach and validate a package before simulation can run.'}
+          detail={eligibility.publishNotSupported
+            ? 'Simulation is available for this version, but publishing is not yet supported.'
+            : (eligibility.blockingReason ?? 'Attach and validate a package before simulation can run.')}
           action={<Button href={`/admin/assessments/${assessmentId}/versions/${version.versionLabel}/import`} variant="secondary">Open package import</Button>}
         />
       </SurfaceSection>

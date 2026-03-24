@@ -14,7 +14,7 @@ test('version detail surface and release controls source use simplified operator
   assert.match(detailSource, /Recent activity/)
   assert.match(detailSource, /Work through these steps before publishing this version\./)
   assert.match(detailSource, /This version is not ready to publish yet\./)
-  assert.match(detailSource, /Issues to fix:/)
+  assert.match(detailSource, /Actionable issues:|Informational notes/)
   assert.doesNotMatch(detailSource, /Release control/)
   assert.doesNotMatch(detailSource, /Latest regression suite snapshot/)
   assert.doesNotMatch(detailSource, /Diff/)

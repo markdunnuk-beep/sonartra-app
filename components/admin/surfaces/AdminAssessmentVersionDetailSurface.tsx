@@ -11,6 +11,7 @@ import {
   getAdminAssessmentPackagePreviewSummary,
   getAdminAssessmentVersionReadiness,
 } from '@/lib/admin/domain/assessment-package-review'
+import { getAdminAssessmentSimulationWorkspaceStatus } from '@/lib/admin/domain/assessment-simulation'
 import { formatAdminRelativeTime, formatAdminTimestamp } from '@/lib/admin/wireframe'
 
 function getReadinessTone(status: 'ready' | 'ready_with_warnings' | 'not_ready') {
@@ -154,6 +155,64 @@ function formatOperatorIssue(item: string) {
   return formattedPath ? `${formattedPath} — ${formattedMessage}` : formattedMessage
 }
 
+function normalizeIssueGroupKey(input: string) {
+  const text = input.toLowerCase()
+  if (text.includes('missing_report_content_ref') || text.includes('report binding') || text.includes('report content')) {
+    return 'report_content_refs'
+  }
+  if (text.includes('response_pattern') || text.includes('response-pattern')) {
+    return 'response_pattern_limitations'
+  }
+  if (text.includes('normalization.groups') || text.includes('normalization groups')) {
+    return 'normalization_groups'
+  }
+  if (text.includes('runtime') || text.includes('publish flow') || text.includes('live version')) {
+    return 'runtime_limitations'
+  }
+  return null
+}
+
+function classifyInformationalIssue(input: string) {
+  const text = input.toLowerCase()
+  if (text.includes('missing_report_content_ref')) return true
+  if (text.includes('response_pattern_primitives_limited')) return true
+  if (text.includes('normalization.groups')) return true
+  if (text.includes('publish is blocked because this version uses package') || text.includes('not yet supported')) return true
+  if (text.includes('runtime') && text.includes('not ready')) return true
+  return false
+}
+
+function buildGroupedIssueList(items: string[]) {
+  const grouped = new Map<string, { sample: string; count: number }>()
+  const passthrough: string[] = []
+  for (const raw of items) {
+    const key = normalizeIssueGroupKey(raw)
+    if (!key) {
+      passthrough.push(raw)
+      continue
+    }
+    const existing = grouped.get(key)
+    if (existing) {
+      existing.count += 1
+      continue
+    }
+    grouped.set(key, { sample: raw, count: 1 })
+  }
+
+  const groupedItems = Array.from(grouped.entries()).map(([key, value]) => {
+    if (value.count <= 1) {
+      return value.sample
+    }
+    if (key === 'report_content_refs') return `${value.sample} (${value.count} related warnings)`
+    if (key === 'response_pattern_limitations') return `${value.sample} (${value.count} related warnings)`
+    if (key === 'normalization_groups') return `${value.sample} (${value.count} related warnings)`
+    if (key === 'runtime_limitations') return `${value.sample} (${value.count} related notes)`
+    return `${value.sample} (${value.count} related items)`
+  })
+
+  return [...passthrough, ...groupedItems]
+}
+
 const AdminAssessmentVersionReleaseControls = dynamic(() => import('@/components/admin/surfaces/AdminAssessmentVersionReleaseControls').then((module) => module.AdminAssessmentVersionReleaseControls), { ssr: false })
 
 function EvidenceList({ items, tone }: { items: string[]; tone: 'rose' | 'amber' }) {
@@ -191,11 +250,21 @@ export function AdminAssessmentVersionDetailSurface({
   const packageInfo = safeVersion.packageInfo
   const preview = getAdminAssessmentPackagePreviewSummary(safeVersion)
   const readiness = getAdminAssessmentVersionReadiness(safeVersion)
+  const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(safeVersion)
   const issues = [
     ...readiness.blockingIssues,
     ...packageInfo.errors.map((issue) => `${issue.path} · ${issue.message}`),
     ...packageInfo.warnings.map((issue) => `${issue.path} · ${issue.message}`),
   ].map(formatOperatorIssue)
+  const actionableIssues = buildGroupedIssueList([
+    ...readiness.blockingIssues.filter((item) => !classifyInformationalIssue(item)),
+    ...packageInfo.errors.map((issue) => `${issue.path} · ${issue.message}`),
+  ].map(formatOperatorIssue))
+  const informationalItems = buildGroupedIssueList([
+    ...readiness.warnings,
+    ...packageInfo.warnings.map((issue) => `${issue.path} · ${issue.message}`),
+    ...readiness.blockingIssues.filter((item) => classifyInformationalIssue(item)),
+  ].map(formatOperatorIssue))
   const summaryItems = [
     { label: 'Status', value: formatLifecycleStatus(safeVersion.lifecycleStatus) },
     { label: 'Ready to publish', value: getReadyToPublishLabel(readiness.status) },
@@ -217,7 +286,9 @@ export function AdminAssessmentVersionDetailSurface({
         actions={(
           <div className="flex flex-wrap gap-2">
             <Button href={`/admin/assessments/${detailData.assessment.id}?tab=versions`} variant="ghost">← Back to versions</Button>
-            <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/simulate`} variant="primary"><FlaskConical className="mr-2 h-4 w-4" />Run test</Button>
+            {simulationStatus.canRunSimulation
+              ? <Button href={`/admin/assessments/${detailData.assessment.id}/versions/${safeVersion.versionLabel}/simulate`} variant="primary"><FlaskConical className="mr-2 h-4 w-4" />Run test</Button>
+              : <Button variant="primary" disabled><FlaskConical className="mr-2 h-4 w-4" />Run test</Button>}
             <Button href={buildAdminAuditHref({ entityType: 'assessment_version', entityId: safeVersion.id })} variant="ghost"><Activity className="mr-2 h-4 w-4" />View audit</Button>
           </div>
         )}
@@ -258,16 +329,16 @@ export function AdminAssessmentVersionDetailSurface({
                   ? 'Run a final test, check readiness, and review the notes below before publishing.'
                   : 'Run a final test, then publish when you are ready.'}
             </p>
-            {readiness.blockingIssues.length ? (
+            {actionableIssues.length ? (
               <div className="mt-4 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-200">Issues to fix:</p>
-                <EvidenceList items={readiness.blockingIssues.map(formatOperatorIssue)} tone="rose" />
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-200">Actionable issues:</p>
+                <EvidenceList items={actionableIssues} tone="rose" />
               </div>
             ) : null}
-            {!readiness.blockingIssues.length && readiness.warnings.length ? (
+            {informationalItems.length ? (
               <div className="mt-4 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-200">Items to review</p>
-                <EvidenceList items={readiness.warnings.map(formatOperatorIssue)} tone="amber" />
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-200">Informational notes</p>
+                <EvidenceList items={informationalItems} tone="amber" />
               </div>
             ) : null}
           </div>
@@ -299,11 +370,8 @@ export function AdminAssessmentVersionDetailSurface({
       {issues.length ? (
         <SurfaceSection title="Issues to fix" description="Complete these steps before publishing.">
           <div className="space-y-4">
-            {readiness.blockingIssues.length ? <EvidenceList items={readiness.blockingIssues.map(formatOperatorIssue)} tone="rose" /> : null}
-            {packageInfo.errors.length ? <EvidenceList items={packageInfo.errors.map((issue) => formatOperatorIssue(`${issue.path} · ${issue.message}`))} tone="rose" /> : null}
-            {readiness.warnings.length || packageInfo.warnings.length ? (
-              <EvidenceList items={[...readiness.warnings, ...packageInfo.warnings.map((issue) => `${issue.path} · ${issue.message}`)].map(formatOperatorIssue)} tone="amber" />
-            ) : null}
+            {actionableIssues.length ? <EvidenceList items={actionableIssues} tone="rose" /> : null}
+            {informationalItems.length ? <EvidenceList items={informationalItems} tone="amber" /> : null}
           </div>
         </SurfaceSection>
       ) : null}

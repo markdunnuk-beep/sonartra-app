@@ -142,7 +142,8 @@ test('readiness state reflects simulatable in admin versus live runtime-enabled 
   })
 
   assert.equal(status.canRunSimulation, true)
-  assert.match(status.summary, /does not imply live runtime or publish readiness/i)
+  assert.match(status.summary, /simulation is available for this version, but publishing is not yet supported/i)
+  assert.equal(status.publishNotSupported, true)
   assert.equal(imported.readiness.simulatable, true)
   assert.equal(imported.readiness.liveRuntimeEnabled, false)
   assert.equal(imported.readiness.publishable, false)
