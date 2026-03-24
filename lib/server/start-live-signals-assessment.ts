@@ -13,6 +13,7 @@ type WithTransaction = typeof withTransaction
 interface StartAssessmentInput {
   appUser: AuthenticatedAppUser | null
   source?: string
+  assessmentDefinitionId?: string
 }
 
 interface AssignedVersionRow {
@@ -95,12 +96,12 @@ export async function startLiveSignalsAssessment(
      INNER JOIN assessment_definitions ad ON ad.id = ara.assessment_definition_id
      INNER JOIN assessment_versions av ON av.id = ara.assessment_version_id
      WHERE ara.target_user_id = $1
-       AND ad.key = 'sonartra_signals'
+       AND ($2::uuid IS NULL OR ara.assessment_definition_id = $2::uuid)
        AND av.lifecycle_status = 'published'
        AND ara.status IN ('assigned', 'in_progress', 'completed_processing')
      ORDER BY ara.assigned_at DESC
      LIMIT 1`,
-    [appUser.dbUserId],
+    [appUser.dbUserId, input.assessmentDefinitionId ?? null],
   )
   const assignedVersion = assignedVersionResult.rows[0] ?? null
 
@@ -124,6 +125,16 @@ export async function startLiveSignalsAssessment(
           assessmentDefinitionId: currentPublishedVersion.assessmentDefinitionId,
         }
       : null
+
+  if (input.assessmentDefinitionId && !assignedVersion) {
+    return {
+      kind: 'unavailable',
+      status: 404,
+      body: {
+        error: 'No launchable published assignment found for this assessment.',
+      },
+    }
+  }
 
   if (!selectedVersion) {
     return {

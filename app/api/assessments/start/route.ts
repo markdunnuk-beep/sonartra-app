@@ -12,12 +12,14 @@ export async function POST(request: Request) {
       | {
           assessmentVersionKey?: string
           source?: string
+          assessmentDefinitionId?: string
         }
       | null
 
     const result = await startLiveSignalsAssessment({
       appUser,
       source: body?.source,
+      assessmentDefinitionId: body?.assessmentDefinitionId,
     })
 
     return NextResponse.json(result.body, { status: result.status })
