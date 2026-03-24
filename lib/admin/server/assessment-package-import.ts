@@ -4,6 +4,8 @@ import { compileRuntimeContractV2, compileRuntimeContractV2DiagnosticsToIssues, 
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, validateSonartraAssessmentPackageV2, type SonartraAssessmentPackageV2ValidatedImport } from '@/lib/admin/domain/assessment-package-v2'
 import { compileCanonicalToRuntimeContractV2DiagnosticsToIssues, isRuntimeContractV2Payload, SONARTRA_RUNTIME_CONTRACT_V2, validateRuntimeContractV2 } from '@/lib/admin/domain/package-runtime-v2'
 import type { AssessmentImportConflict, AssessmentPackageIdentity } from '@/lib/admin/domain/assessment-management'
+import { deriveReadinessState, type AdminAssessmentReadinessState } from '@/lib/admin/domain/assessment-readiness'
+import type { AssessmentPipelineBoundary } from '@/lib/admin/domain/assessment-pipeline-boundaries'
 
 export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contract_v2' | 'unknown'
 export type AssessmentPackageContractClassifier = 'legacy_contract_v1' | 'canonical_contract_v2' | 'runtime_contract_v2' | 'unknown_or_invalid'
@@ -29,6 +31,7 @@ export interface AdminAssessmentPackageValidationSummary {
   warnings: SonartraAssessmentPackageValidationIssue[]
   summary: SonartraAssessmentPackageSummary | null
   readiness: AdminAssessmentPackageReadinessFlags
+  readinessState: AdminAssessmentReadinessState
   analysis?: AdminAssessmentImportAnalysis
 }
 
@@ -70,7 +73,9 @@ export interface AdminAssessmentImportAnalysis {
   compiledRuntimeArtifactProduced: boolean
   compiledRuntimePlanProduced?: boolean
   readinessSemantic: ImportReadinessSemantic
+  readinessState: AdminAssessmentReadinessState
   diagnostics: ImportDiagnosticCollection
+  diagnosticsByBoundary: Record<AssessmentPipelineBoundary, SonartraAssessmentPackageValidationIssue[]>
   compatibilityFlags: string[]
   compiledRuntimeArtifact: ExecutableAssessmentPackageV2 | null
   compiledRuntimePlan?: CompiledRuntimePlanV2 | null
@@ -512,6 +517,12 @@ export function summarizeImportReadiness(input: {
 }
 
 function buildValidationSummary(input: Omit<ImportedAssessmentPackageResult, 'validationSummary'>): AdminAssessmentPackageValidationSummary {
+  const readinessState = deriveReadinessState({
+    classifier: input.classifier,
+    readiness: input.readiness,
+    compiledPlanAvailable: Boolean(input.analysis.compiledRuntimePlanProduced),
+  })
+
   return {
     success: input.packageStatus === 'valid' || input.packageStatus === 'valid_with_warnings',
     detectedVersion: input.detectedVersion,
@@ -522,6 +533,7 @@ function buildValidationSummary(input: Omit<ImportedAssessmentPackageResult, 'va
     warnings: input.warnings,
     summary: input.summary,
     readiness: input.readiness,
+    readinessState,
     analysis: input.analysis,
   }
 }
@@ -552,6 +564,18 @@ export function analyzePackageForImport(input: unknown): ImportedAssessmentPacka
     ? (isRecord(validated.definitionPayload) && isRecord(validated.definitionPayload.meta) ? asTrimmedString(validated.definitionPayload.meta.versionLabel) : null) ?? detected.versionLabel
     : (validated.canonicalPayload?.metadata.compatibility.packageSemver ?? validated.runtimePayload?.metadata.compatibility.packageSemver ?? detected.versionLabel)
 
+  const readinessState = deriveReadinessState({
+    classifier: detected.classifier,
+    readiness: readiness.readiness,
+    compiledPlanAvailable: Boolean(validated.runtimePlan),
+  })
+
+  const diagnosticsByBoundary: Record<AssessmentPipelineBoundary, SonartraAssessmentPackageValidationIssue[]> = {
+    validation: [...validated.diagnostics.canonicalValidation, ...validated.diagnostics.runtimeValidation, ...validated.diagnostics.general],
+    compiler: [...validated.diagnostics.compilation, ...(validated.diagnostics.planCompilation ?? [])],
+    execution: [],
+  }
+
   const analysis: AdminAssessmentImportAnalysis = {
     classifier: detected.classifier,
     contractFamily: detected.classifier === 'legacy_contract_v1'
@@ -578,7 +602,9 @@ export function analyzePackageForImport(input: unknown): ImportedAssessmentPacka
     compiledRuntimeArtifactProduced: Boolean(validated.runtimePayload),
     compiledRuntimePlanProduced: Boolean(validated.runtimePlan),
     readinessSemantic: readiness.semantic,
+    readinessState,
     diagnostics: validated.diagnostics,
+    diagnosticsByBoundary,
     compatibilityFlags: [
       ...(detected.classifier === 'runtime_contract_v2' ? ['runtime_payload_upload'] : []),
       ...(detected.classifier === 'canonical_contract_v2' && !validated.runtimePayload ? ['canonical_compile_incomplete'] : []),
@@ -628,7 +654,7 @@ export function extractAssessmentPackageIdentity(
     }
   }
 
-  if (imported.detectedVersion === 'legacy_v1') {
+  if (imported.classifier === 'legacy_contract_v1') {
     const meta = isRecord(input.meta) ? input.meta : {}
     const assessmentKey = asTrimmedString(meta.assessmentKey)
     const assessmentName = asTrimmedString(meta.assessmentTitle)
@@ -706,7 +732,7 @@ export function extractAssessmentPackageIdentity(
     }
   }
 
-  if (imported.detectedVersion === 'package_contract_v2') {
+  if (imported.classifier === 'canonical_contract_v2' || imported.classifier === 'runtime_contract_v2') {
     const metadata = isRecord(input.metadata) ? input.metadata : (isRecord(imported.definitionPayload) && isRecord(imported.definitionPayload.metadata) ? imported.definitionPayload.metadata : {})
     const locales = isRecord(metadata.locales) ? metadata.locales : {}
     const authoring = isRecord(metadata.authoring) ? metadata.authoring : {}

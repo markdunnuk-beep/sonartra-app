@@ -29,6 +29,7 @@ export interface RuntimeExecutionIssueV2 {
 export interface RuntimeExecutionStageResultV2 {
   stage: RuntimeExecutionStage
   status: 'success' | 'completed_with_issues' | 'failed' | 'skipped'
+  outcome: 'success' | 'partial' | 'failed' | 'skipped'
   issueCount: number
   fatalIssueCount: number
   skippedReason: string | null
@@ -76,6 +77,7 @@ export interface RuntimeOutputsResultV2 {
 
 export interface CompiledRuntimeExecutionResultV2 {
   status: 'success' | 'completed_with_issues' | 'failed'
+  outcome: 'success' | 'partial' | 'failed'
   stages: Record<RuntimeExecutionStage, RuntimeExecutionStageResultV2>
   issues: RuntimeExecutionIssueV2[]
   scoring: RuntimeScoringResultV2
@@ -681,15 +683,16 @@ export function executeCompiledRuntimePlanV2(
       return {
         stage,
         status: 'skipped',
+        outcome: 'skipped',
         issueCount: stageIssueCount[stage].count,
         fatalIssueCount: stageIssueCount[stage].fatal,
         skippedReason: skippedStages.get(stage) ?? null,
       }
     }
     const stats = stageIssueCount[stage]
-    if (stats.fatal > 0) return { stage, status: 'failed', issueCount: stats.count, fatalIssueCount: stats.fatal, skippedReason: null }
-    if (stats.count > 0) return { stage, status: 'completed_with_issues', issueCount: stats.count, fatalIssueCount: stats.fatal, skippedReason: null }
-    return { stage, status: 'success', issueCount: 0, fatalIssueCount: 0, skippedReason: null }
+    if (stats.fatal > 0) return { stage, status: 'failed', outcome: 'failed', issueCount: stats.count, fatalIssueCount: stats.fatal, skippedReason: null }
+    if (stats.count > 0) return { stage, status: 'completed_with_issues', outcome: 'partial', issueCount: stats.count, fatalIssueCount: stats.fatal, skippedReason: null }
+    return { stage, status: 'success', outcome: 'success', issueCount: 0, fatalIssueCount: 0, skippedReason: null }
   }
 
   const stages: CompiledRuntimeExecutionResultV2['stages'] = {
@@ -705,6 +708,7 @@ export function executeCompiledRuntimePlanV2(
 
   return {
     status: fatalIssueCount > 0 ? 'failed' : issues.length > 0 ? 'completed_with_issues' : 'success',
+    outcome: fatalIssueCount > 0 ? 'failed' : issues.length > 0 ? 'partial' : 'success',
     stages,
     issues,
     scoring: {

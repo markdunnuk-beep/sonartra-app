@@ -33,6 +33,7 @@ test('valid v2 package import artifact produces admin-compatible summary and rea
   assert.equal(result.summary?.packageName, 'Adaptive Workstyle Sample')
   assert.equal(result.readiness.importable, true)
   assert.equal(result.readiness.compilable, true)
+  assert.equal(result.analysis.readinessState.milestone, 'preview_simulation_ready')
   assert.equal(result.readiness.runtimeExecutable, false)
   assert.equal(result.readiness.publishable, false)
 })
@@ -51,6 +52,7 @@ test('runtime v2 payloads classify and validate as executable runtime packages w
   assert.equal(result.analysis.compilePerformed, false)
   assert.equal(result.readiness.runtimeExecutable, true)
   assert.equal(result.analysis.executableReady, true)
+  assert.equal(result.analysis.readinessState.milestone, 'live_runtime_supported')
 })
 
 test('malformed v2 package returns normalized validation errors', () => {
