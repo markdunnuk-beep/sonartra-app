@@ -1,0 +1,183 @@
+{
+  "contractVersion": "hybrid_mvp_v1",
+  "assessmentId": "asm_hybrid_dashboard_visibility_v1",
+  "assessmentKey": "hybrid-dashboard-visibility",
+  "assessmentName": "Hybrid Dashboard Visibility Test",
+  "slug": "hybrid-dashboard-visibility-test",
+  "category": "individual",
+  "versionLabel": "1.0.0",
+  "description": "Minimal hybrid MVP fixture used to verify import, publish, assignment, completion, and result visibility end to end.",
+  "domains": [
+    {
+      "id": "dom_work_style",
+      "key": "work_style",
+      "label": "Work Style"
+    }
+  ],
+  "signals": [
+    {
+      "id": "sig_decisive",
+      "key": "decisive",
+      "label": "Decisive",
+      "domainId": "dom_work_style"
+    },
+    {
+      "id": "sig_analytical",
+      "key": "analytical",
+      "label": "Analytical",
+      "domainId": "dom_work_style"
+    },
+    {
+      "id": "sig_collaborative",
+      "key": "collaborative",
+      "label": "Collaborative",
+      "domainId": "dom_work_style"
+    }
+  ],
+  "questions": [
+    {
+      "id": "q_decision_approach",
+      "prompt": "When making a decision, I usually...",
+      "responseModel": "single_select",
+      "options": [
+        {
+          "id": "q_decision_approach_opt_fast_call",
+          "label": "Set direction quickly and refine as needed.",
+          "signalWeights": [
+            {
+              "signalId": "sig_decisive",
+              "weight": 3
+            }
+          ]
+        },
+        {
+          "id": "q_decision_approach_opt_data_first",
+          "label": "Collect evidence before committing.",
+          "signalWeights": [
+            {
+              "signalId": "sig_analytical",
+              "weight": 3
+            }
+          ]
+        },
+        {
+          "id": "q_decision_approach_opt_team_alignment",
+          "label": "Align the team before finalizing the plan.",
+          "signalWeights": [
+            {
+              "signalId": "sig_collaborative",
+              "weight": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q_team_discussion",
+      "prompt": "In team discussions, I tend to...",
+      "responseModel": "single_select",
+      "options": [
+        {
+          "id": "q_team_discussion_opt_drive_outcome",
+          "label": "Drive to a clear decision quickly.",
+          "signalWeights": [
+            {
+              "signalId": "sig_decisive",
+              "weight": 2
+            }
+          ]
+        },
+        {
+          "id": "q_team_discussion_opt_test_assumptions",
+          "label": "Challenge assumptions and test logic.",
+          "signalWeights": [
+            {
+              "signalId": "sig_analytical",
+              "weight": 2
+            }
+          ]
+        },
+        {
+          "id": "q_team_discussion_opt_build_buy_in",
+          "label": "Ensure everyone is heard and aligned.",
+          "signalWeights": [
+            {
+              "signalId": "sig_collaborative",
+              "weight": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q_ambiguity_response",
+      "prompt": "When work becomes unclear, I prefer to...",
+      "responseModel": "single_select",
+      "options": [
+        {
+          "id": "q_ambiguity_response_opt_choose_path",
+          "label": "Choose a path and move forward.",
+          "signalWeights": [
+            {
+              "signalId": "sig_decisive",
+              "weight": 1
+            }
+          ]
+        },
+        {
+          "id": "q_ambiguity_response_opt_map_unknowns",
+          "label": "Map unknowns before acting.",
+          "signalWeights": [
+            {
+              "signalId": "sig_analytical",
+              "weight": 1
+            }
+          ]
+        },
+        {
+          "id": "q_ambiguity_response_opt_sync_stakeholders",
+          "label": "Check with stakeholders to align next steps.",
+          "signalWeights": [
+            {
+              "signalId": "sig_collaborative",
+              "weight": 1
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "outputTemplates": {
+    "overview": {
+      "highPerformer": "Your strongest visible pattern is {topSignalLabel} at {topSignalScorePercent}, with clear expression across this test.",
+      "balancedProfile": "Your profile is balanced overall; {topSignalLabel} currently leads at {topSignalScorePercent}.",
+      "developingProfile": "Your current pattern shows a lower-expression lead in {topSignalLabel} at {topSignalScorePercent}; use this as a baseline for growth.",
+      "default": "This hybrid test profile is ready: {topSignalLabel} is currently the top signal at {topSignalScorePercent}."
+    },
+    "signalNarratives": {
+      "sig_decisive": {
+        "high": "{signalLabel} stands out strongly ({normalizedPercent}); you tend to set direction quickly.",
+        "balanced": "{signalLabel} is moderate ({normalizedPercent}); you can decide quickly when needed.",
+        "low": "{signalLabel} is lower ({normalizedPercent}); you may delay final calls under uncertainty.",
+        "default": "{signalLabel} is present at {normalizedPercent}."
+      },
+      "sig_analytical": {
+        "high": "{signalLabel} is prominent ({normalizedPercent}); you rely on evidence and logic.",
+        "balanced": "{signalLabel} is balanced ({normalizedPercent}); you calibrate depth to context.",
+        "low": "{signalLabel} is less expressed ({normalizedPercent}); analysis depth may be skipped in fast cycles.",
+        "default": "{signalLabel} is present at {normalizedPercent}."
+      },
+      "sig_collaborative": {
+        "high": "{signalLabel} is a clear strength ({normalizedPercent}); you prioritize alignment.",
+        "balanced": "{signalLabel} is balanced ({normalizedPercent}); you collaborate without losing pace.",
+        "low": "{signalLabel} is less expressed ({normalizedPercent}); alignment may come after execution.",
+        "default": "{signalLabel} is present at {normalizedPercent}."
+      }
+    },
+    "domainNarratives": {
+      "dom_work_style": {
+        "summary": "{domainLabel} is currently led by {topSignalLabel} at {topSignalPercent}, making strengths and watchouts easy to inspect in UI tests."
+      }
+    }
+  }
+}
