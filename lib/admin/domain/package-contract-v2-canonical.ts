@@ -3,6 +3,7 @@ import type {
   SonartraAssessmentPackageV2IntegrityBlock,
   SonartraAssessmentPackageV2IntegrityRule,
   SonartraAssessmentPackageV2NormalizationBlock,
+  SonartraAssessmentPackageV2NormalizationGroup,
   SonartraAssessmentPackageV2NormalizationRule,
   SonartraAssessmentPackageV2OutputBlock,
   SonartraAssessmentPackageV2OutputRule,
@@ -597,15 +598,34 @@ export function normalizeCanonicalPackageContractV2(input: unknown): CanonicalPa
       if (!dimensionKeys.has(ref) && !derivedDimensionKeys.has(ref)) pushIssue(errors, `${path}.comparisonOrder`, `Unknown comparisonOrder reference "${ref}".`)
     }
   }
-  if (normalizationGroupsInput.length > 0) {
+  const normalizationGroupsForRuntime: SonartraAssessmentPackageV2NormalizationGroup[] = normalizationGroupsInput
+    .filter(isRecord)
+    .map((entry, index) => ({
+      id: asTrimmedString(entry.id) ?? `invalid-normalization-group-${index}`,
+      label: asTrimmedString(entry.label) ?? '',
+      dimensionIds: asStringArray(entry.dimensionKeys),
+      derivedDimensionIds: asStringArray(entry.derivedDimensionKeys),
+      comparisonOrder: asStringArray(entry.comparisonOrder),
+    }))
+
+  const referencedNormalizationGroupIds = new Set(
+    normalizationRules
+      .map((rule) => isRecord(rule.appliesTo) ? asTrimmedString(rule.appliesTo.groupKey) : null)
+      .filter((groupId): groupId is string => Boolean(groupId)),
+  )
+
+  if (normalizationGroupsInput.length > 0 && referencedNormalizationGroupIds.size === 0) {
     pushIssue(
       warnings,
       'normalization.groups',
-      'Normalization groups are currently metadata-only for import/review and do not execute during runtime normalization plan compilation.',
+      'Normalization groups are present but metadata-only for this package import because no normalization rule appliesTo.groupKey references them.',
     )
   }
 
-  const normalizedNormalization: SonartraAssessmentPackageV2NormalizationBlock = { rules: normalizationRules }
+  const normalizedNormalization: SonartraAssessmentPackageV2NormalizationBlock = {
+    groups: normalizationGroupsForRuntime,
+    rules: normalizationRules,
+  }
 
   const aggregationInput = isRecord(input.aggregation) ? input.aggregation : null
   const comparableGroups = aggregationInput && Array.isArray(aggregationInput.comparableGroups) ? aggregationInput.comparableGroups : []

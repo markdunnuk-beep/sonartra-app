@@ -82,6 +82,30 @@ test('canonical v2 package rejects malformed scoring declarations', () => {
   assert.ok(result.errors.some((issue) => /Duplicate scoring mapping/i.test(issue.message)))
 })
 
+test('canonical v2 package supports normalization rule targets resolved from normalization groupKey', () => {
+  const fixture = cloneFixture()
+  fixture.normalization.rules[0].appliesTo.dimensionIds = []
+
+  const result = validateSonartraAssessmentPackageV2(fixture)
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(
+    result.normalizedPackage?.normalization.rules[0]?.appliesTo.dimensionIds?.slice().sort(),
+    fixture.normalization.groups[0].dimensionKeys.slice().sort(),
+  )
+})
+
+test('canonical v2 package rejects normalization rule references to missing normalization groupKey', () => {
+  const fixture = cloneFixture()
+  fixture.normalization.rules[0].appliesTo.dimensionIds = []
+  fixture.normalization.rules[0].appliesTo.groupKey = 'missing-group'
+
+  const result = validateSonartraAssessmentPackageV2(fixture)
+
+  assert.equal(result.ok, false)
+  assert.ok(result.errors.some((issue) => issue.path.includes('normalization.rules[0].appliesTo.groupKey')))
+})
+
 test('canonical v2 package validates derived dimension declaration shape', () => {
   const result = validateSonartraAssessmentPackageV2(cloneFixture())
 
