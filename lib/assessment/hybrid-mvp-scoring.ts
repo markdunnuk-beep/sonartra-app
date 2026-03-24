@@ -1,3 +1,5 @@
+import { buildHybridMvpTemplatedReport } from '@/lib/assessment/hybrid-mvp-output'
+
 export const HYBRID_MVP_CONTRACT_VERSION = 'hybrid_mvp_v1' as const
 
 export interface HybridMvpSignalDefinition {
@@ -41,6 +43,29 @@ export interface HybridMvpAssessmentDefinition {
   signals: HybridMvpSignalDefinition[]
   domains: HybridMvpDomainDefinition[]
   questions: HybridMvpQuestionDefinition[]
+  outputTemplates?: {
+    overview?: {
+      highPerformer?: string
+      balancedProfile?: string
+      developingProfile?: string
+      default?: string
+    }
+    signalNarratives?: Record<
+      string,
+      {
+        high?: string
+        balanced?: string
+        low?: string
+        default?: string
+      }
+    >
+    domainNarratives?: Record<
+      string,
+      {
+        summary?: string
+      }
+    >
+  }
 }
 
 export type HybridMvpResponseValue = string | string[]
@@ -78,9 +103,55 @@ export interface HybridMvpScoringResult {
     byDomain: HybridMvpDomainVector[]
   }
   report: {
-    summary: null
-    sections: []
+    summary: HybridMvpReportSummary | null
+    sections: HybridMvpReportSection[]
+    trace: HybridMvpReportTrace[]
   }
+}
+
+export interface HybridMvpReportSummary {
+  id: string
+  headline: string
+  text: string
+  meta: {
+    topSignalId: string | null
+    topSignalRank: number | null
+    topSignalBucket: 'high' | 'balanced' | 'low' | null
+    templateRef: string
+  }
+}
+
+export interface HybridMvpReportBlock {
+  id: string
+  kind: 'narrative' | 'signal' | 'watchout' | 'domain'
+  title: string
+  body: string
+  value?: string
+  meta: {
+    sourceType: 'signal' | 'domain' | 'overview'
+    sourceId: string
+    templateRef: string
+    rank?: number
+    bucket?: 'high' | 'balanced' | 'low'
+  }
+}
+
+export interface HybridMvpReportSection {
+  id: 'overview' | 'strengths' | 'watchouts' | 'development_focus' | 'domain_summaries'
+  title: string
+  blocks: HybridMvpReportBlock[]
+}
+
+export interface HybridMvpReportTrace {
+  outputId: string
+  sectionKey: string
+  sourceType: 'signal' | 'domain' | 'overview' | 'fallback'
+  sourceId: string
+  reason: string
+  templateRef: string
+  rank?: number
+  normalizedScore?: number
+  bucket?: 'high' | 'balanced' | 'low'
 }
 
 export interface HybridMvpScoringIssue {
@@ -351,6 +422,15 @@ export function scoreHybridMvpAssessment(definition: HybridMvpAssessmentDefiniti
   const normalizedSignalScores = normalizeHybridSignalScores({ rawSignalScores, signalDomainById })
   const rankedSignals = rankHybridSignals({ rawSignalScores, normalizedSignalScores, signalKeyById, signalDomainById })
   const aggregationVectors = buildHybridAggregationVectors(rankedSignals)
+  const report = buildHybridMvpTemplatedReport({
+    definition,
+    scored: {
+      assessmentId: definition.assessmentId,
+      assessmentKey: definition.assessmentKey,
+      rankedSignals,
+      aggregationVectors,
+    },
+  })
 
   return {
     ok: true,
@@ -363,10 +443,7 @@ export function scoreHybridMvpAssessment(definition: HybridMvpAssessmentDefiniti
       normalizedSignalScores,
       rankedSignals,
       aggregationVectors,
-      report: {
-        summary: null,
-        sections: [],
-      },
+      report,
     },
   }
 }
