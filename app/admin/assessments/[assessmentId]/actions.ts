@@ -29,6 +29,7 @@ import {
   simulateAdminAssessmentVersion,
   updateAdminAssessmentVersionReleaseNotes,
 } from '@/lib/admin/server/assessment-management'
+import { createAdminAssessmentAssignment } from '@/lib/server/assessment-assignments'
 
 function revalidateAssessmentPaths(assessmentId: string, versionLabel?: string) {
   revalidatePath('/admin/assessments')
@@ -373,4 +374,19 @@ export async function submitAdminAssessmentImportPackageAction(
     message: 'Package imported successfully, but the page could not redirect because the assessment or version identifier was missing. Review the results below and refresh the page before continuing.',
     validationResult: result.validationResult,
   })
+}
+
+
+export async function submitAdminAssessmentAssignUserAction(formData: FormData): Promise<void> {
+  const assessmentId = String(formData.get('assessmentId') ?? '')
+  const targetUserEmail = String(formData.get('targetUserEmail') ?? '')
+  const result = await createAdminAssessmentAssignment({ assessmentId, targetUserEmail })
+
+  if (!result.ok && result.code === 'permission_denied') {
+    redirect('/sign-in')
+  }
+
+  revalidateAssessmentPaths(assessmentId)
+  const mutation = result.ok ? 'assignment-created' : 'assignment-error'
+  redirect(`/admin/assessments/${assessmentId}?tab=assignments&mutation=${mutation}`)
 }
