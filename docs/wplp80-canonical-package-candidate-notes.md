@@ -68,3 +68,43 @@ This document captures authoring decisions and contract-fit pressure points for 
 - **Language catalog gap** remains deferred to **Task 3** (contract/runtime authoring model extension), because it does not block import or plan compilation.
 - **Full normalization-group execution semantics** remain deferred to **Task 4** (execution/report semantics expansion). Task 2 now surfaces this limitation explicitly at import time.
 - **Psychometric source-weight ambiguity** remains a package authoring/data-governance concern and is not resolved by engine compile-path changes.
+
+## Task 3 execution/preview verification findings (March 24, 2026)
+
+### What executed correctly
+
+- WPLP-80 canonical candidate executed end-to-end through the runtime-v2 path via `PreparedRuntimeExecutionBundleV2` and `executeCompiledRuntimePlanV2` using deterministic timestamps and repeatable scenario payloads.
+- Representative response-set coverage now includes:
+  - balanced/neutral,
+  - extreme profile constructions,
+  - contradiction-style alternating profiles,
+  - missing/skewed edge payloads.
+- Runtime stage behavior remained coherent and stage-correct:
+  - scoring surfaced explicit missing-response diagnostics in edge cases,
+  - derived dimensions resolved without silent dependency failures for valid payloads,
+  - normalization entries remained deterministic across repeated identical executions,
+  - aggregation/integrity/output instruction ordering remained stable against compiled execution order.
+- Admin simulation and report-preview readiness checks remained compatible for both canonical-v2 input and runtime-v2 input produced from the canonical artifact.
+
+### Issues found in Task 3
+
+- No engine execution defects requiring runtime architecture changes were identified in the WPLP-80 verification matrix.
+- No compiler defects requiring contract interpretation changes were identified.
+- Previously known limitations remained explicit and diagnosable (not silent):
+  - `normalization.groups` metadata-only execution status,
+  - limited advanced `response_pattern` integrity primitives.
+
+### Fixes made in Task 3
+
+- Added focused WPLP-80 regression tests covering runtime execution determinism, stage-correct diagnostics, output/integrity ordering stability, and preview-path compatibility.
+- No runtime-engine or compiler behavior changes were required for this task.
+
+### Deferred to Task 4
+
+- Full executable semantics for `normalization.groups` declarations.
+- Advanced statistical response-pattern integrity primitives beyond current predicate model.
+- Any broader narrative/language-catalog contract expansion.
+
+### New pressure points observed
+
+- Scenario generation for profile-shape validation depends on available option-level score maps and does not guarantee monotonic movement of any single raw dimension in all authored item families; this is a test-fixture realism/authoring nuance rather than an execution-engine defect.
