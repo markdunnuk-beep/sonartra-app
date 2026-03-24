@@ -7,6 +7,38 @@ import { validateSonartraAssessmentPackageV2 } from '../lib/admin/domain/assessm
 import { normalizeAdminAssessmentPackageImportState } from '../lib/admin/domain/assessment-management'
 import { extractAssessmentPackageIdentity, importAssessmentPackagePayload, detectAssessmentPackageVersion } from '../lib/admin/server/assessment-package-import'
 
+const hybridFixture = {
+  contractVersion: 'hybrid_mvp_v1',
+  assessmentId: 'hybrid-foundation-v1',
+  assessmentKey: 'hybrid-foundation',
+  signals: [
+    { id: 's1', key: 'adaptability', label: 'Adaptability', domainId: 'd1' },
+    { id: 's2', key: 'execution', label: 'Execution', domainId: 'd1' },
+  ],
+  domains: [
+    { id: 'd1', key: 'delivery', label: 'Delivery' },
+  ],
+  questions: [
+    {
+      id: 'q1',
+      prompt: 'When priorities shift quickly, I usually:',
+      responseModel: 'single_select',
+      options: [
+        { id: 'q1_a', label: 'Re-plan quickly', signalWeights: [{ signalId: 's1', weight: 2 }] },
+        { id: 'q1_b', label: 'Stay rigid', signalWeights: [{ signalId: 's2', weight: 1 }] },
+      ],
+    },
+  ],
+  outputTemplates: {
+    overview: {
+      default: 'Hybrid summary available.',
+    },
+    signalNarratives: {
+      s1: { high: 'Strong adaptability signal.' },
+    },
+  },
+}
+
 test('v2 package detection identifies Package Contract v2 payloads', () => {
   const detected = detectAssessmentPackageVersion(examplePackage)
 
@@ -36,6 +68,47 @@ test('valid v2 package import artifact produces admin-compatible summary and rea
   assert.equal(result.analysis.readinessState.milestone, 'preview_simulation_ready')
   assert.equal(result.readiness.runtimeExecutable, false)
   assert.equal(result.readiness.publishable, false)
+})
+
+test('hybrid_mvp_v1 payload detection classifies the fixed hybrid contract', () => {
+  const detected = detectAssessmentPackageVersion(hybridFixture)
+
+  assert.equal(detected.detectedVersion, 'hybrid_mvp_v1')
+  assert.equal(detected.classifier, 'hybrid_mvp_contract_v1')
+  assert.equal(detected.schemaVersion, 'hybrid_mvp_v1')
+})
+
+test('valid hybrid import yields publishable readiness and deterministic summary metadata', () => {
+  const result = importAssessmentPackagePayload(hybridFixture)
+
+  assert.equal(result.validationSummary.success, true)
+  assert.equal(result.detectedVersion, 'hybrid_mvp_v1')
+  assert.equal(result.classifier, 'hybrid_mvp_contract_v1')
+  assert.equal(result.analysis.contractFamily, 'hybrid')
+  assert.equal(result.analysis.payloadKind, 'hybrid_definition_payload')
+  assert.equal(result.readiness.importable, true)
+  assert.equal(result.readiness.runtimeExecutable, true)
+  assert.equal(result.readiness.publishable, true)
+  assert.equal(result.summary?.questionsCount, 1)
+  assert.equal(result.summary?.dimensionsCount, 1)
+})
+
+test('hybrid import rejects out-of-scope generic-engine fields and broken references', () => {
+  const result = importAssessmentPackagePayload({
+    ...hybridFixture,
+    scripts: [{ key: 'unsafe' }],
+    questions: [{
+      id: 'q1',
+      prompt: 'Broken',
+      responseModel: 'single_select',
+      options: [{ id: 'q1_a', label: 'A', signalWeights: [{ signalId: 'unknown', weight: 1 }] }],
+    }],
+  })
+
+  assert.equal(result.validationSummary.success, false)
+  assert.equal(result.packageStatus, 'invalid')
+  assert.ok(result.errors.some((issue) => issue.path === 'scripts'))
+  assert.ok(result.errors.some((issue) => issue.path.includes('signalId')))
 })
 
 test('runtime v2 payloads classify and validate as executable runtime packages without canonical transform assumptions', () => {

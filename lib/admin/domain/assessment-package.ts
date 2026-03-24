@@ -4,7 +4,7 @@ export const SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1 = 'sonartra-assessment-packag
 
 export type AssessmentPackageImportSourceType = 'manual_import'
 export type AssessmentPackageStatus = 'missing' | 'valid' | 'valid_with_warnings' | 'invalid'
-export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contract_v2' | 'runtime_contract_v2' | 'unknown'
+export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contract_v2' | 'runtime_contract_v2' | 'hybrid_mvp_v1' | 'unknown'
 
 export interface SonartraAssessmentPackageMeta {
   schemaVersion: string

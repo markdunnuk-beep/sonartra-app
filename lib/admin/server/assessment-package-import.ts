@@ -3,12 +3,14 @@ import { compileAssessmentPackageV2, type ExecutableAssessmentPackageV2 } from '
 import { compileRuntimeContractV2, compileRuntimeContractV2DiagnosticsToIssues, type CompiledRuntimePlanV2 } from '@/lib/admin/domain/runtime-plan-v2-compiler'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, validateSonartraAssessmentPackageV2, type SonartraAssessmentPackageV2ValidatedImport } from '@/lib/admin/domain/assessment-package-v2'
 import { compileCanonicalToRuntimeContractV2DiagnosticsToIssues, isRuntimeContractV2Payload, SONARTRA_RUNTIME_CONTRACT_V2, validateRuntimeContractV2 } from '@/lib/admin/domain/package-runtime-v2'
+import { HYBRID_MVP_CONTRACT_VERSION } from '@/lib/assessment/hybrid-mvp-scoring'
+import { validateHybridMvpDefinitionPayload } from '@/lib/admin/domain/hybrid-mvp-definition'
 import type { AssessmentImportConflict, AssessmentPackageIdentity } from '@/lib/admin/domain/assessment-management'
 import { deriveReadinessState, type AdminAssessmentReadinessState } from '@/lib/admin/domain/assessment-readiness'
 import type { AssessmentPipelineBoundary } from '@/lib/admin/domain/assessment-pipeline-boundaries'
 
-export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contract_v2' | 'unknown'
-export type AssessmentPackageContractClassifier = 'legacy_contract_v1' | 'canonical_contract_v2' | 'runtime_contract_v2' | 'unknown_or_invalid'
+export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contract_v2' | 'hybrid_mvp_v1' | 'unknown'
+export type AssessmentPackageContractClassifier = 'legacy_contract_v1' | 'canonical_contract_v2' | 'runtime_contract_v2' | 'hybrid_mvp_contract_v1' | 'unknown_or_invalid'
 
 export interface AdminAssessmentPackageReadinessFlags {
   structurallyValid: boolean
@@ -61,9 +63,9 @@ export interface ImportDiagnosticCollection {
 
 export interface AdminAssessmentImportAnalysis {
   classifier: AssessmentPackageContractClassifier
-  contractFamily: 'legacy' | 'canonical' | 'runtime' | 'unknown'
-  packageVersion: '1' | '2' | null
-  payloadKind: 'legacy_payload' | 'canonical_authoring_payload' | 'runtime_executable_payload' | 'unknown_payload'
+  contractFamily: 'legacy' | 'canonical' | 'runtime' | 'hybrid' | 'unknown'
+  packageVersion: '1' | '2' | 'hybrid_mvp_v1' | null
+  payloadKind: 'legacy_payload' | 'canonical_authoring_payload' | 'runtime_executable_payload' | 'hybrid_definition_payload' | 'unknown_payload'
   structurallyValid: boolean
   importable: boolean
   executableReady: boolean
@@ -189,6 +191,17 @@ export function classifyPackageContract(input: unknown): PackageVersionDetection
   }
 
   const topLevelSchemaVersion = asTrimmedString(input.schemaVersion)
+  const contractVersion = asTrimmedString(input.contractVersion)
+  if (contractVersion === HYBRID_MVP_CONTRACT_VERSION) {
+    return {
+      detectedVersion: 'hybrid_mvp_v1',
+      classifier: 'hybrid_mvp_contract_v1',
+      schemaVersion: HYBRID_MVP_CONTRACT_VERSION,
+      packageName: asTrimmedString(input.assessmentKey) ?? asTrimmedString(input.assessmentId),
+      versionLabel: HYBRID_MVP_CONTRACT_VERSION,
+    }
+  }
+
   if (input.packageVersion === '2' || topLevelSchemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
     const metadata = isRecord(input.metadata) ? input.metadata : null
     const compatibility = metadata && isRecord(metadata.compatibility) ? metadata.compatibility : null
@@ -391,9 +404,37 @@ export function validateDetectedPackage(input: unknown, detected: PackageVersion
     }
   }
 
+  if (detected.classifier === 'hybrid_mvp_contract_v1') {
+    const validation = validateHybridMvpDefinitionPayload(input)
+    return {
+      status: validation.status,
+      errors: validation.errors,
+      warnings: validation.warnings,
+      summary: buildGenericSummary({
+        ...validation.summary,
+        packageName: validation.normalizedDefinition?.assessmentKey ?? detected.packageName,
+        versionLabel: HYBRID_MVP_CONTRACT_VERSION,
+        assessmentKey: validation.normalizedDefinition?.assessmentKey ?? null,
+      }),
+      definitionPayload: validation.normalizedDefinition,
+      canonicalPayload: null,
+      runtimePayload: null,
+      diagnostics: {
+        canonicalValidation: [],
+        compilation: [],
+        runtimeValidation: [],
+        planCompilation: [],
+        general: [...validation.errors, ...validation.warnings],
+      },
+      compilePerformed: false,
+      compileRequired: false,
+      runtimePlan: null,
+    }
+  }
+
   const errors: SonartraAssessmentPackageValidationIssue[] = [{
     path: 'schemaVersion',
-    message: 'Unknown or unsupported package contract version. Upload a legacy/v1 package, canonical Package Contract v2 payload, or runtime contract v2 payload.',
+    message: 'Unknown or unsupported package contract version. Upload a legacy/v1 package, canonical Package Contract v2 payload, runtime contract v2 payload, or hybrid_mvp_v1 payload.',
   }]
 
   return {
@@ -456,6 +497,24 @@ export function summarizeImportReadiness(input: {
         runtimeExecutable: true,
         liveRuntimeEnabled: true,
         publishable: false,
+      },
+      semantic: input.validationStatus === 'valid_with_warnings' ? 'valid_with_warnings' : 'executable_ready',
+      executableReady: true,
+      authoringOnly: false,
+    }
+  }
+
+  if (input.classifier === 'hybrid_mvp_contract_v1') {
+    return {
+      readiness: {
+        structurallyValid: true,
+        importable: true,
+        compilable: false,
+        evaluatable: true,
+        simulatable: true,
+        runtimeExecutable: true,
+        liveRuntimeEnabled: true,
+        publishable: true,
       },
       semantic: input.validationStatus === 'valid_with_warnings' ? 'valid_with_warnings' : 'executable_ready',
       executableReady: true,
@@ -584,14 +643,24 @@ export function analyzePackageForImport(input: unknown): ImportedAssessmentPacka
         ? 'canonical'
         : detected.classifier === 'runtime_contract_v2'
           ? 'runtime'
+          : detected.classifier === 'hybrid_mvp_contract_v1'
+            ? 'hybrid'
           : 'unknown',
-    packageVersion: detected.classifier === 'legacy_contract_v1' ? '1' : detected.classifier === 'unknown_or_invalid' ? null : '2',
+    packageVersion: detected.classifier === 'legacy_contract_v1'
+      ? '1'
+      : detected.classifier === 'unknown_or_invalid'
+        ? null
+        : detected.classifier === 'hybrid_mvp_contract_v1'
+          ? 'hybrid_mvp_v1'
+          : '2',
     payloadKind: detected.classifier === 'legacy_contract_v1'
       ? 'legacy_payload'
       : detected.classifier === 'canonical_contract_v2'
         ? 'canonical_authoring_payload'
         : detected.classifier === 'runtime_contract_v2'
           ? 'runtime_executable_payload'
+          : detected.classifier === 'hybrid_mvp_contract_v1'
+            ? 'hybrid_definition_payload'
           : 'unknown_payload',
     structurallyValid: readiness.readiness.structurallyValid,
     importable: readiness.readiness.importable,
@@ -608,6 +677,7 @@ export function analyzePackageForImport(input: unknown): ImportedAssessmentPacka
     compatibilityFlags: [
       ...(detected.classifier === 'runtime_contract_v2' ? ['runtime_payload_upload'] : []),
       ...(detected.classifier === 'canonical_contract_v2' && !validated.runtimePayload ? ['canonical_compile_incomplete'] : []),
+      ...(detected.classifier === 'hybrid_mvp_contract_v1' ? ['hybrid_mvp_fixed_contract'] : []),
     ],
     compiledRuntimeArtifact: validated.runtimePayload,
     compiledRuntimePlan: validated.runtimePlan,
@@ -620,6 +690,8 @@ export function analyzePackageForImport(input: unknown): ImportedAssessmentPacka
       ? SONARTRA_RUNTIME_CONTRACT_V2
       : detected.classifier === 'canonical_contract_v2'
         ? validated.canonicalPayload?.schemaVersion ?? detected.schemaVersion ?? SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
+        : detected.classifier === 'hybrid_mvp_contract_v1'
+          ? HYBRID_MVP_CONTRACT_VERSION
         : detected.schemaVersion,
     packageName,
     versionLabel,
@@ -803,6 +875,69 @@ export function extractAssessmentPackageIdentity(
         authorSource: asTrimmedString(authoring.source),
         versionLabel: asTrimmedString(compatibility.packageSemver),
         schemaVersion: imported.schemaVersion,
+        detectedVersion: imported.detectedVersion,
+        derivedFields,
+      },
+      conflicts,
+    }
+  }
+
+  if (imported.classifier === 'hybrid_mvp_contract_v1') {
+    const assessmentKey = asTrimmedString(input.assessmentKey)
+    const assessmentId = asTrimmedString(input.assessmentId)
+    const assessmentName = asTrimmedString(input.assessmentName) ?? assessmentKey
+    const slug = normalizeSlug(asTrimmedString(input.slug) ?? assessmentKey)
+    const category = normalizeCategory(asTrimmedString(input.category) ?? 'other')
+    const derivedFields: Array<'slug' | 'category'> = []
+
+    if (!assessmentKey) {
+      conflicts.push({
+        code: 'missing_identity_metadata',
+        severity: 'error',
+        field: 'assessmentKey',
+        message: 'Hybrid identity is missing the required assessmentKey.',
+      })
+    }
+    if (!assessmentName) {
+      conflicts.push({
+        code: 'missing_identity_metadata',
+        severity: 'error',
+        field: 'assessmentName',
+        message: 'Hybrid identity is missing assessmentName/assessmentKey for admin labeling.',
+      })
+    }
+    if (!slug) {
+      conflicts.push({
+        code: 'missing_identity_metadata',
+        severity: 'error',
+        field: 'slug',
+        message: 'Hybrid identity is missing slug and it could not be derived from assessmentKey.',
+      })
+    } else if (!asTrimmedString(input.slug)) {
+      derivedFields.push('slug')
+    }
+    if (!asTrimmedString(input.category)) {
+      derivedFields.push('category')
+    }
+
+    if (!assessmentKey || !assessmentName || !slug) {
+      return { identity: null, conflicts }
+    }
+
+    return {
+      identity: {
+        assessmentKey,
+        assessmentName,
+        slug,
+        category: category ?? 'other',
+        description: asTrimmedString(input.description),
+        defaultLocale: null,
+        supportedLocales: [],
+        assessmentType: 'hybrid_mvp_v1',
+        authorName: null,
+        authorSource: null,
+        versionLabel: asTrimmedString(input.versionLabel) ?? HYBRID_MVP_CONTRACT_VERSION,
+        schemaVersion: HYBRID_MVP_CONTRACT_VERSION,
         detectedVersion: imported.detectedVersion,
         derivedFields,
       },

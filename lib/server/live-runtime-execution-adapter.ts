@@ -12,7 +12,7 @@ import { parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/asse
 
 export interface LiveRuntimeExecutionRoutingDecision {
   contractVersion: 'legacy_v1' | 'package_contract_v2'
-  classifier: 'legacy_contract_v1' | 'canonical_contract_v2' | 'runtime_contract_v2' | 'unknown_or_invalid'
+  classifier: 'legacy_contract_v1' | 'canonical_contract_v2' | 'runtime_contract_v2' | 'hybrid_mvp_contract_v1' | 'unknown_or_invalid'
   liveRuntimeSupported: boolean
   reasonCode:
     | 'schema_not_v2'
