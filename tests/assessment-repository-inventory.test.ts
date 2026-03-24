@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { loadLiveAssessmentRepositoryInventory } from '../lib/server/assessment-repository-inventory'
 import type { AssessmentResultRow, AssessmentRow } from '../lib/assessment-types'
+import { resetAssessmentResultSchemaCapabilitiesCacheForTests } from '../lib/server/assessment-result-schema-capabilities'
 
 const baseAssessment: AssessmentRow = {
   id: 'assessment-1',
@@ -72,6 +73,8 @@ function makeAssignment(overrides: Partial<{
 }
 
 function makeQueryDb(options: {
+  hasReportArtifactColumn?: boolean
+  onSql?: (sql: string) => void
   assignments?: ReturnType<typeof makeAssignment>[]
   latestAssessmentByDefinition?: Record<string, ({ total_questions: number | null } & AssessmentRow) | null>
   latestResultByAssessmentId?: Record<string, AssessmentResultRow | null>
@@ -79,6 +82,12 @@ function makeQueryDb(options: {
   signalCountByResultId?: Record<string, number>
 }) {
   return async (sql: string, params?: unknown[]) => {
+    options.onSql?.(sql)
+
+    if (/from information_schema\.columns/i.test(sql) && /assessment_results/i.test(sql) && /report_artifact_json/i.test(sql)) {
+      return { rows: [{ has_column: options.hasReportArtifactColumn ?? true }] } as never
+    }
+
     if (/from assessment_repository_assignments/i.test(sql)) {
       return { rows: options.assignments ?? [] } as never
     }
@@ -111,6 +120,7 @@ function makeQueryDb(options: {
 }
 
 test('published + assigned + no attempt appears as launchable in repository inventory', async () => {
+  resetAssessmentResultSchemaCapabilitiesCacheForTests()
   const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
     queryDb: makeQueryDb({
       assignments: [makeAssignment()],
@@ -124,6 +134,7 @@ test('published + assigned + no attempt appears as launchable in repository inve
 })
 
 test('published + assigned + in-progress attempt appears as in progress', async () => {
+  resetAssessmentResultSchemaCapabilitiesCacheForTests()
   const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
     queryDb: makeQueryDb({
       assignments: [makeAssignment({ status: 'in_progress' })],
@@ -142,6 +153,7 @@ test('published + assigned + in-progress attempt appears as in progress', async 
 })
 
 test('published + assigned + completed hybrid result appears as results ready', async () => {
+  resetAssessmentResultSchemaCapabilitiesCacheForTests()
   const completedAssessment = {
     ...baseAssessment,
     status: 'completed' as const,
@@ -205,6 +217,7 @@ test('published + assigned + completed hybrid result appears as results ready', 
 })
 
 test('unassigned published assessment stays hidden when repository is assignment-gated', async () => {
+  resetAssessmentResultSchemaCapabilitiesCacheForTests()
   const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
     queryDb: makeQueryDb({
       assignments: [],
@@ -212,4 +225,66 @@ test('unassigned published assessment stays hidden when repository is assignment
   })
 
   assert.deepEqual(inventory, [])
+})
+
+test('repository inventory reads include report_artifact_json when the optional column exists', async () => {
+  resetAssessmentResultSchemaCapabilitiesCacheForTests()
+  const sqlStatements: string[] = []
+  await loadLiveAssessmentRepositoryInventory('user-1', {
+    queryDb: makeQueryDb({
+      hasReportArtifactColumn: true,
+      onSql(sql) {
+        sqlStatements.push(sql)
+      },
+      assignments: [makeAssignment()],
+    }),
+  })
+
+  assert.equal(
+    sqlStatements.some(
+      (sql) => /from assessment_results/i.test(sql) && !/information_schema\.columns/i.test(sql)
+        && (/ar\.report_artifact_json,/.test(sql) || /,\s*report_artifact_json,/.test(sql)),
+    ),
+    true,
+  )
+})
+
+test('repository inventory reads stay compatibility-safe without report_artifact_json', async () => {
+  resetAssessmentResultSchemaCapabilitiesCacheForTests()
+  const sqlStatements: string[] = []
+  const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
+    queryDb: makeQueryDb({
+      hasReportArtifactColumn: false,
+      onSql(sql) {
+        sqlStatements.push(sql)
+      },
+      assignments: [makeAssignment({ status: 'in_progress' })],
+      latestAssessmentByDefinition: {
+        'definition-signals': {
+          ...baseAssessment,
+          total_questions: 80,
+        },
+      },
+      latestResultByAssessmentId: {
+        'assessment-1': {
+          ...baseResult,
+          status: 'complete',
+        },
+      },
+    }),
+  })
+
+  assert.equal(
+    sqlStatements.some(
+      (sql) => /from assessment_results/i.test(sql) && !/information_schema\.columns/i.test(sql)
+        && (/ar\.report_artifact_json,/.test(sql) || /,\s*report_artifact_json,/.test(sql)),
+    ),
+    false,
+  )
+  assert.equal(
+    sqlStatements.some((sql) => /from assessment_results/i.test(sql) && /AS report_artifact_json/i.test(sql)),
+    true,
+  )
+  assert.equal(inventory.length, 1)
+  assert.equal(inventory[0]?.status, 'in_progress')
 })

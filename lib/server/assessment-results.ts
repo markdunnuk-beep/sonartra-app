@@ -2,6 +2,7 @@ import { PoolClient } from 'pg';
 
 import { queryDb, withTransaction } from '@/lib/db';
 import { AssessmentResultRow as AssessmentResultSnapshotRow, AssessmentResultSignalRow } from '@/lib/assessment-types';
+import { getAssessmentResultReportArtifactSelectProjection } from '@/lib/server/assessment-result-schema-capabilities';
 import {
   FailedAssessmentResultPayload,
   PersistAssessmentResultInput,
@@ -298,8 +299,9 @@ export async function getAssessmentResultByAssessmentId(
   assessmentId: string,
   client?: PoolClient
 ): Promise<AssessmentResultSnapshotRow | null> {
+  const reportArtifactProjection = await getAssessmentResultReportArtifactSelectProjection('report_artifact_json')
   const query = `SELECT id, assessment_id, assessment_version_id, version_key, scoring_model_key, snapshot_version, status,
-                        result_payload, response_quality_payload, report_artifact_json, completed_at, scored_at, created_at, updated_at
+                        result_payload, response_quality_payload, ${reportArtifactProjection}, completed_at, scored_at, created_at, updated_at
                  FROM assessment_results
                  WHERE assessment_id = $1
                  ORDER BY created_at DESC
@@ -334,9 +336,10 @@ export async function getAssessmentResultSignalsByResultId(
 }
 
 export async function getAssessmentResultSnapshotsByAssessmentId(assessmentId: string) {
+  const reportArtifactProjection = await getAssessmentResultReportArtifactSelectProjection('report_artifact_json')
   return queryDb(
     `SELECT id, assessment_id, assessment_version_id, version_key, scoring_model_key, snapshot_version, status,
-            result_payload, response_quality_payload, report_artifact_json, completed_at, scored_at, created_at, updated_at
+            result_payload, response_quality_payload, ${reportArtifactProjection}, completed_at, scored_at, created_at, updated_at
      FROM assessment_results
      WHERE assessment_id = $1
      ORDER BY created_at DESC`,
