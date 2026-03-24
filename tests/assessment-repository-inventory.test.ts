@@ -55,6 +55,21 @@ function makeQueryDb(options: {
   latestAssessment?: ({ version_key: string | null; version_name: string | null; total_questions: number | null } & AssessmentRow) | null
   latestResult?: AssessmentResultRow | null
   latestReadyResult?: ({ assessment_started_at: string | null; assessment_completed_at: string | null } & AssessmentResultRow) | null
+  latestAssignment?: {
+    id: string
+    status: 'assigned' | 'in_progress' | 'completed_processing' | 'results_ready' | 'failed' | 'cancelled'
+    assessment_definition_id: string
+    assessment_definition_key: string
+    assessment_definition_slug: string
+    assessment_version_id: string
+    assessment_version_key: string
+    assessment_version_name: string
+    total_questions: number
+    is_active: boolean
+    assessment_id: string | null
+    latest_result_id: string | null
+    assigned_at: string
+  } | null
   signalCount?: number
 }) {
   return async (sql: string) => {
@@ -71,7 +86,7 @@ function makeQueryDb(options: {
     }
 
     if (/from assessment_repository_assignments/i.test(sql)) {
-      return { rows: [] } as never
+      return { rows: options.latestAssignment ? [options.latestAssignment] : [] } as never
     }
 
     if (/from assessment_result_signals/i.test(sql)) {
@@ -107,6 +122,43 @@ test('hides inventory when the published Signals version has not been materializ
   })
 
   assert.deepEqual(inventory, [])
+})
+
+test('returns assigned lifecycle inventory when a published assignment exists but the current live runtime is unavailable', async () => {
+  const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
+    resolveLiveSignalsPublishedVersionState: async () => ({
+      version: null,
+      diagnostic: {
+        code: 'runtime_not_materialized',
+        message: 'The published Sonartra Signals version is not runnable yet because runtime materialization has not completed.',
+      },
+    }),
+    queryDb: makeQueryDb({
+      latestAssignment: {
+        id: 'assignment-1',
+        status: 'assigned',
+        assessment_definition_id: 'definition-signals',
+        assessment_definition_key: 'sonartra_signals',
+        assessment_definition_slug: 'sonartra-signals',
+        assessment_version_id: 'version-assigned',
+        assessment_version_key: 'signals-hybrid-v1',
+        assessment_version_name: 'Assigned Signals Hybrid v1',
+        total_questions: 64,
+        is_active: true,
+        assessment_id: null,
+        latest_result_id: null,
+        assigned_at: '2026-03-20T08:55:00.000Z',
+      },
+    }),
+  })
+
+  assert.equal(inventory.length, 1)
+  assert.equal(inventory[0]?.status, 'not_started')
+  assert.equal(inventory[0]?.lifecycleState, 'not_started')
+  assert.equal(inventory[0]?.availability?.versionId, 'version-assigned')
+  assert.equal(inventory[0]?.availability?.versionKey, 'signals-hybrid-v1')
+  assert.equal(inventory[0]?.questionCount, 64)
+  assert.equal(inventory[0]?.assessmentHref, '/assessment/workspace')
 })
 
 test('returns a startable Signals inventory item when a published live version exists and the user has not started', async () => {
