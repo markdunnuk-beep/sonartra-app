@@ -1,5 +1,6 @@
 import { AssessmentResultRow, AssessmentRow } from '@/lib/assessment-types';
 import { hasUserFacingV2Summary, isPackageContractV2Result } from '@/lib/server/live-assessment-user-result';
+import { isHybridMvpReadyResult } from '@/lib/server/hybrid-mvp-result';
 import { queryDb } from '@/lib/db';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 
@@ -117,7 +118,7 @@ const defaultDependencies: LifecycleDependencies = {
            EXISTS (
              SELECT 1 FROM assessment_result_signals ars WHERE ars.assessment_result_id = ar.id
            )
-           OR COALESCE(ar.result_payload->>'contractVersion', '') = 'package_contract_v2'
+           OR COALESCE(ar.result_payload->>'contractVersion', '') IN ('package_contract_v2', 'hybrid_mvp_v1')
          )
        ORDER BY a.completed_at DESC NULLS LAST, ar.created_at DESC
        LIMIT 1`,
@@ -259,7 +260,7 @@ export async function resolveIndividualLifecycleState(
     };
   }
 
-  if (latestAssessmentResult.status === 'complete' && (signalCount > 0 || (isPackageContractV2Result(latestAssessmentResult) && hasUserFacingV2Summary(latestAssessmentResult)))) {
+  if (latestAssessmentResult.status === 'complete' && (signalCount > 0 || (isPackageContractV2Result(latestAssessmentResult) && hasUserFacingV2Summary(latestAssessmentResult)) || isHybridMvpReadyResult(latestAssessmentResult))) {
     return {
       authState: 'authenticated',
       userId,

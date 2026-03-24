@@ -423,3 +423,59 @@ test('results_unavailable state renders a controlled completed-but-unavailable m
   assert.match(html, /completed assessment is not yet available to view/i)
   assert.match(html, /no user-facing summary is available/i)
 })
+
+test('ready_hybrid state renders premium hybrid summary sections', () => {
+  const html = renderToStaticMarkup(
+    <IndividualIntelligenceResultView
+      model={{
+        ok: true,
+        state: 'ready_hybrid',
+        data: {
+          assessment: readyData.assessment,
+          snapshot: readyData.snapshot,
+          hybrid: {
+            contractVersion: 'hybrid_mvp_v1',
+            assessmentMeta: {
+              assessmentId: 'assessment-1',
+              assessmentKey: 'signals',
+              assessmentVersionKey: 'hybrid-v1',
+              assessmentVersionName: 'Hybrid Signals v1',
+            },
+            summary: {
+              id: 'summary-1',
+              headline: 'Execution profile',
+              text: 'Strong execution drive with focused follow-through.',
+            },
+            sections: [
+              {
+                id: 'strengths',
+                title: 'Strengths',
+                blocks: [{ id: 's1', kind: 'signal', title: 'Drive', body: 'Strong momentum.', value: '66%' }],
+              },
+              {
+                id: 'watchouts',
+                title: 'Watchouts',
+                blocks: [{ id: 'w1', kind: 'watchout', title: 'Pacing', body: 'Can over-index on speed.', value: '24%' }],
+              },
+            ],
+            rankedSignals: [
+              { signalId: 'signal-1', signalKey: 'Drive', domainId: 'execution', rawScore: 12, normalizedScore: 0.66, rank: 1 },
+              { signalId: 'signal-2', signalKey: 'Pacing', domainId: 'execution', rawScore: 4, normalizedScore: 0.24, rank: 2 },
+            ],
+            normalizedSignalScores: { 'signal-1': 0.66, 'signal-2': 0.24 },
+            domainSummaries: [
+              { domainId: 'execution', totalRawScore: 16, signalCount: 2, topSignalId: 'signal-1', topNormalizedScore: 0.66 },
+            ],
+          },
+        },
+      }}
+    />,
+  )
+
+  assert.match(html, /Hybrid Signals v1/)
+  assert.match(html, /Execution profile/)
+  assert.match(html, /Strengths/)
+  assert.match(html, /Watchouts/)
+  assert.match(html, /Signal breakdown/)
+  assert.match(html, /Domain vector summary/)
+})

@@ -70,6 +70,10 @@ function makeQueryDb(options: {
       return { rows: options.latestReadyResult ? [options.latestReadyResult] : [] } as never
     }
 
+    if (/from assessment_repository_assignments/i.test(sql)) {
+      return { rows: [] } as never
+    }
+
     if (/from assessment_result_signals/i.test(sql)) {
       return { rows: [{ signal_count: String(options.signalCount ?? 0) }] } as never
     }
@@ -290,6 +294,59 @@ test('returns ready lifecycle for completed v2 results even when signal rows are
       latestResult: v2Result,
       latestReadyResult: {
         ...v2Result,
+        assessment_started_at: '2026-03-20T09:00:00.000Z',
+        assessment_completed_at: '2026-03-20T09:15:00.000Z',
+      },
+      signalCount: 0,
+    }),
+  })
+
+  assert.equal(inventory[0]?.status, 'complete')
+  assert.equal(inventory[0]?.lifecycleState, 'ready')
+  assert.equal(inventory[0]?.resultsAvailable, true)
+})
+
+test('returns ready lifecycle for hybrid_mvp_v1 results even when signal rows are not persisted', async () => {
+  const hybridResult: AssessmentResultRow = {
+    ...baseResult,
+    status: 'complete',
+    result_payload: {
+      contractVersion: 'hybrid_mvp_v1',
+      rankedSignals: [
+        { signalId: 'signal-1', signalKey: 'Drive', domainId: 'execution', rawScore: 12, normalizedScore: 0.66, rank: 1 },
+      ],
+      report: {
+        summary: { id: 'summary-1', headline: 'Execution profile', text: 'Strong execution profile.' },
+        sections: [
+          {
+            id: 'strengths',
+            title: 'Strengths',
+            blocks: [{ id: 's1', kind: 'signal', title: 'Drive', body: 'Strong momentum.' }],
+          },
+        ],
+      },
+    },
+  }
+
+  const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
+    resolveLiveSignalsPublishedVersionState: async () => ({
+      version: publishedVersion,
+      diagnostic: { code: 'no_published_version', message: 'No active published Sonartra Signals version is available.' },
+    }),
+    queryDb: makeQueryDb({
+      latestAssessment: {
+        ...baseAssessment,
+        status: 'completed',
+        progress_count: 80,
+        progress_percent: '100',
+        completed_at: '2026-03-20T09:15:00.000Z',
+        version_key: 'signals-v2',
+        version_name: 'Sonartra Signals v2',
+        total_questions: 80,
+      },
+      latestResult: hybridResult,
+      latestReadyResult: {
+        ...hybridResult,
         assessment_started_at: '2026-03-20T09:00:00.000Z',
         assessment_completed_at: '2026-03-20T09:15:00.000Z',
       },

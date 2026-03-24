@@ -352,3 +352,74 @@ test('returns results_unavailable when a v2 result completes without product sum
   assert.equal(response.ok, true)
   assert.equal(response.state, 'results_unavailable')
 })
+
+test('returns ready_hybrid for complete hybrid_mvp_v1 payloads using report-driven shaping', async () => {
+  const hybridResult = {
+    ...completeResult,
+    version_key: 'hybrid-v1',
+    result_payload: {
+      contractVersion: 'hybrid_mvp_v1',
+      assessmentMeta: {
+        assessmentId: 'assessment-1',
+        assessmentKey: 'signals',
+        assessmentVersionKey: 'hybrid-v1',
+        assessmentVersionName: 'Hybrid Signals v1',
+      },
+      rankedSignals: [
+        { signalId: 'signal-1', signalKey: 'Drive', domainId: 'execution', rawScore: 12, normalizedScore: 0.66, rank: 1 },
+        { signalId: 'signal-2', signalKey: 'Focus', domainId: 'execution', rawScore: 6, normalizedScore: 0.34, rank: 2 },
+      ],
+      normalizedSignalScores: {
+        'signal-1': 0.66,
+        'signal-2': 0.34,
+      },
+      aggregationVectors: {
+        global: { domainId: null, totalRawScore: 18, vector: [] },
+        byDomain: [
+          {
+            domainId: 'execution',
+            totalRawScore: 18,
+            vector: [
+              { signalId: 'signal-1', rawScore: 12, normalizedScore: 0.66, rank: 1 },
+              { signalId: 'signal-2', rawScore: 6, normalizedScore: 0.34, rank: 2 },
+            ],
+          },
+        ],
+      },
+      report: {
+        summary: {
+          id: 'summary-1',
+          headline: 'Execution profile',
+          text: 'You show strong execution drive with focused follow-through.',
+        },
+        sections: [
+          {
+            id: 'strengths',
+            title: 'Strengths',
+            blocks: [
+              { id: 's1', kind: 'signal', title: 'Drive', body: 'Strong momentum under pressure.', value: '66%' },
+            ],
+          },
+        ],
+      },
+    },
+  }
+
+  const response = await getLatestIndividualResultForUser({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext, version_key: 'hybrid-v1' }),
+    getLatestResultForAssessment: async () => hybridResult,
+    getResultById: async () => hybridResult,
+    getLatestReadyResultForUser: async () => ({ ...readyResultForUser, version_key: 'hybrid-v1', result_payload: hybridResult.result_payload }),
+    getSignalsByResultId: async () => [],
+  })
+
+  assert.equal(response.ok, true)
+  assert.equal(response.state, 'ready_hybrid')
+
+  if (response.state === 'ready_hybrid') {
+    assert.equal(response.data.hybrid.summary?.headline, 'Execution profile')
+    assert.equal(response.data.hybrid.rankedSignals[0]?.signalKey, 'Drive')
+    assert.equal(response.data.hybrid.sections[0]?.id, 'strengths')
+  }
+})

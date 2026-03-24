@@ -212,3 +212,42 @@ test('completed v2 snapshot with user-facing summary resolves ready without sign
 
   if (state.authState === 'authenticated') assert.equal(state.lifecycle.state, 'ready')
 })
+
+test('completed hybrid_mvp_v1 snapshot resolves ready without signal rows', async () => {
+  const hybridReady = {
+    ...completeSnapshot,
+    result_payload: {
+      contractVersion: 'hybrid_mvp_v1',
+      rankedSignals: [
+        { signalId: 'signal-1', signalKey: 'Drive', domainId: 'execution', rawScore: 12, normalizedScore: 0.66, rank: 1 },
+      ],
+      report: {
+        summary: { id: 'summary-1', headline: 'Execution profile', text: 'Strong execution profile.' },
+        sections: [
+          {
+            id: 'strengths',
+            title: 'Strengths',
+            blocks: [{ id: 's1', kind: 'signal', title: 'Drive', body: 'Strong momentum.' }],
+          },
+        ],
+      },
+    },
+  }
+
+  const state = await resolveIndividualLifecycleState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessmentForUser: async () => completedAssessment,
+    getLatestResultForAssessment: async () => hybridReady,
+    getSignalCountByResultId: async () => 0,
+    getLatestReadyResultForUser: async () => ({
+      ...hybridReady,
+      assessment_started_at: completedAssessment.started_at,
+      assessment_completed_at: completedAssessment.completed_at,
+      assessment_version_key: completedAssessment.version_key,
+    }),
+  })
+
+  if (state.authState === 'authenticated') {
+    assert.equal(state.lifecycle.state, 'ready')
+  }
+})
