@@ -14,7 +14,27 @@ export interface LiveRuntimeExecutionRoutingDecision {
   contractVersion: 'legacy_v1' | 'package_contract_v2'
   classifier: 'legacy_contract_v1' | 'canonical_contract_v2' | 'runtime_contract_v2' | 'unknown_or_invalid'
   liveRuntimeSupported: boolean
+  reasonCode:
+    | 'schema_not_v2'
+    | 'classifier_not_runtime_v2'
+    | 'report_explicitly_not_supported'
+    | 'report_missing_live_runtime_support'
+    | 'report_metadata_incomplete'
+    | 'fallback_not_supported'
+    | null
   reason: string | null
+  blockedReasons: Array<{
+    code: NonNullable<LiveRuntimeExecutionRoutingDecision['reasonCode']>
+    source: 'authoritative_report' | 'fallback'
+    detail: string
+  }>
+  debug: {
+    reportPresent: boolean
+    reportClassifierPresent: boolean
+    reportSupportPresent: boolean
+    usedFallbackSupportInference: boolean
+    fallbackSupport: boolean
+  }
 }
 
 interface StoredReadinessState {
@@ -41,6 +61,24 @@ function parseStoredValidationReport(value: unknown): StoredValidationReport | n
   return isRecord(value) ? (value as StoredValidationReport) : null
 }
 
+function buildBlockedDecision(input: {
+  classifier: LiveRuntimeExecutionRoutingDecision['classifier']
+  reasonCode: NonNullable<LiveRuntimeExecutionRoutingDecision['reasonCode']>
+  reason: string
+  source: 'authoritative_report' | 'fallback'
+  debug: LiveRuntimeExecutionRoutingDecision['debug']
+}): LiveRuntimeExecutionRoutingDecision {
+  return {
+    contractVersion: 'package_contract_v2',
+    classifier: input.classifier,
+    liveRuntimeSupported: false,
+    reasonCode: input.reasonCode,
+    reason: input.reason,
+    blockedReasons: [{ code: input.reasonCode, source: input.source, detail: input.reason }],
+    debug: input.debug,
+  }
+}
+
 export function resolveLiveRuntimeRoutingDecision(input: {
   packageSchemaVersion: string | null
   storedDefinitionPayload: unknown
@@ -54,49 +92,128 @@ export function resolveLiveRuntimeRoutingDecision(input: {
       contractVersion: 'legacy_v1',
       classifier: 'legacy_contract_v1',
       liveRuntimeSupported: false,
+      reasonCode: 'schema_not_v2',
       reason: 'Package schema is not Package Contract v2.',
+      blockedReasons: [{
+        code: 'schema_not_v2',
+        source: 'fallback',
+        detail: 'Package schema is not Package Contract v2.',
+      }],
+      debug: {
+        reportPresent: false,
+        reportClassifierPresent: false,
+        reportSupportPresent: false,
+        usedFallbackSupportInference: false,
+        fallbackSupport: false,
+      },
     }
   }
 
   const report = parseStoredValidationReport(input.packageValidationReport)
   const classified = classifyPackageContract(input.storedDefinitionPayload)
-  const classifier = report?.analysis?.classifier ?? classified.classifier
+  const reportClassifier = report?.analysis?.classifier
+  const classifier = reportClassifier ?? classified.classifier
   const liveRuntimeSupportedFromState = report?.analysis?.readinessState?.capabilities?.liveRuntimeSupported === true
-  const liveRuntimeEnabledFromReadiness = report?.readiness?.liveRuntimeEnabled === true
+  const liveRuntimeDeniedFromState = report?.analysis?.readinessState?.capabilities?.liveRuntimeSupported === false
+  const reportSupportPresent = typeof report?.analysis?.readinessState?.capabilities?.liveRuntimeSupported === 'boolean'
+  const reportClassifierPresent = typeof reportClassifier === 'string'
+  const reportPresent = Boolean(report)
   const fallbackSupport = evaluatePackageV2LiveRuntimeSupport(
     classified.classifier === 'canonical_contract_v2' ? parseStoredValidatedAssessmentPackageV2(input.storedDefinitionPayload) : null,
   )
-  const liveRuntimeSupported = liveRuntimeSupportedFromState
-    || (liveRuntimeEnabledFromReadiness && classifier === 'runtime_contract_v2')
-    || (!report && fallbackSupport.supported)
+  const debug: LiveRuntimeExecutionRoutingDecision['debug'] = {
+    reportPresent,
+    reportClassifierPresent,
+    reportSupportPresent,
+    usedFallbackSupportInference: !reportPresent,
+    fallbackSupport: fallbackSupport.supported,
+  }
 
-  if (classifier !== 'runtime_contract_v2' && report?.analysis?.classifier) {
+  if (reportPresent) {
+    if (classifier !== 'runtime_contract_v2') {
+      return buildBlockedDecision({
+        classifier,
+        reasonCode: 'classifier_not_runtime_v2',
+        reason: 'Package Contract v2 payload is not runtime-contract classified for live execution.',
+        source: 'authoritative_report',
+        debug,
+      })
+    }
+
+    if (!reportSupportPresent) {
+      return buildBlockedDecision({
+        classifier,
+        reasonCode: 'report_metadata_incomplete',
+        reason: 'Stored validation report is present but missing explicit live runtime support metadata.',
+        source: 'authoritative_report',
+        debug,
+      })
+    }
+
+    if (liveRuntimeDeniedFromState) {
+      return buildBlockedDecision({
+        classifier,
+        reasonCode: 'report_explicitly_not_supported',
+        reason: 'Stored validation report explicitly marks this package as not live-runtime-supported.',
+        source: 'authoritative_report',
+        debug,
+      })
+    }
+
+    if (!liveRuntimeSupportedFromState) {
+      return buildBlockedDecision({
+        classifier,
+        reasonCode: 'report_missing_live_runtime_support',
+        reason: 'Stored validation report does not authorize live runtime execution support.',
+        source: 'authoritative_report',
+        debug,
+      })
+    }
+
     return {
       contractVersion: 'package_contract_v2',
       classifier,
-      liveRuntimeSupported: false,
-      reason: 'Package Contract v2 payload is not runtime-contract classified for live execution.',
+      liveRuntimeSupported: true,
+      reasonCode: null,
+      reason: null,
+      blockedReasons: [],
+      debug,
     }
   }
 
-  if (!liveRuntimeSupported) {
-    return {
-      contractVersion: 'package_contract_v2',
+  if (classifier !== 'runtime_contract_v2') {
+    return buildBlockedDecision({
       classifier,
-      liveRuntimeSupported: false,
-      reason: 'Package Contract v2 runtime support is not enabled for live execution readiness.',
-    }
+      reasonCode: 'classifier_not_runtime_v2',
+      reason: 'Package Contract v2 payload is not runtime-contract classified for live execution.',
+      source: 'fallback',
+      debug,
+    })
+  }
+
+  if (!fallbackSupport.supported) {
+    return buildBlockedDecision({
+      classifier,
+      reasonCode: 'fallback_not_supported',
+      reason: fallbackSupport.issues[0]?.message ?? 'Package Contract v2 runtime support is not enabled for live execution readiness.',
+      source: 'fallback',
+      debug,
+    })
   }
 
   return {
     contractVersion: 'package_contract_v2',
     classifier,
     liveRuntimeSupported: true,
+    reasonCode: null,
     reason: null,
+    blockedReasons: [],
+    debug,
   }
 }
 
 export interface LiveRuntimeExecutionAdapterResult {
+  routing: LiveRuntimeExecutionRoutingDecision
   bundle: PreparedRuntimeExecutionBundleV2
   executionResult: ReturnType<typeof executePreparedRuntimeExecutionBundleV2>
   compatibility: {
@@ -147,6 +264,7 @@ export function executeLiveRuntimeBundleWithCompatibility(input: {
   const materializedOutputs = materializeAssessmentOutputsV2(prepared.bundle.runtimeArtifact, evaluation)
 
   return {
+    routing,
     bundle: prepared.bundle,
     executionResult,
     compatibility: {
