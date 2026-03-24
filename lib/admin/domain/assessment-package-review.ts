@@ -7,12 +7,14 @@ import {
 } from '@/lib/admin/domain/assessment-package'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
 import { evaluatePackageV2LiveRuntimeSupport } from '@/lib/package-contract-v2-live-runtime'
+import { preparePackageExecutionBundleForAssessmentVersion } from '@/lib/admin/domain/runtime-execution-adapter-v2'
 import type {
   AdminAssessmentReleaseCheck,
   AdminAssessmentReleaseCheckStatus,
   AdminAssessmentReleaseReadinessStatus,
   AdminAssessmentVersionRecord,
 } from '@/lib/admin/domain/assessment-management'
+import { classifyPackageContract } from '@/lib/admin/server/assessment-package-import'
 
 export type AdminAssessmentPublishReadinessVerdict = 'ready' | 'ready_with_warnings' | 'blocked'
 export type AdminAssessmentEvidenceStatus = AdminAssessmentReleaseCheckStatus
@@ -347,9 +349,13 @@ export function getAdminAssessmentVersionReadiness(
   version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage' | 'storedDefinitionPayload' | 'lifecycleStatus'> & Partial<Pick<AdminAssessmentVersionRecord, 'savedScenarios' | 'latestSuiteSnapshot'>>,
 ): AdminAssessmentVersionReadiness {
   const packageInfo = normalizePackageInfoRuntime(version.packageInfo)
+  const classifiedPayload = classifyPackageContract(version.storedDefinitionPayload ?? version.normalizedPackage)
   const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
   const pkgV2 = packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 ? parseStoredValidatedAssessmentPackageV2(version.storedDefinitionPayload ?? version.normalizedPackage) : null
   const v2RuntimeSupport = evaluatePackageV2LiveRuntimeSupport(pkgV2)
+  const runtimeFoundation = preparePackageExecutionBundleForAssessmentVersion({
+    storedPackage: version.storedDefinitionPayload ?? version.normalizedPackage,
+  })
   const checks: AdminAssessmentReadinessChecklistItem[] = []
   const blockingIssues: string[] = []
   const warnings = [...getPackageWarningMessages(packageInfo)]
@@ -377,6 +383,14 @@ export function getAdminAssessmentVersionReadiness(
 
   const packageAttached = packageInfo.status !== 'missing'
   addCheck('package_attached', 'Package attached', packageAttached ? 'pass' : 'fail', packageAttached ? 'A package payload is attached to the version record.' : 'Attach a package before publish.')
+  addCheck(
+    'contract_payload_classification',
+    'Contract payload classified',
+    classifiedPayload.classifier === 'unknown_or_invalid' ? 'fail' : 'pass',
+    classifiedPayload.classifier === 'unknown_or_invalid'
+      ? 'Stored package payload could not be classified into legacy, canonical-v2, or runtime-v2 contract families.'
+      : `Behavioral branching uses classifier=${classifiedPayload.classifier} (schema ${classifiedPayload.schemaVersion ?? 'unknown'}).`,
+  )
 
   const isImportedV2Package = packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
     && (packageInfo.status === 'valid' || packageInfo.status === 'valid_with_warnings')
@@ -401,6 +415,70 @@ export function getAdminAssessmentVersionReadiness(
           ? 'Current runtime execution path is compatible with Package Contract v2 for live execution.'
           : `Package Contract v2 is importable and structurally valid, but publish stays blocked until the live runtime supports the full execution path. ${v2RuntimeSupport.issues[0]?.message ?? ''}`.trim())
       : 'Current runtime execution path is compatible with the stored package contract.',
+  )
+  addCheck(
+    'admin_compilable_to_runtime',
+    'Compilable to runtime execution plan',
+    classifiedPayload.classifier === 'legacy_contract_v1'
+      ? 'pass'
+      : runtimeFoundation.readiness.compilable
+        ? 'pass'
+        : packageInfo.status === 'missing'
+          ? 'warning'
+          : 'fail',
+    classifiedPayload.classifier === 'legacy_contract_v1'
+      ? 'Legacy v1 package uses compatibility simulation semantics; runtime-v2 compile readiness is not required for legacy publish checks.'
+      : runtimeFoundation.readiness.compilable
+      ? 'Stored package compiles for admin runtime-v2 execution planning.'
+      : runtimeFoundation.errors[0]?.message ?? 'Package is importable but is not currently compilable to runtime execution plan.',
+  )
+  addCheck(
+    'admin_compiled_plan_available',
+    'Compiled runtime plan available',
+    classifiedPayload.classifier === 'legacy_contract_v1'
+      ? 'pass'
+      : runtimeFoundation.bundle?.compiledRuntimePlan
+        ? 'pass'
+        : packageInfo.status === 'missing'
+          ? 'warning'
+          : 'fail',
+    classifiedPayload.classifier === 'legacy_contract_v1'
+      ? 'Legacy v1 package does not emit a runtime-v2 compiled plan in this workflow.'
+      : runtimeFoundation.bundle?.compiledRuntimePlan
+      ? `Compiled runtime plan prepared from ${runtimeFoundation.bundle.source.replace(/_/g, ' ')}.`
+      : 'No compiled runtime plan is available for admin preview/simulation execution.',
+  )
+  addCheck(
+    'admin_execution_ready',
+    'Executable in admin runtime flows',
+    classifiedPayload.classifier === 'legacy_contract_v1'
+      ? 'pass'
+      : runtimeFoundation.readiness.simulatable
+        ? 'pass'
+        : packageInfo.status === 'missing'
+          ? 'warning'
+          : 'fail',
+    classifiedPayload.classifier === 'legacy_contract_v1'
+      ? 'Legacy package remains executable in admin flows via compatibility simulation.'
+      : runtimeFoundation.readiness.simulatable
+      ? 'Package is executable in admin simulation/preview execution flows.'
+      : runtimeFoundation.errors[0]?.message ?? 'Admin execution readiness is incomplete.',
+  )
+  addCheck(
+    'preview_simulation_ready',
+    'Preview/simulation readiness',
+    classifiedPayload.classifier === 'legacy_contract_v1'
+      ? 'pass'
+      : runtimeFoundation.readiness.simulatable
+        ? 'pass'
+        : packageInfo.status === 'missing'
+          ? 'warning'
+          : 'fail',
+    classifiedPayload.classifier === 'legacy_contract_v1'
+      ? 'Preview and simulation remain available through the legacy compatibility path.'
+      : runtimeFoundation.readiness.simulatable
+      ? 'Preview and simulation share the same prepared runtime execution boundary.'
+      : 'Preview and simulation remain blocked until execution-plan readiness is restored.',
   )
 
   if (!pkg) {

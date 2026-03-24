@@ -8,6 +8,8 @@ import {
   getAdminAssessmentVersionDiff,
   getAdminAssessmentVersionReadiness,
 } from '../lib/admin/domain/assessment-package-review'
+import examplePackage from './fixtures/package-contract-v2-example.json'
+import { importAssessmentPackagePayload } from '../lib/admin/server/assessment-package-import'
 
 const baselinePackage: SonartraAssessmentPackageV1 = {
   meta: {
@@ -237,6 +239,38 @@ test('package preview summarises normalized dimensions, questions, and coverage'
   assert.match(preview.questionSummary, /2 questions/)
   assert.equal(preview.dimensions[0]?.id, 'drive')
   assert.equal(preview.questions[1]?.id, 'q2')
+})
+
+test('readiness checks explicitly include compile/execution and preview semantics for canonical v2', () => {
+  const imported = importAssessmentPackagePayload(examplePackage)
+  const readiness = getAdminAssessmentVersionReadiness({
+    packageInfo: {
+      status: imported.packageStatus,
+      schemaVersion: imported.schemaVersion,
+      sourceType: 'manual_import',
+      importedAt: '2026-03-24T00:00:00.000Z',
+      importedByName: 'A. Tester',
+      sourceFilename: 'example-v2.json',
+      summary: imported.summary,
+      errors: imported.errors,
+      warnings: imported.warnings,
+    },
+    normalizedPackage: imported.definitionPayload as never,
+    storedDefinitionPayload: imported.definitionPayload as never,
+    lifecycleStatus: 'draft',
+    savedScenarios: [],
+    latestSuiteSnapshot: null,
+  })
+
+  const compileCheck = readiness.checks.find((entry) => entry.key === 'admin_compilable_to_runtime')
+  const execCheck = readiness.checks.find((entry) => entry.key === 'admin_execution_ready')
+  const previewCheck = readiness.checks.find((entry) => entry.key === 'preview_simulation_ready')
+  const classifierCheck = readiness.checks.find((entry) => entry.key === 'contract_payload_classification')
+
+  assert.equal(classifierCheck?.status, 'pass')
+  assert.equal(compileCheck?.status, 'pass')
+  assert.equal(execCheck?.status, 'pass')
+  assert.equal(previewCheck?.status, 'pass')
 })
 
 

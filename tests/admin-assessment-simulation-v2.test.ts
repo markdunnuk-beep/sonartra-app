@@ -15,6 +15,7 @@ import {
   getAdminAssessmentSimulationWorkspaceStatus,
   parseAdminAssessmentSimulationPayloadForPackage,
 } from '../lib/admin/domain/assessment-simulation'
+import { getAdminAssessmentReportPreviewWorkspaceStatus } from '../lib/admin/domain/assessment-report-output'
 
 function getValidatedFixture() {
   const validation = validateSonartraAssessmentPackageV2(examplePackage)
@@ -179,6 +180,46 @@ test('runtime contract v2 simulation uses the same bundle preparation/execution 
   })
   assert.equal(simulation.ok, true)
   assert.equal(simulation.result?.readiness?.runtimeExecutable, true)
+})
+
+test('report preview readiness uses the same runtime-v2 foundation for canonical and runtime contracts', () => {
+  const importedCanonical = importAssessmentPackagePayload(examplePackage)
+  const importedRuntime = importAssessmentPackagePayload(importedCanonical.analysis.compiledRuntimeArtifact!)
+
+  const canonicalStatus = getAdminAssessmentReportPreviewWorkspaceStatus({
+    packageInfo: {
+      status: importedCanonical.packageStatus,
+      schemaVersion: importedCanonical.schemaVersion,
+      sourceType: 'manual_import',
+      importedAt: null,
+      importedByName: null,
+      sourceFilename: null,
+      summary: importedCanonical.summary,
+      errors: importedCanonical.errors,
+      warnings: importedCanonical.warnings,
+    },
+    normalizedPackage: importedCanonical.definitionPayload as never,
+  })
+
+  const runtimeStatus = getAdminAssessmentReportPreviewWorkspaceStatus({
+    packageInfo: {
+      status: importedRuntime.packageStatus,
+      schemaVersion: importedRuntime.schemaVersion,
+      sourceType: 'manual_import',
+      importedAt: null,
+      importedByName: null,
+      sourceFilename: null,
+      summary: importedRuntime.summary,
+      errors: importedRuntime.errors,
+      warnings: importedRuntime.warnings,
+    },
+    normalizedPackage: importedRuntime.definitionPayload as never,
+  })
+
+  assert.equal(canonicalStatus.canGeneratePreview, true)
+  assert.equal(runtimeStatus.canGeneratePreview, true)
+  assert.match(canonicalStatus.summary, /shared runtime-v2 preparation/i)
+  assert.match(runtimeStatus.summary, /shared runtime-v2 preparation/i)
 })
 
 test('admin v2 view-model adapters retain debug details outside the materialized domain contract', () => {
