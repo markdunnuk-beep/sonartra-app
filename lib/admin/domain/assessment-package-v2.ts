@@ -282,7 +282,16 @@ export interface SonartraAssessmentPackageV2NormalizationRule {
   expression?: string | null
 }
 
+export interface SonartraAssessmentPackageV2NormalizationGroup {
+  id: string
+  label: string
+  dimensionIds?: string[]
+  derivedDimensionIds?: string[]
+  comparisonOrder?: string[]
+}
+
 export interface SonartraAssessmentPackageV2NormalizationBlock {
+  groups?: SonartraAssessmentPackageV2NormalizationGroup[]
   rules: SonartraAssessmentPackageV2NormalizationRule[]
 }
 
@@ -1026,6 +1035,51 @@ function validateLegacySonartraAssessmentPackageV2(input: unknown): SonartraAsse
     }
   }
 
+  const normalizationGroupsInput = isRecord(input.normalization) && Array.isArray(input.normalization.groups) ? input.normalization.groups : []
+  const normalizationGroups: SonartraAssessmentPackageV2NormalizationGroup[] = []
+  const normalizationGroupIds = new Set<string>()
+  const normalizationGroupById = new Map<string, SonartraAssessmentPackageV2NormalizationGroup>()
+  for (const [index, entry] of normalizationGroupsInput.entries()) {
+    const path = `normalization.groups[${index}]`
+    if (!isRecord(entry)) {
+      pushIssue(errors, path, 'Normalization groups must be objects.')
+      continue
+    }
+    const id = asTrimmedString(entry.id)
+    const label = asTrimmedString(entry.label)
+    const groupDimensionIds = asStringArray(entry.dimensionIds)
+    const groupDerivedDimensionIds = asStringArray(entry.derivedDimensionIds)
+    const comparisonOrder = asStringArray(entry.comparisonOrder)
+    if (!id) pushIssue(errors, `${path}.id`, 'Normalization group id is required.')
+    if (!label) pushIssue(errors, `${path}.label`, 'Normalization group label is required.')
+    if (id && normalizationGroupIds.has(id)) pushIssue(errors, `${path}.id`, `Duplicate normalization group id "${id}".`)
+    if (groupDimensionIds.length === 0 && groupDerivedDimensionIds.length === 0) {
+      pushIssue(errors, path, 'Normalization groups must reference at least one dimension or derived dimension.')
+    }
+    for (const dimensionId of groupDimensionIds) {
+      if (!dimensionIds.has(dimensionId)) pushIssue(errors, `${path}.dimensionIds`, `Unknown dimension reference "${dimensionId}".`)
+    }
+    for (const derivedDimensionId of groupDerivedDimensionIds) {
+      if (!derivedDimensionIds.has(derivedDimensionId)) pushIssue(errors, `${path}.derivedDimensionIds`, `Unknown derived dimension reference "${derivedDimensionId}".`)
+    }
+    for (const ref of comparisonOrder) {
+      if (!dimensionIds.has(ref) && !derivedDimensionIds.has(ref)) pushIssue(errors, `${path}.comparisonOrder`, `Unknown comparisonOrder reference "${ref}".`)
+    }
+
+    const normalizedGroup: SonartraAssessmentPackageV2NormalizationGroup = {
+      id: id ?? `invalid-normalization-group-${index}`,
+      label: label ?? '',
+      dimensionIds: [...new Set(groupDimensionIds)],
+      derivedDimensionIds: [...new Set(groupDerivedDimensionIds)],
+      comparisonOrder: [...new Set(comparisonOrder)],
+    }
+    normalizationGroups.push(normalizedGroup)
+    if (id) {
+      normalizationGroupIds.add(id)
+      normalizationGroupById.set(id, normalizedGroup)
+    }
+  }
+
   const normalizationRulesInput = isRecord(input.normalization) && Array.isArray(input.normalization.rules) ? input.normalization.rules : []
   const normalizationRules: SonartraAssessmentPackageV2NormalizationRule[] = []
   const normalizationRuleIds = new Set<string>()
@@ -1044,10 +1098,21 @@ function validateLegacySonartraAssessmentPackageV2(input: unknown): SonartraAsse
     }
     if (!version) pushIssue(errors, `${path}.version`, 'Normalization rule version is required.')
     if (id && normalizationRuleIds.has(id)) pushIssue(errors, `${path}.id`, `Duplicate normalization rule id "${id}".`)
+    const groupKey = asTrimmedString(entry.appliesTo.groupKey)
+    if (groupKey && !normalizationGroupById.has(groupKey)) {
+      pushIssue(errors, `${path}.appliesTo.groupKey`, `Unknown normalization group "${groupKey}".`)
+    }
     const appliesToDimensionIds = asStringArray(entry.appliesTo.dimensionIds)
     const appliesToDerivedDimensionIds = asStringArray(entry.appliesTo.derivedDimensionIds)
-    if (appliesToDimensionIds.length === 0 && appliesToDerivedDimensionIds.length === 0) {
-      pushIssue(errors, `${path}.appliesTo`, 'Normalization rules must target at least one dimension or derived dimension.')
+    const expandedDimensionIds = new Set(appliesToDimensionIds)
+    const expandedDerivedDimensionIds = new Set(appliesToDerivedDimensionIds)
+    if (groupKey) {
+      const referencedGroup = normalizationGroupById.get(groupKey)
+      for (const dimensionId of referencedGroup?.dimensionIds ?? []) expandedDimensionIds.add(dimensionId)
+      for (const derivedDimensionId of referencedGroup?.derivedDimensionIds ?? []) expandedDerivedDimensionIds.add(derivedDimensionId)
+    }
+    if (expandedDimensionIds.size === 0 && expandedDerivedDimensionIds.size === 0) {
+      pushIssue(errors, `${path}.appliesTo`, 'Normalization rules must target at least one dimension, derived dimension, or resolvable groupKey.')
     }
     for (const dimensionId of appliesToDimensionIds) {
       if (!dimensionIds.has(dimensionId)) pushIssue(errors, `${path}.appliesTo.dimensionIds`, `Unknown dimension reference "${dimensionId}".`)
@@ -1060,9 +1125,9 @@ function validateLegacySonartraAssessmentPackageV2(input: unknown): SonartraAsse
       id: id ?? `invalid-normalization-rule-${index}`,
       method: (method as SonartraAssessmentPackageV2NormalizationMethod) ?? 'band_table',
       appliesTo: {
-        dimensionIds: appliesToDimensionIds,
-        derivedDimensionIds: appliesToDerivedDimensionIds,
-        groupKey: asTrimmedString(entry.appliesTo.groupKey),
+        dimensionIds: [...expandedDimensionIds],
+        derivedDimensionIds: [...expandedDerivedDimensionIds],
+        groupKey,
       },
       version: version ?? '',
       table: Array.isArray(entry.table)
@@ -1258,6 +1323,7 @@ function validateLegacySonartraAssessmentPackageV2(input: unknown): SonartraAsse
       rules: scoringRules,
     },
     normalization: {
+      groups: normalizationGroups,
       rules: normalizationRules,
     },
     integrity: {

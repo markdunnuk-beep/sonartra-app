@@ -23,10 +23,10 @@ This document captures authoring decisions and contract-fit pressure points for 
    - Detail: v2 canonical supports output block titles, report binding labels, explanations, and question/section text, but does not yet provide a dedicated language catalog for multi-variant narrative packs at package level.
    - Best-fit used: premium, human-facing copy placed in `outputs.reportBindings[].explanation` and `outputs.blocks[].title`.
 
-2. **Normalization groups are metadata-only in canonical-to-runtime normalization path**
+2. **Normalization-group execution semantics are intentionally narrow**
    - Category: contract limitation.
-   - Detail: canonical `normalization.groups` can define comparison sets, but runtime normalization execution currently depends on rules and does not yet consume group declarations as executable semantics.
-   - Best-fit used: preserve complete grouping metadata plus concrete normalization rules to keep future execution options open.
+   - Detail: canonical `normalization.groups` declarations are now preserved into validated runtime input and can be consumed narrowly through `normalization.rules[*].appliesTo.groupKey` target expansion. Groups are still not independently executable without a rule that references them.
+   - Best-fit used: preserve complete grouping metadata plus explicit normalization rules, with optional `groupKey` targeting to avoid target duplication.
 
 3. **Response-pattern integrity logic granularity is currently constrained by predicate operands**
    - Category: contract limitation.
@@ -99,11 +99,48 @@ This document captures authoring decisions and contract-fit pressure points for 
 - Added focused WPLP-80 regression tests covering runtime execution determinism, stage-correct diagnostics, output/integrity ordering stability, and preview-path compatibility.
 - No runtime-engine or compiler behavior changes were required for this task.
 
-### Deferred to Task 4
+## Task 4 limitation cleanup and production-readiness polish (March 24, 2026)
 
-- Full executable semantics for `normalization.groups` declarations.
-- Advanced statistical response-pattern integrity primitives beyond current predicate model.
-- Any broader narrative/language-catalog contract expansion.
+### Deferred-item classification and decisions
+
+- **Normalization groups**
+  - Classification: **should fix now (bounded)**.
+  - Decision: implemented a minimal executable behavior only: `normalization.rules[*].appliesTo.groupKey` now resolves and expands to the group's declared dimension/derived-dimension targets during package validation.
+  - Explicit non-goal retained: groups remain non-executable metadata unless a rule references them.
+
+- **Advanced response_pattern primitives**
+  - Classification: **should explicitly leave deferred**.
+  - Decision: no runtime semantic expansion in this pass; existing warning stays to avoid false readiness signals.
+
+- **Broader language/narrative contract expansion**
+  - Classification: **should document as package/contract limitation**.
+  - Decision: deferred; no schema redesign in this bounded pass.
+
+- **Psychometric weighting ambiguity in source data**
+  - Classification: **package/data-governance limitation**.
+  - Decision: remains outside engine scope; no engine-side heuristics added.
+
+### Task 4 code-path improvements made
+
+- Added validated import support for `normalization.groups` in runtime-contract v2 input.
+- Added rule-target expansion from `appliesTo.groupKey` to concrete dimension/derived-dimension targets for deterministic runtime execution planning.
+- Added explicit validation erroring for unknown normalization `groupKey` references.
+- Kept canonical warning honest by only emitting metadata-only messaging when groups exist but no normalization rule references them via `groupKey`.
+- Added regression coverage for:
+  - successful groupKey-driven normalization target expansion,
+  - explicit failure on missing normalization group references.
+
+### Remaining intentional deferrals after Task 4
+
+- Advanced statistical response-pattern primitives beyond the current predicate model.
+- Broader language/narrative-catalog contract expansion.
+- Source psychometric weighting ambiguity resolution (authoring/data governance).
+
+### Production-readiness status
+
+- WPLP-80 remains deterministic and stable across canonical import, compile, runtime execution, simulation, and preview compatibility checks.
+- With the bounded normalization-group fix in place and explicit diagnostics preserved, WPLP-80 is suitable for a real admin import exercise.
+- Recommended next step: run a controlled admin import rehearsal using the full candidate package and capture operator feedback on diagnostics clarity before broader rollout.
 
 ### New pressure points observed
 
