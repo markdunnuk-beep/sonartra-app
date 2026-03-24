@@ -599,7 +599,16 @@ export function compileAssessmentPackageV2(
   })
 
   const compiledIntegrityRules = new Map<string, ExecutableIntegrityRule>()
-  input.integrity.rules.forEach((rule) => {
+  input.integrity.rules.forEach((rule, index) => {
+    if (rule.kind === 'response_pattern') {
+      pushDiagnostic(
+        diagnostics,
+        'warning',
+        'response_pattern_primitives_limited',
+        `integrity.rules[${index}]`,
+        `Integrity rule "${rule.id}" uses response_pattern semantics, but advanced statistical response-pattern primitives are not yet first-class in runtime execution.`,
+      )
+    }
     const refs = extractPredicateReferences(rule.predicate)
     compiledIntegrityRules.set(rule.id, {
       id: rule.id,
