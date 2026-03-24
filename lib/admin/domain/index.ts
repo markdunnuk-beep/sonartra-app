@@ -17,3 +17,6 @@ export * from './assessment-package-v2'
 export * from './package-contract-v2-canonical'
 export * from './assessment-package-v2-compiler'
 export * from './assessment-package-v2-evaluator'
+
+export * from './runtime-plan-v2-compiler'
+export * from './runtime-plan-v2-executor'
