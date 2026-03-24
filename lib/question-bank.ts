@@ -1,5 +1,6 @@
 import { AssessmentRow, AssessmentVersionRow } from '@/lib/assessment-types';
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2';
+import { HYBRID_MVP_CONTRACT_VERSION, type HybridMvpAssessmentDefinition } from '@/lib/assessment/hybrid-mvp-scoring';
 import { buildV2QuestionDeliveryContract } from '@/lib/server/live-assessment-v2';
 import { queryDb } from '@/lib/db';
 import {
@@ -15,6 +16,7 @@ interface QuestionBankDependencies {
 
 interface AssessmentRuntimeVersionRow extends AssessmentVersionRow {
   package_schema_version: string | null
+  package_raw_payload: unknown
   definition_payload: unknown
 }
 
@@ -53,6 +55,128 @@ interface VersionQuestionSetJoinRow {
   question_set_is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+interface RuntimeQuestionResponseRow {
+  question_id: number
+  response_value: number
+  response_time_ms: number | null
+  is_changed: boolean
+  updated_at: string
+}
+
+interface HybridResponseEnvelope {
+  responses?: Record<string, unknown>
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function parseHybridDefinition(payload: unknown): HybridMvpAssessmentDefinition | null {
+  if (!isRecord(payload) || payload.contractVersion !== HYBRID_MVP_CONTRACT_VERSION) {
+    return null
+  }
+
+  return payload as unknown as HybridMvpAssessmentDefinition
+}
+
+function toLegacyNumericOptionValue(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function mapV2ContractToLegacyQuestions(runtime: ReturnType<typeof buildV2QuestionDeliveryContract>): QuestionPayload[] {
+  return runtime.questions.map((question, index) => ({
+    question_number: index + 1,
+    question_key: question.code || question.id,
+    prompt: question.prompt,
+    section_key: question.sections[0]?.id ?? 'default',
+    section_name: question.sections[0]?.title ?? null,
+    reverse_scored: false,
+    options: question.responseModel.options.map((option, optionIndex) => ({
+      option_key: option.code ?? option.id,
+      option_text: option.label,
+      display_order: optionIndex + 1,
+      numeric_value: toLegacyNumericOptionValue(option.value, optionIndex + 1),
+    })),
+  }))
+}
+
+function mapV2ResponsesToLegacyRows(input: {
+  runtime: ReturnType<typeof buildV2QuestionDeliveryContract>
+  questions: QuestionPayload[]
+}): RuntimeQuestionResponseRow[] {
+  const byQuestionId = new Map(input.runtime.questions.map((question, index) => [question.id, { question, index }]))
+
+  return input.runtime.responses.flatMap((response) => {
+    const runtimeQuestion = byQuestionId.get(response.questionId)
+    if (!runtimeQuestion) return []
+
+    const questionNumber = runtimeQuestion.index + 1
+    const mappedQuestion = input.questions[runtimeQuestion.index]
+    if (!mappedQuestion) return []
+
+    const matchedOption = mappedQuestion.options.find((option) =>
+      option.numeric_value === response.value
+      || option.option_key === response.value
+      || option.option_text === response.value,
+    )
+
+    return [{
+      question_id: questionNumber,
+      response_value: matchedOption?.numeric_value ?? mappedQuestion.options[0]?.numeric_value ?? 1,
+      response_time_ms: null,
+      is_changed: false,
+      updated_at: response.updatedAt ?? new Date(0).toISOString(),
+    }]
+  })
+}
+
+function mapHybridDefinitionToLegacyQuestions(definition: HybridMvpAssessmentDefinition): QuestionPayload[] {
+  return definition.questions.map((question, questionIndex) => ({
+    question_number: questionIndex + 1,
+    question_key: question.id,
+    prompt: question.prompt,
+    section_key: 'hybrid_mvp',
+    section_name: 'Hybrid Assessment',
+    reverse_scored: false,
+    options: question.options.map((option, optionIndex) => ({
+      option_key: option.id,
+      option_text: option.label,
+      display_order: optionIndex + 1,
+      numeric_value: optionIndex + 1,
+    })),
+  }))
+}
+
+function mapHybridResponsesToLegacyRows(input: {
+  metadataJson: Record<string, unknown> | null
+  definition: HybridMvpAssessmentDefinition
+  questions: QuestionPayload[]
+}): RuntimeQuestionResponseRow[] {
+  const liveHybrid = isRecord(input.metadataJson?.liveHybridMvpV1) ? input.metadataJson.liveHybridMvpV1 as HybridResponseEnvelope : null
+  const responses = isRecord(liveHybrid?.responses) ? liveHybrid.responses : {}
+  const updatedByQuestion = isRecord(input.metadataJson?.liveHybridMvpV1) && isRecord((input.metadataJson.liveHybridMvpV1 as Record<string, unknown>).updatedAtByQuestionId)
+    ? (input.metadataJson.liveHybridMvpV1 as Record<string, Record<string, string>>).updatedAtByQuestionId
+    : {}
+
+  return input.definition.questions.flatMap((question, index) => {
+    const response = responses[question.id]
+    if (typeof response !== 'string') return []
+
+    const mappedQuestion = input.questions[index]
+    if (!mappedQuestion) return []
+    const matchedOption = mappedQuestion.options.find((option) => option.option_key === response)
+    if (!matchedOption?.numeric_value) return []
+
+    return [{
+      question_id: index + 1,
+      response_value: matchedOption.numeric_value,
+      response_time_ms: null,
+      is_changed: false,
+      updated_at: updatedByQuestion[question.id] ?? new Date(0).toISOString(),
+    }]
+  })
 }
 
 function groupQuestions(rows: QuestionWithOptionRow[]): QuestionPayload[] {
@@ -231,7 +355,7 @@ export async function getQuestionsByAssessmentIdWithDependencies(
   if (!assessment) return null;
 
   const versionResult = await dependencies.queryDb<AssessmentRuntimeVersionRow>(
-    `SELECT id, key, name, total_questions, is_active, package_schema_version, definition_payload
+    `SELECT id, key, name, total_questions, is_active, package_schema_version, package_raw_payload, definition_payload
      FROM assessment_versions
      WHERE id = $1`,
     [assessment.assessment_version_id]
@@ -254,6 +378,9 @@ export async function getQuestionsByAssessmentIdWithDependencies(
       pkg,
     })
 
+    const questions = mapV2ContractToLegacyQuestions(runtime)
+    const responses = mapV2ResponsesToLegacyRows({ runtime, questions })
+
     return {
       assessment: {
         id: assessment.id,
@@ -275,10 +402,45 @@ export async function getQuestionsByAssessmentIdWithDependencies(
         name: `${version.name} Live Runtime`,
         description: 'Runtime question contract generated directly from Package Contract v2.',
       },
-      questions: [],
-      responses: [],
+      questions,
+      responses,
       runtime,
     } as AssessmentQuestionsResponse & { runtime: ReturnType<typeof buildV2QuestionDeliveryContract> }
+  }
+
+  const hybridDefinition = parseHybridDefinition(version.definition_payload) ?? parseHybridDefinition(version.package_raw_payload)
+  if (hybridDefinition) {
+    const questions = mapHybridDefinitionToLegacyQuestions(hybridDefinition)
+    const responses = mapHybridResponsesToLegacyRows({
+      metadataJson: assessment.metadata_json,
+      definition: hybridDefinition,
+      questions,
+    })
+
+    return {
+      assessment: {
+        id: assessment.id,
+        status: assessment.status,
+        progressCount: assessment.progress_count,
+        progressPercent: Number(assessment.progress_percent),
+        currentQuestionIndex: assessment.current_question_index,
+      },
+      version: {
+        id: version.id,
+        key: version.key,
+        name: version.name,
+        totalQuestions: version.total_questions,
+        isActive: version.is_active,
+      },
+      questionSet: {
+        id: `hybrid-mvp-v1:${version.id}`,
+        key: `hybrid-mvp-v1:${version.key}`,
+        name: `${version.name} Hybrid Runtime`,
+        description: 'Runtime question contract generated directly from hybrid_mvp_v1 definition payload.',
+      },
+      questions,
+      responses,
+    }
   }
 
   const resolved = await resolveVersionAndActiveQuestionSetWithDependencies(version.key, dependencies);
