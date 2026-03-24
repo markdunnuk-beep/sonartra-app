@@ -8,22 +8,18 @@ export const dynamic = 'force-dynamic'
 interface AssessmentWorkspacePageProps {
   searchParams?: {
     assessmentId?: string | string[]
+    definitionId?: string | string[]
   }
 }
 
-function getAssessmentId(searchParams: AssessmentWorkspacePageProps['searchParams']): string | null {
-  const rawAssessmentId = searchParams?.assessmentId
-  const assessmentId = Array.isArray(rawAssessmentId) ? rawAssessmentId[0] : rawAssessmentId
-
-  if (!assessmentId) {
-    return null
-  }
-
-  return assessmentId
+function getSearchParamValue(value: string | string[] | undefined): string | null {
+  const resolved = Array.isArray(value) ? value[0] : value
+  return resolved ?? null
 }
 
 export default async function AssessmentWorkspacePage({ searchParams }: AssessmentWorkspacePageProps) {
-  const requestedAssessmentId = getAssessmentId(searchParams)
+  const requestedAssessmentId = getSearchParamValue(searchParams?.assessmentId)
+  const requestedDefinitionId = getSearchParamValue(searchParams?.definitionId)
   const resolved = await resolveIndividualLifecycleState()
 
   if (resolved.authState === 'unauthenticated') {
@@ -35,6 +31,7 @@ export default async function AssessmentWorkspacePage({ searchParams }: Assessme
   return (
     <AssessmentWorkspaceClient
       initialAssessmentId={requestedAssessmentId}
+      initialDefinitionId={requestedDefinitionId}
       initialLifecycle={resolved.lifecycle}
       canonicalAssessmentId={canonicalAssessmentId}
     />

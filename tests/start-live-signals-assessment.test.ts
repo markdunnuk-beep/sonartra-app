@@ -242,6 +242,43 @@ test('creates a new attempt against the current published version when no unfini
   assert.deepEqual(insertCalls[0]!.params, ['user-1', 'version-current', 'workspace'])
 })
 
+
+
+test('assessmentDefinitionId launch is assignment-scoped and does not fall back to an unrelated published version', async () => {
+  const result = await startLiveSignalsAssessment(
+    { appUser, assessmentDefinitionId: 'definition-hybrid' },
+    {
+      queryDb: async (sql) => {
+        if (/FROM assessment_repository_assignments/i.test(sql)) {
+          return { rows: [] } as never
+        }
+
+        return { rows: [] } as never
+      },
+      resolveLiveSignalsPublishedVersionState: async () => ({
+        version: {
+          assessmentDefinitionId: 'definition-signals',
+          assessmentDefinitionKey: 'sonartra_signals',
+          assessmentDefinitionSlug: 'sonartra-signals',
+          currentPublishedVersionId: 'version-current',
+          assessmentVersionId: 'version-current',
+          assessmentVersionKey: 'wplp80-v2',
+          assessmentVersionName: 'WPLP-80 v2',
+          totalQuestions: 80,
+          isActive: true,
+        },
+        diagnostic: { code: 'no_published_version', message: 'No active published Sonartra Signals version is available.' },
+      }),
+      withTransaction: async () => {
+        throw new Error('transaction should not be called when assignment is missing')
+      },
+    },
+  )
+
+  assert.equal(result.kind, 'unavailable')
+  assert.equal(result.status, 404)
+  assert.equal(result.body.error, 'No launchable published assignment found for this assessment.')
+})
 test('route file keeps the helper internal and exports only POST', async () => {
   const source = await readFile(new URL('../app/api/assessments/start/route.ts', import.meta.url), 'utf8')
 

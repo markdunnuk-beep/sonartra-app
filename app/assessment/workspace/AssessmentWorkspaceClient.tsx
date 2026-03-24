@@ -130,11 +130,12 @@ export function AssessmentLifecycleCard({ lifecycleState, startError, loading, o
 
 interface AssessmentPageClientProps {
   initialAssessmentId: string | null
+  initialDefinitionId: string | null
   canonicalAssessmentId: string | null
   initialLifecycle: IndividualLifecycleResolution
 }
 
-export default function AssessmentPageClient({ initialAssessmentId, canonicalAssessmentId, initialLifecycle }: AssessmentPageClientProps) {
+export default function AssessmentPageClient({ initialAssessmentId, initialDefinitionId, canonicalAssessmentId, initialLifecycle }: AssessmentPageClientProps) {
   const [viewState, setViewState] = useState<'intro' | 'starting' | 'active'>('intro')
   const [assessmentId, setAssessmentId] = useState<string | null>(canonicalAssessmentId ?? initialAssessmentId)
   const [lifecycleState, setLifecycleState] = useState<IndividualLifecycleState>(initialLifecycle.state)
@@ -343,6 +344,7 @@ export default function AssessmentPageClient({ initialAssessmentId, canonicalAss
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           source: 'direct',
+          assessmentDefinitionId: initialDefinitionId ?? undefined,
         }),
       })
 
