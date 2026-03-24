@@ -9,6 +9,7 @@ import { parseStoredNormalizedAssessmentPackage } from '@/lib/admin/domain/asses
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
 import { SONARTRA_RUNTIME_CONTRACT_V2 } from '@/lib/admin/domain/package-runtime-v2'
 import { resolveAssessmentPackageLocaleContext } from '@/lib/admin/domain/assessment-package-content'
+import { classifyPackageContract } from '@/lib/admin/server/assessment-package-import'
 import type { AdminAssessmentVersionRecord } from '@/lib/admin/domain/assessment-management'
 import {
   buildAdminAssessmentSimulationScenarioV2,
@@ -215,6 +216,15 @@ function isPackageContractV2Version(version: Pick<AdminAssessmentVersionRecord, 
     && (version.packageInfo?.status === 'valid' || version.packageInfo?.status === 'valid_with_warnings')
 }
 
+function isRuntimeFoundationPackage(version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage'>) {
+  const classifier = classifyPackageContract(version.normalizedPackage)
+  if (classifier.classifier === 'canonical_contract_v2' || classifier.classifier === 'runtime_contract_v2') {
+    return true
+  }
+
+  return isPackageContractV2Version(version)
+}
+
 function toLegacyCompatibleV2Result(
   request: AdminAssessmentSimulationRequestV2,
   result: AssessmentSimulationResultV2,
@@ -360,7 +370,7 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
     ? ((version.normalizedPackage as { questions?: unknown[] } | null)?.questions?.length ?? 0)
     : null
   const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
-  const isImportedV2Package = isPackageContractV2Version(version)
+  const isImportedV2Package = isRuntimeFoundationPackage(version)
   const pkgV2 = isImportedV2Package ? parseStoredValidatedAssessmentPackageV2(version.normalizedPackage as unknown) : null
 
   if (isImportedV2Package) {

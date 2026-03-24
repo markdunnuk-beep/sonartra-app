@@ -10,6 +10,8 @@ import {
   type SonartraPackageContentProvenance,
 } from '@/lib/admin/domain/assessment-package-content'
 import { getAdminAssessmentSimulationWorkspaceStatus, type AdminAssessmentSimulationResult } from '@/lib/admin/domain/assessment-simulation'
+import { preparePackageExecutionBundleForAssessmentVersion } from '@/lib/admin/domain/runtime-execution-adapter-v2'
+import { classifyPackageContract } from '@/lib/admin/server/assessment-package-import'
 
 export type AdminAssessmentReportPreviewAvailability = 'available' | 'blocked'
 export type AdminAssessmentReportQualityVerdict = 'strong' | 'usable_with_gaps' | 'blocked'
@@ -495,6 +497,28 @@ function getDimensionNarrative(
 }
 
 export function getAdminAssessmentReportPreviewWorkspaceStatus(version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage'>): AdminAssessmentReportPreviewWorkspaceStatus {
+  const classifier = classifyPackageContract(version.normalizedPackage)
+  if (classifier.classifier === 'canonical_contract_v2' || classifier.classifier === 'runtime_contract_v2') {
+    const prepared = preparePackageExecutionBundleForAssessmentVersion({ storedPackage: version.normalizedPackage })
+    if (!prepared.bundle || !prepared.readiness.simulatable) {
+      return {
+        availability: 'blocked',
+        statusLabel: 'Unavailable',
+        summary: 'Report preview is unavailable because the runtime-v2 execution bundle cannot be prepared from the currently stored package payload.',
+        blockingReason: prepared.errors[0]?.message ?? 'Resolve structural, compile, or execution-plan issues to enable preview/simulation flows.',
+        canGeneratePreview: false,
+      }
+    }
+
+    return {
+      availability: 'available',
+      statusLabel: 'Ready after simulation',
+      summary: 'Report preview is available through the shared runtime-v2 preparation + execution foundation. Run a simulation payload to materialize preview evidence.',
+      blockingReason: null,
+      canGeneratePreview: true,
+    }
+  }
+
   const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus(version)
 
   if (!simulationStatus.canRunSimulation) {
