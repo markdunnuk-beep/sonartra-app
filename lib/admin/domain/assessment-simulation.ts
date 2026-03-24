@@ -372,7 +372,11 @@ export function getAdminAssessmentSimulationWorkspaceStatus(version: Pick<AdminA
     ? ((version.normalizedPackage as { questions?: unknown[] } | null)?.questions?.length ?? 0)
     : null
   const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
-  const isImportedV2Package = isRuntimeFoundationPackage({ packageInfo: version.packageInfo, normalizedPackage: storedPackage })
+  const storedNormalizedPackage = parseStoredNormalizedAssessmentPackage(storedPackage)
+  const isImportedV2Package = isRuntimeFoundationPackage({
+    packageInfo: version.packageInfo,
+    normalizedPackage: storedNormalizedPackage ?? pkg,
+  })
   const pkgV2 = isImportedV2Package ? parseStoredValidatedAssessmentPackageV2(storedPackage as unknown) : null
 
   if (isImportedV2Package) {
