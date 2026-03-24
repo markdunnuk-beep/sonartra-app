@@ -89,9 +89,13 @@ test('canonical v2 package supports normalization rule targets resolved from nor
   const result = validateSonartraAssessmentPackageV2(fixture)
 
   assert.equal(result.ok, true)
+  const normalizationGroup = fixture.normalization.groups[0]
+  assert.ok(normalizationGroup)
+  const dimensionKeys = normalizationGroup.dimensionKeys
+  assert.ok(dimensionKeys)
   assert.deepEqual(
     result.normalizedPackage?.normalization.rules[0]?.appliesTo.dimensionIds?.slice().sort(),
-    fixture.normalization.groups[0].dimensionKeys.slice().sort(),
+    dimensionKeys.slice().sort(),
   )
 })
 
