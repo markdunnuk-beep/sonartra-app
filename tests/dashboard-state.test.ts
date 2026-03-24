@@ -150,6 +150,104 @@ test('no assessment still resolves to true not_started defaults', async () => {
   assert.equal(state.assessment.questionsCompleted, 0)
 })
 
+test('dashboard prefers assignment-aware inventory lifecycle when available', async () => {
+  const state = await getAuthenticatedDashboardState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getAssessmentInventory: async () => [
+      {
+        id: 'signals',
+        slug: 'signals',
+        title: 'Signals',
+        category: 'individual',
+        description: 'Signals',
+        longDescription: 'Signals',
+        status: 'not_started',
+        lifecycleState: 'not_started',
+        inventorySource: 'server',
+        hasAdvancedOutputs: true,
+        questionCount: 80,
+        estimatedMinutes: 12,
+        resultsAvailable: false,
+        isRetakeAllowed: false,
+        measures: [],
+        operationalDetails: [],
+        accessRows: [],
+        outputRows: [],
+        productOrder: 1,
+      },
+    ],
+    getLatestAssessment: async () => ({ ...inProgressAssessment, status: 'completed', progress_percent: '100', progress_count: 80 }),
+    resolveLifecycle: async () => ({
+      authState: 'authenticated',
+      userId: 'user-1',
+      lifecycle: {
+        state: 'ready',
+        latestAssessment: null,
+        latestAssessmentResult: null,
+        latestReadyResult: null,
+        message: 'stale ready status',
+      },
+    }),
+  })
+
+  assert.equal(state.assessment.status, 'not_started')
+  assert.equal(state.hasCompletedResult, false)
+  assert.equal(state.result, null)
+})
+
+test('assignment-aware inventory keeps hybrid assigned lifecycle visible on dashboard', async () => {
+  const state = await getAuthenticatedDashboardState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getAssessmentInventory: async () => [
+      {
+        id: 'signals',
+        slug: 'signals',
+        title: 'Signals',
+        category: 'individual',
+        description: 'Signals',
+        longDescription: 'Signals',
+        status: 'not_started',
+        lifecycleState: 'not_started',
+        inventorySource: 'server',
+        hasAdvancedOutputs: true,
+        questionCount: 80,
+        estimatedMinutes: 12,
+        resultsAvailable: false,
+        isRetakeAllowed: false,
+        measures: [],
+        operationalDetails: [],
+        accessRows: [],
+        outputRows: [],
+        productOrder: 1,
+        availability: {
+          definitionId: 'def-1',
+          definitionKey: 'sonartra_signals',
+          definitionSlug: 'signals',
+          versionId: 'version-2',
+          versionKey: 'hybrid-v1',
+          versionName: 'Hybrid v1',
+        },
+      },
+    ],
+    getLatestAssessment: async () => null,
+    resolveLifecycle: async () => ({
+      authState: 'authenticated',
+      userId: 'user-1',
+      lifecycle: {
+        state: 'ready',
+        latestAssessment: null,
+        latestAssessmentResult: null,
+        latestReadyResult: null,
+        message: 'legacy ready status',
+      },
+    }),
+  })
+
+  assert.equal(state.assessment.status, 'not_started')
+  assert.equal(state.assessment.progressPercent, 0)
+  assert.equal(state.hasCompletedResult, false)
+})
+
 test('completed_processing lifecycle keeps real completion metrics while result remains unavailable', async () => {
   const state = await getAuthenticatedDashboardState({
     resolveAuthenticatedUserId: async () => 'user-1',
