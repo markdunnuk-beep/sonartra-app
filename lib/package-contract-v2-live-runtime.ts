@@ -1,3 +1,9 @@
+/**
+ * Compatibility boundary:
+ * Package Contract v2 remains supported for existing stored assessments.
+ * New MVP assessment authoring should target the controlled hybrid contract
+ * in `lib/assessment/hybrid-mvp-contract.ts`.
+ */
 import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import type {
   SonartraAssessmentPackageV2Option,
