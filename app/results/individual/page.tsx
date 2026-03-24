@@ -5,6 +5,16 @@ import { redirect } from 'next/navigation'
 import { currentUser } from '@clerk/nextjs/server'
 
 export const dynamic = 'force-dynamic'
+interface IndividualResultsPageProps {
+  searchParams?: {
+    definitionId?: string | string[]
+  }
+}
+
+function getSearchParamValue(value: string | string[] | undefined): string | null {
+  const resolved = Array.isArray(value) ? value[0] : value
+  return resolved ?? null
+}
 
 function normaliseStatePayload(model: IndividualResultApiResponse): IndividualResultApiResponse | { state: string; message?: string } {
   const knownStates = new Set(['unauthenticated', 'empty', 'in_progress', 'completed_processing', 'results_unavailable', 'ready', 'ready_v2', 'ready_hybrid', 'error'])
@@ -15,8 +25,9 @@ function normaliseStatePayload(model: IndividualResultApiResponse): IndividualRe
   return { state: 'unexpected', message: 'Received unsupported result state.' }
 }
 
-export default async function IndividualResultsPage() {
-  const model = normaliseStatePayload(await getLatestIndividualResultForUser())
+export default async function IndividualResultsPage({ searchParams }: IndividualResultsPageProps) {
+  const requestedDefinitionId = getSearchParamValue(searchParams?.definitionId)
+  const model = normaliseStatePayload(await getLatestIndividualResultForUser({ definitionId: requestedDefinitionId }))
 
   if (model.state === 'unauthenticated') {
     redirect('/sign-in')

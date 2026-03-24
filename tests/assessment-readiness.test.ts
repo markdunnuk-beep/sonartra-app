@@ -91,12 +91,15 @@ test('fully answered assessment with stale completion markers resolves ready whe
 })
 
 test('completed with no snapshot resolves completed_processing', async () => {
-  const state = await resolveIndividualLifecycleState({
-    resolveAuthenticatedUserId: async () => 'user-1',
-    getLatestAssessmentForUser: async () => completedAssessment,
-    getLatestResultForAssessment: async () => null,
-    getLatestReadyResultForUser: async () => null,
-  })
+  const state = await resolveIndividualLifecycleState(
+    { staleProcessingThresholdMinutes: 200_000 },
+    {
+      resolveAuthenticatedUserId: async () => 'user-1',
+      getLatestAssessmentForUser: async () => completedAssessment,
+      getLatestResultForAssessment: async () => null,
+      getLatestReadyResultForUser: async () => null,
+    },
+  )
 
   if (state.authState === 'authenticated') assert.equal(state.lifecycle.state, 'completed_processing')
 })
@@ -250,4 +253,36 @@ test('completed hybrid_mvp_v1 snapshot resolves ready without signal rows', asyn
   if (state.authState === 'authenticated') {
     assert.equal(state.lifecycle.state, 'ready')
   }
+})
+
+test('definition-scoped resolution passes definition id through assessment and ready-result lookups', async () => {
+  const seen: Array<{ kind: string; definitionId: string | null | undefined }> = []
+
+  await resolveIndividualLifecycleState(
+    { definitionId: '00000000-0000-0000-0000-000000000222' },
+    {
+      resolveAuthenticatedUserId: async () => 'user-1',
+      getLatestAssessmentForUser: async (_userId, definitionId) => {
+        seen.push({ kind: 'assessment', definitionId })
+        return null
+      },
+      getLatestReadyResultForUser: async (_userId, definitionId) => {
+        seen.push({ kind: 'ready', definitionId })
+        return null
+      },
+      getLatestAssignmentStatusForUser: async (_userId, definitionId) => {
+        seen.push({ kind: 'assignment', definitionId })
+        return null
+      },
+    },
+  )
+
+  assert.deepEqual(
+    seen,
+    [
+      { kind: 'assessment', definitionId: '00000000-0000-0000-0000-000000000222' },
+      { kind: 'ready', definitionId: '00000000-0000-0000-0000-000000000222' },
+      { kind: 'assignment', definitionId: '00000000-0000-0000-0000-000000000222' },
+    ],
+  )
 })
