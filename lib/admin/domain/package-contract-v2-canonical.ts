@@ -539,7 +539,14 @@ export function normalizeCanonicalPackageContractV2(input: unknown): CanonicalPa
     if (!responseModel || !Array.isArray(responseModel.options)) continue
     const option = responseModel.options.find((entry) => isRecord(entry) && entry.id === optionId)
     if (!option || !isRecord(option)) continue
-    const scoreMap: Record<string, number> = isRecord(option.scoreMap) ? Object.fromEntries(Object.entries(option.scoreMap).filter(([, value]) => typeof value === 'number')) : {}
+    const scoreMap: Record<string, number> = {}
+    if (isRecord(option.scoreMap)) {
+      for (const [key, value] of Object.entries(option.scoreMap)) {
+        if (typeof value === 'number') {
+          scoreMap[key] = value
+        }
+      }
+    }
     for (const targetEntry of targets) {
       if (!isRecord(targetEntry)) continue
       const dimensionKey = asTrimmedString(targetEntry.dimensionKey)
