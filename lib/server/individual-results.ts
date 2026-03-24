@@ -105,8 +105,12 @@ interface IndividualResultsDependencies {
   getLatestAssessmentForUser: (userId: string) => Promise<AssessmentContextRow | null>;
   getLatestResultForAssessment: (assessmentId: string) => Promise<AssessmentResultRow | null>;
   getResultById: (resultId: string) => Promise<AssessmentResultRow | null>;
-  getLatestReadyResultForUser: (userId: string) => Promise<ReadyResultContextRow | null>;
+  getLatestReadyResultForUser: (userId: string, assessmentDefinitionId?: string | null) => Promise<ReadyResultContextRow | null>;
   getSignalsByResultId: (resultId: string) => Promise<AssessmentResultSignalRow[]>;
+}
+
+export interface IndividualResultSelectionInput {
+  assessmentDefinitionId?: string | null;
 }
 
 const LAYER_ORDER = new Map<string, number>(ASSESSMENT_LAYER_KEYS.map((layerKey, index) => [layerKey, index]));
@@ -159,17 +163,22 @@ const defaultDependencies: IndividualResultsDependencies = {
 
     return result.rows[0] ?? null;
   },
-  async getLatestReadyResultForUser(userId) {
+  async getLatestReadyResultForUser(userId, assessmentDefinitionId) {
     const reportArtifactProjection = await getAssessmentResultReportArtifactSelectProjection('ar.report_artifact_json')
+    const definitionFilter = typeof assessmentDefinitionId === 'string' && assessmentDefinitionId.trim().length > 0
+      ? 'AND av.assessment_definition_id = $2'
+      : ''
+    const params = definitionFilter ? [userId, assessmentDefinitionId] : [userId]
     const result = await queryDb<ReadyResultContextRow>(
       `SELECT ar.id, ar.assessment_id, ar.assessment_version_id, ar.version_key, ar.scoring_model_key, ar.snapshot_version,
               ar.status, ar.result_payload, ar.response_quality_payload, ${reportArtifactProjection}, ar.completed_at, ar.scored_at, ar.created_at, ar.updated_at,
               a.started_at AS assessment_started_at, a.completed_at AS assessment_completed_at, av.key AS assessment_version_key
        FROM assessment_results ar
        INNER JOIN assessments a ON a.id = ar.assessment_id
-       LEFT JOIN assessment_versions av ON av.id = a.assessment_version_id
+       INNER JOIN assessment_versions av ON av.id = a.assessment_version_id
        WHERE a.user_id = $1
          AND a.organisation_id IS NULL
+         ${definitionFilter}
          AND ar.status = 'complete'
          AND (
            EXISTS (
@@ -179,7 +188,7 @@ const defaultDependencies: IndividualResultsDependencies = {
          )
        ORDER BY a.completed_at DESC NULLS LAST, ar.created_at DESC
        LIMIT 1`,
-      [userId],
+      params,
     );
 
     return result.rows[0] ?? null;
@@ -267,10 +276,28 @@ function toAssessmentMetadata(
   };
 }
 
+function looksLikeDependencyOverride(value: unknown): value is Partial<IndividualResultsDependencies> {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  return [
+    'resolveAuthenticatedUserId',
+    'getLatestAssessmentForUser',
+    'getLatestResultForAssessment',
+    'getResultById',
+    'getLatestReadyResultForUser',
+    'getSignalsByResultId',
+  ].some((key) => key in (value as Record<string, unknown>))
+}
+
 export async function getLatestIndividualResultForUser(
+  selectionOrDependencies: IndividualResultSelectionInput | Partial<IndividualResultsDependencies> = {},
   dependencies: Partial<IndividualResultsDependencies> = {},
 ): Promise<IndividualResultApiResponse> {
-  const resolvedDependencies = { ...defaultDependencies, ...dependencies };
+  const selection = looksLikeDependencyOverride(selectionOrDependencies) ? {} : selectionOrDependencies
+  const dependencyOverrides = looksLikeDependencyOverride(selectionOrDependencies) ? selectionOrDependencies : dependencies
+  const resolvedDependencies = { ...defaultDependencies, ...dependencyOverrides };
 
   try {
     const lifecycle = await resolveIndividualLifecycleState({
@@ -278,7 +305,7 @@ export async function getLatestIndividualResultForUser(
       getLatestAssessmentForUser: resolvedDependencies.getLatestAssessmentForUser,
       getLatestResultForAssessment: resolvedDependencies.getLatestResultForAssessment,
       getSignalCountByResultId: async (resultId) => (await resolvedDependencies.getSignalsByResultId(resultId)).length,
-      getLatestReadyResultForUser: resolvedDependencies.getLatestReadyResultForUser,
+      getLatestReadyResultForUser: async (userId) => resolvedDependencies.getLatestReadyResultForUser(userId, selection.assessmentDefinitionId),
     });
 
     if (lifecycle.authState === 'unauthenticated') {

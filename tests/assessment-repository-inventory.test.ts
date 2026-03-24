@@ -216,6 +216,50 @@ test('published + assigned + completed hybrid result appears as results ready', 
   assert.equal(inventory[0]?.resultsAvailable, true)
 })
 
+test('results_ready assignment state is respected when a complete snapshot exists without signal rows', async () => {
+  resetAssessmentResultSchemaCapabilitiesCacheForTests()
+  const completedAssessment = {
+    ...baseAssessment,
+    status: 'completed' as const,
+    progress_count: 80,
+    progress_percent: '100',
+    completed_at: '2026-03-20T09:15:00.000Z',
+    total_questions: 80,
+  }
+
+  const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {
+    queryDb: makeQueryDb({
+      assignments: [makeAssignment({ status: 'results_ready' })],
+      latestAssessmentByDefinition: {
+        'definition-signals': completedAssessment,
+      },
+      latestResultByAssessmentId: {
+        'assessment-1': {
+          ...baseResult,
+          status: 'complete',
+          result_payload: { contractVersion: 'unknown_contract' },
+        },
+      },
+      latestReadyResultByDefinition: {
+        'definition-signals': {
+          ...baseResult,
+          status: 'complete',
+          result_payload: { contractVersion: 'unknown_contract' },
+          assessment_started_at: '2026-03-20T09:00:00.000Z',
+          assessment_completed_at: '2026-03-20T09:15:00.000Z',
+        },
+      },
+      signalCountByResultId: {
+        'result-1': 0,
+      },
+    }),
+  })
+
+  assert.equal(inventory[0]?.status, 'complete')
+  assert.equal(inventory[0]?.lifecycleState, 'ready')
+  assert.equal(inventory[0]?.resultsHref, '/results/individual?definitionId=definition-signals')
+})
+
 test('unassigned published assessment stays hidden when repository is assignment-gated', async () => {
   resetAssessmentResultSchemaCapabilitiesCacheForTests()
   const inventory = await loadLiveAssessmentRepositoryInventory('user-1', {

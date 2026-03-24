@@ -18,6 +18,7 @@ import { hasUserFacingV2Summary, isPackageContractV2Result } from '@/lib/server/
 import { isHybridMvpReadyResult } from '@/lib/server/hybrid-mvp-result'
 import { getCurrentAssessmentRepositoryContext } from '@/lib/assessment/assessment-repository-context'
 import { getAssessmentResultReportArtifactSelectProjection } from '@/lib/server/assessment-result-schema-capabilities'
+import { parseAssessmentReportArtifactRecord } from '@/lib/reports/assessment-report-v2'
 
 interface AssignmentStateRow {
   id: string
@@ -140,7 +141,17 @@ function resolveLifecycleState(args: {
     return 'error'
   }
 
-  if (latestAssessmentResult.status === 'complete' && (latestAssessmentSignalCount > 0 || (isPackageContractV2Result(latestAssessmentResult) && hasUserFacingV2Summary(latestAssessmentResult)) || isHybridMvpReadyResult(latestAssessmentResult))) {
+  const hasReadyArtifact = parseAssessmentReportArtifactRecord(latestAssessmentResult.report_artifact_json)?.state === 'available'
+  if (
+    latestAssessmentResult.status === 'complete'
+    && (
+      latestAssessmentSignalCount > 0
+      || (isPackageContractV2Result(latestAssessmentResult) && hasUserFacingV2Summary(latestAssessmentResult))
+      || isHybridMvpReadyResult(latestAssessmentResult)
+      || hasReadyArtifact
+      || latestAssignmentStatus === 'results_ready'
+    )
+  ) {
     return 'ready'
   }
 
@@ -423,7 +434,9 @@ export async function loadLiveAssessmentRepositoryInventory(
       assessmentHref: lifecycleState === 'not_started' || lifecycleState === 'in_progress' || lifecycleState === 'ready'
         ? meta.assessmentHref
         : undefined,
-      resultsHref: lifecycleState === 'ready' ? meta.resultsHref : undefined,
+      resultsHref: lifecycleState === 'ready' && meta.resultsHref
+        ? `${meta.resultsHref}?definitionId=${encodeURIComponent(assignment.assessment_definition_id)}`
+        : undefined,
       productOrder: meta.displayOrder,
       latestAttemptId: latestAssessment?.id ?? null,
       latestResultId: latestAssessmentResult?.id ?? latestReadyResult?.id ?? null,
