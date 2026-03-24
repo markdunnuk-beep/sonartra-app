@@ -67,7 +67,9 @@ test('derived stage computes in dependency order and skips deterministically on 
   assert.equal(plan.executionOrder.derivedDimensionIds[0], 'adaptive-balance')
   assert.equal(result.issues.some((issue) => issue.stage === 'derivation' && issue.code === 'skipped_due_to_upstream_failure'), true)
   assert.equal(result.stages.derivation.status, 'skipped')
+  assert.equal(result.stages.derivation.outcome, 'skipped')
   assert.equal(result.stages.outputs.status, 'skipped')
+  assert.equal(result.stages.outputs.outcome, 'skipped')
 })
 
 test('normalization emits unsupported_execution_pattern when method is unsupported', () => {
@@ -88,6 +90,8 @@ test('normalization emits unsupported_execution_pattern when method is unsupport
   const result = executeCompiledRuntimePlanV2(plan, responses, { executablePackage: executable })
 
   assert.equal(result.issues.some((issue) => issue.stage === 'normalization' && issue.code === 'unsupported_execution_pattern'), true)
+  assert.equal(result.stages.normalization.outcome, 'partial')
+  assert.equal(result.outcome, 'partial')
 })
 
 test('aggregation covers raw and derived deterministic ids', () => {

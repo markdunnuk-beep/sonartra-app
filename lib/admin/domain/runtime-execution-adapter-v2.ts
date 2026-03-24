@@ -1,4 +1,5 @@
 import type { AdminAssessmentPackageReadinessFlags, AdminAssessmentImportAnalysis } from '@/lib/admin/server/assessment-package-import'
+import { deriveReadinessState, type AdminAssessmentReadinessState } from '@/lib/admin/domain/assessment-readiness'
 import { compileAssessmentPackageV2, type ExecutableAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import { parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
 import { compileRuntimeContractV2, type CompiledRuntimePlanV2 } from '@/lib/admin/domain/runtime-plan-v2-compiler'
@@ -24,6 +25,7 @@ export interface PreparedRuntimeExecutionBundleV2 {
 export interface PreparedRuntimeExecutionBundleResultV2 {
   ok: boolean
   readiness: AdminAssessmentPackageReadinessFlags
+  readinessState: AdminAssessmentReadinessState
   errors: Array<{ path: string; message: string }>
   warnings: Array<{ path: string; message: string }>
   bundle: PreparedRuntimeExecutionBundleV2 | null
@@ -32,6 +34,7 @@ export interface PreparedRuntimeExecutionBundleResultV2 {
 export interface AdminRuntimeExecutionResultV2 {
   ok: boolean
   readiness: AdminAssessmentPackageReadinessFlags
+  readinessState: AdminAssessmentReadinessState
   bundle: PreparedRuntimeExecutionBundleV2 | null
   normalizedResponses: ReturnType<typeof normalizeRuntimeResponsesForExecutionV2>
   executionResult: CompiledRuntimeExecutionResultV2 | null
@@ -57,6 +60,14 @@ function toReadiness(input: {
     liveRuntimeEnabled: input.liveRuntimeEnabled,
     publishable: false,
   }
+}
+
+function toReadinessState(input: { classifier: 'canonical_contract_v2' | 'runtime_contract_v2'; readiness: AdminAssessmentPackageReadinessFlags; compiledPlanAvailable: boolean }): AdminAssessmentReadinessState {
+  return deriveReadinessState({
+    classifier: input.classifier,
+    readiness: input.readiness,
+    compiledPlanAvailable: input.compiledPlanAvailable,
+  })
 }
 
 function mapExecutionIssues(issues: RuntimeExecutionIssueV2[]): Array<{ path: string; message: string }> {
@@ -86,15 +97,21 @@ export function preparePackageExecutionBundleForAssessmentVersion(input: {
     : null
 
   if (analysisBundle) {
+    const readiness = toReadiness({
+      structurallyValid: true,
+      compilable: true,
+      evaluatable: true,
+      simulatable: true,
+      runtimeExecutable: analysisBundle.source === 'runtime_contract_v2',
+      liveRuntimeEnabled: analysisBundle.source === 'runtime_contract_v2',
+    })
     return {
       ok: true,
-      readiness: toReadiness({
-        structurallyValid: true,
-        compilable: true,
-        evaluatable: true,
-        simulatable: true,
-        runtimeExecutable: analysisBundle.source === 'runtime_contract_v2',
-        liveRuntimeEnabled: analysisBundle.source === 'runtime_contract_v2',
+      readiness,
+      readinessState: toReadinessState({
+        classifier: analysisBundle.source === 'runtime_contract_v2' ? 'runtime_contract_v2' : 'canonical_contract_v2',
+        readiness,
+        compiledPlanAvailable: true,
       }),
       errors,
       warnings,
@@ -128,22 +145,36 @@ export function preparePackageExecutionBundleForAssessmentVersion(input: {
           runtimeExecutable: false,
           liveRuntimeEnabled: false,
         }),
+        readinessState: toReadinessState({
+          classifier: 'runtime_contract_v2',
+          readiness: toReadiness({
+            structurallyValid: true,
+            compilable: false,
+            evaluatable: false,
+            simulatable: false,
+            runtimeExecutable: false,
+            liveRuntimeEnabled: false,
+          }),
+          compiledPlanAvailable: false,
+        }),
         errors,
         warnings,
         bundle: null,
       }
     }
 
+    const readiness = toReadiness({
+      structurallyValid: true,
+      compilable: true,
+      evaluatable: true,
+      simulatable: true,
+      runtimeExecutable: true,
+      liveRuntimeEnabled: true,
+    })
     return {
       ok: true,
-      readiness: toReadiness({
-        structurallyValid: true,
-        compilable: true,
-        evaluatable: true,
-        simulatable: true,
-        runtimeExecutable: true,
-        liveRuntimeEnabled: true,
-      }),
+      readiness,
+      readinessState: toReadinessState({ classifier: 'runtime_contract_v2', readiness, compiledPlanAvailable: true }),
       errors,
       warnings,
       bundle: {
@@ -160,17 +191,19 @@ export function preparePackageExecutionBundleForAssessmentVersion(input: {
   }
 
   const canonical = parseStoredValidatedAssessmentPackageV2(input.storedPackage)
+  const invalidReadiness = toReadiness({
+    structurallyValid: false,
+    compilable: false,
+    evaluatable: false,
+    simulatable: false,
+    runtimeExecutable: false,
+    liveRuntimeEnabled: false,
+  })
   if (!canonical) {
     return {
       ok: false,
-      readiness: toReadiness({
-        structurallyValid: false,
-        compilable: false,
-        evaluatable: false,
-        simulatable: false,
-        runtimeExecutable: false,
-        liveRuntimeEnabled: false,
-      }),
+      readiness: invalidReadiness,
+      readinessState: toReadinessState({ classifier: 'canonical_contract_v2', readiness: invalidReadiness, compiledPlanAvailable: false }),
       errors: [{ path: 'package', message: 'No valid canonical v2 or runtime v2 package is available for runtime execution.' }],
       warnings,
       bundle: null,
@@ -181,16 +214,18 @@ export function preparePackageExecutionBundleForAssessmentVersion(input: {
   if (!compiled.ok || !compiled.executablePackage) {
     errors.push(...compiled.diagnostics.filter((entry) => entry.severity === 'error').map((entry) => ({ path: entry.path, message: entry.message })))
     warnings.push(...compiled.diagnostics.filter((entry) => entry.severity === 'warning').map((entry) => ({ path: entry.path, message: entry.message })))
+    const readiness = toReadiness({
+      structurallyValid: true,
+      compilable: false,
+      evaluatable: false,
+      simulatable: false,
+      runtimeExecutable: false,
+      liveRuntimeEnabled: false,
+    })
     return {
       ok: false,
-      readiness: toReadiness({
-        structurallyValid: true,
-        compilable: false,
-        evaluatable: false,
-        simulatable: false,
-        runtimeExecutable: false,
-        liveRuntimeEnabled: false,
-      }),
+      readiness,
+      readinessState: toReadinessState({ classifier: 'canonical_contract_v2', readiness, compiledPlanAvailable: false }),
       errors,
       warnings,
       bundle: null,
@@ -201,32 +236,36 @@ export function preparePackageExecutionBundleForAssessmentVersion(input: {
   if (!runtimePlan.ok || !runtimePlan.compiledPlan) {
     errors.push(...runtimePlan.diagnostics.filter((entry) => entry.severity === 'error').map((entry) => ({ path: entry.path, message: entry.message })))
     warnings.push(...runtimePlan.diagnostics.filter((entry) => entry.severity === 'warning').map((entry) => ({ path: entry.path, message: entry.message })))
+    const readiness = toReadiness({
+      structurallyValid: true,
+      compilable: true,
+      evaluatable: false,
+      simulatable: false,
+      runtimeExecutable: false,
+      liveRuntimeEnabled: false,
+    })
     return {
       ok: false,
-      readiness: toReadiness({
-        structurallyValid: true,
-        compilable: true,
-        evaluatable: false,
-        simulatable: false,
-        runtimeExecutable: false,
-        liveRuntimeEnabled: false,
-      }),
+      readiness,
+      readinessState: toReadinessState({ classifier: 'canonical_contract_v2', readiness, compiledPlanAvailable: false }),
       errors,
       warnings,
       bundle: null,
     }
   }
 
+  const readiness = toReadiness({
+    structurallyValid: true,
+    compilable: true,
+    evaluatable: true,
+    simulatable: true,
+    runtimeExecutable: false,
+    liveRuntimeEnabled: false,
+  })
   return {
     ok: true,
-    readiness: toReadiness({
-      structurallyValid: true,
-      compilable: true,
-      evaluatable: true,
-      simulatable: true,
-      runtimeExecutable: false,
-      liveRuntimeEnabled: false,
-    }),
+    readiness,
+    readinessState: toReadinessState({ classifier: 'canonical_contract_v2', readiness, compiledPlanAvailable: true }),
     errors,
     warnings,
     bundle: {
@@ -256,15 +295,21 @@ export function executePreparedRuntimeExecutionBundleV2(input: {
   const executionErrors = mapExecutionIssues(executionResult.issues.filter((issue) => issue.fatal))
   const executionWarnings = mapExecutionIssues(executionResult.issues.filter((issue) => !issue.fatal))
 
+  const readiness = toReadiness({
+    structurallyValid: true,
+    compilable: true,
+    evaluatable: true,
+    simulatable: true,
+    runtimeExecutable: input.bundle.source === 'runtime_contract_v2',
+    liveRuntimeEnabled: input.bundle.source === 'runtime_contract_v2',
+  })
   return {
     ok: executionResult.status !== 'failed',
-    readiness: toReadiness({
-      structurallyValid: true,
-      compilable: true,
-      evaluatable: true,
-      simulatable: true,
-      runtimeExecutable: input.bundle.source === 'runtime_contract_v2',
-      liveRuntimeEnabled: input.bundle.source === 'runtime_contract_v2',
+    readiness,
+    readinessState: toReadinessState({
+      classifier: input.bundle.source === 'runtime_contract_v2' ? 'runtime_contract_v2' : 'canonical_contract_v2',
+      readiness,
+      compiledPlanAvailable: true,
     }),
     bundle: input.bundle,
     normalizedResponses,

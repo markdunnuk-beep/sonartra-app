@@ -36,6 +36,7 @@ import {
   importAssessmentPackagePayload,
   type AdminAssessmentPackageValidationSummary,
 } from '@/lib/admin/server/assessment-package-import'
+import { deriveReadinessState } from '@/lib/admin/domain/assessment-readiness'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
 import { getAdminAssessmentVersionReadiness } from '@/lib/admin/domain/assessment-package-review'
 import { evaluatePackageV2LiveRuntimeSupport } from '@/lib/package-contract-v2-live-runtime'
@@ -2440,6 +2441,20 @@ async function reviewAssessmentPackageCreateOrAttach(
             liveRuntimeEnabled: false,
             publishable: false,
           },
+          readinessState: deriveReadinessState({
+            classifier: 'unknown_or_invalid',
+            readiness: {
+              structurallyValid: false,
+              importable: false,
+              compilable: false,
+              evaluatable: false,
+              simulatable: false,
+              runtimeExecutable: false,
+              liveRuntimeEnabled: false,
+              publishable: false,
+            },
+            compiledPlanAvailable: false,
+          }),
           errors: [{ path: '$', message: 'Malformed JSON.' }],
           warnings: [],
         },
@@ -2787,6 +2802,20 @@ export async function importAdminAssessmentPackage(
           liveRuntimeEnabled: false,
           publishable: false,
         },
+        readinessState: deriveReadinessState({
+          classifier: 'unknown_or_invalid',
+          readiness: {
+            structurallyValid: false,
+            importable: false,
+            compilable: false,
+            evaluatable: false,
+            simulatable: false,
+            runtimeExecutable: false,
+            liveRuntimeEnabled: false,
+            publishable: false,
+          },
+          compiledPlanAvailable: false,
+        }),
         errors: [{ path: '$', message: 'Malformed JSON.' }],
         warnings: [],
       },
