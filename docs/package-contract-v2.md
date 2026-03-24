@@ -221,3 +221,71 @@ Those later stages should consume this contract rather than redesign it.
 - output blocks plus report bindings
 
 It is intentionally not the final WPLP-80 package. It exists to pressure-test the contract shape.
+
+## Executable runtime contract v2
+
+Prompt 2 introduces a **first-class executable runtime contract v2** as a separate, explicit package shape. This runtime contract is intentionally distinct from the canonical authoring contract.
+
+### Why a separate runtime contract exists
+
+The canonical contract is authored for humans and package tooling. The runtime contract is compiled for deterministic execution.
+
+Canonical contract concerns:
+- rich authoring metadata
+- authoring-first structure and declarations
+- package editing/import ergonomics
+
+Runtime contract concerns:
+- deterministic ids and resolved references
+- explicit item bank, dimensions, scoring instructions, and rule blocks
+- runtime-safe declarations for scoring, derived dimensions, integrity checks, normalization, aggregation, and output rule execution
+
+### Runtime contract v2 shape (high-level)
+
+`lib/admin/domain/package-runtime-v2.ts` defines the executable runtime package shape and parser/validator.
+
+Top-level runtime areas:
+- `metadata`
+- `itemBank`
+- `dimensions`
+- `scoring`
+- `integrity`
+- `normalization`
+- `aggregation`
+- `outputs`
+- optional `diagnostics`
+
+Runtime packages are identified by:
+- `contractKind: "runtime_v2"`
+- `packageVersion: "2"`
+- `metadata.runtimeSchemaVersion: "sonartra-assessment-runtime-package/v2"`
+
+### Compiler target adapter (canonical -> runtime)
+
+`compileCanonicalToRuntimeContractV2` now provides a scoped translation path from canonical v2 to runtime v2.
+
+Current scope:
+- structural translation only
+- deterministic sorting and reference-safe ids
+- runtime contract validation after translation
+
+Current non-goals (still unchanged):
+- generic scoring executor
+- generic normalizer
+- integrity/output rule execution engine
+- full publish/materialization migration
+- simulation/preview runtime replacement
+
+### Intended downstream consumers
+
+Later prompts should consume runtime contract v2 directly for:
+- generic scorer
+- derived dimension executor
+- integrity/contradiction evaluator
+- normalizer
+- aggregation layer
+- output rule engine
+- simulation and preview runtime flows
+- publish/runtime materialization
+
+This avoids coupling those systems to legacy normalized v2 shapes.
