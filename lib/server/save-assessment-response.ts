@@ -1,6 +1,7 @@
 import { SaveResponseRequest } from '@/lib/assessment-types'
 import { withTransaction } from '@/lib/db'
 import { saveV2AssessmentResponse } from '@/lib/server/live-assessment-v2'
+import { saveHybridAssessmentResponse } from '@/lib/server/live-assessment-hybrid-mvp'
 
 interface AssessmentProgressRow {
   id: string
@@ -68,12 +69,23 @@ export async function saveAssessmentResponse(
   }
 
   if (typeof input.questionId === 'string') {
-    return saveV2AssessmentResponse({
+    const v2Result = await saveV2AssessmentResponse({
       assessmentId: input.assessmentId,
       appUserId: input.appUserId,
       questionId: input.questionId,
       response: input.response,
       responseTimeMs: input.responseTimeMs,
+    })
+
+    if (!(v2Result.status === 400 && 'error' in v2Result.body && v2Result.body.error === 'Assessment is not using Package Contract v2.')) {
+      return v2Result as SaveAssessmentResponseResult
+    }
+
+    return saveHybridAssessmentResponse({
+      assessmentId: input.assessmentId,
+      appUserId: input.appUserId,
+      questionId: input.questionId,
+      response: input.response,
     }) as Promise<SaveAssessmentResponseResult>
   }
 

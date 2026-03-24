@@ -16,6 +16,7 @@ import {
 import { getLatestAssessmentResultSnapshot, persistFailedAssessmentResult, persistStructuredAssessmentResult, persistSuccessfulAssessmentResult } from '@/lib/server/assessment-results';
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 } from '@/lib/admin/domain/assessment-package-v2';
 import { evaluateCompletedV2Assessment } from '@/lib/server/live-assessment-v2';
+import { evaluateCompletedHybridAssessment, isHybridMvpRuntimeDefinition } from '@/lib/server/live-assessment-hybrid-mvp';
 
 interface CompletionCheckRow {
   id: string;
@@ -164,8 +165,8 @@ export async function completeAssessmentWithResults(
   dependencies: CompletionDependencies = defaultDependencies,
   runtimeDependencies: CompletionRuntimeDependencies = defaultRuntimeDependencies
 ): Promise<CompleteAssessmentResult> {
-  const versionInfo = await queryDb<{ package_schema_version: string | null; user_id: string }>(
-    `SELECT av.package_schema_version, a.user_id
+  const versionInfo = await queryDb<{ package_schema_version: string | null; user_id: string; definition_payload: unknown }>(
+    `SELECT av.package_schema_version, a.user_id, av.definition_payload
      FROM assessments a
      INNER JOIN assessment_versions av ON av.id = a.assessment_version_id
      WHERE a.id = $1
@@ -175,6 +176,26 @@ export async function completeAssessmentWithResults(
 
   const runtimeVersion = versionInfo.rows[0];
 
+
+
+  if (isHybridMvpRuntimeDefinition(runtimeVersion?.definition_payload)) {
+    return evaluateCompletedHybridAssessment({
+      assessmentId,
+      ownerUserId: runtimeVersion.user_id,
+      persistResult: async (input, client) => persistStructuredAssessmentResult({
+        assessmentId: input.assessmentId,
+        assessmentVersionId: input.assessmentVersionId,
+        versionKey: input.versionKey,
+        scoringModelKey: 'hybrid-mvp-v1-runtime',
+        snapshotVersion: 1,
+        status: input.status === 'complete' ? 'complete' : 'failed',
+        resultPayload: input.resultPayload,
+        responseQualityPayload: input.responseQualityPayload,
+        completedAt: input.completedAt,
+        scoredAt: input.scoredAt,
+      }, client),
+    }) as Promise<CompleteAssessmentResult>
+  }
   if (runtimeVersion?.package_schema_version === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
     return evaluateCompletedV2Assessment({
       assessmentId,
