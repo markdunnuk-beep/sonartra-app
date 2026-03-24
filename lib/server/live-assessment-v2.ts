@@ -1,14 +1,13 @@
 import type { PoolClient } from 'pg'
 
-import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
-import { materializeAssessmentOutputsV2, type MaterializedAssessmentOutputsV2 } from '@/lib/admin/domain/assessment-package-v2-materialization'
-import type { AssessmentEvaluationResultV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
 import {
   SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
   parseStoredValidatedAssessmentPackageV2,
   type SonartraAssessmentPackageV2ResponseModel,
   type SonartraAssessmentPackageV2ValidatedImport,
 } from '@/lib/admin/domain/assessment-package-v2'
+import type { AssessmentEvaluationResultV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
+import type { MaterializedAssessmentOutputsV2 } from '@/lib/admin/domain/assessment-package-v2-materialization'
 import type { AssessmentRow } from '@/lib/assessment-types'
 import { queryDb, withTransaction } from '@/lib/db'
 import {
@@ -17,7 +16,8 @@ import {
   normalizeV2LiveResponseValue,
 } from '@/lib/package-contract-v2-live-runtime'
 import { getLatestAssessmentResultSnapshot } from '@/lib/server/assessment-results'
-import { evaluateAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
+import { executeLiveRuntimeBundleWithCompatibility, resolveLiveRuntimeRoutingDecision } from '@/lib/server/live-runtime-execution-adapter'
+import { mapLiveRuntimeExecutionToPersistedCompatibilityPayload } from '@/lib/server/live-runtime-result-compat'
 
 export type LiveAssessmentContractVersion = 'legacy_v1' | 'package_contract_v2'
 export type RuntimeExecutionDiagnosticCode =
@@ -116,6 +116,7 @@ interface AssessmentVersionRuntimeRow {
   package_schema_version: string | null
   package_status: string | null
   definition_payload: unknown
+  package_validation_report_json: unknown
   assessment_status: AssessmentRow['status']
   total_questions: number
   metadata_json: Record<string, unknown> | null
@@ -321,6 +322,7 @@ export async function loadAssessmentVersionRuntimeRow(
                       av.package_schema_version,
                       av.package_status,
                       av.definition_payload,
+                      av.package_validation_report_json,
                       a.status AS assessment_status,
                       av.total_questions,
                       a.metadata_json,
@@ -361,11 +363,16 @@ export async function saveV2AssessmentResponse(
     }
 
     const pkg = parseStoredValidatedAssessmentPackageV2(row.definition_payload)
+    const routing = resolveLiveRuntimeRoutingDecision({
+      packageSchemaVersion: row.package_schema_version,
+      storedDefinitionPayload: row.definition_payload,
+      packageValidationReport: row.package_validation_report_json,
+    })
     const eligibility = isV2PackageLiveRuntimeExecutable(pkg)
-    if (!pkg || !eligibility.eligible) {
+    if (!pkg || !eligibility.eligible || !routing.liveRuntimeSupported) {
       return {
         status: 409 as const,
-        body: { error: eligibility.diagnostics[0]?.message ?? 'Assessment is not eligible for live runtime execution.' },
+        body: { error: routing.reason ?? eligibility.diagnostics[0]?.message ?? 'Assessment is not eligible for live runtime execution.' },
       }
     }
 
@@ -463,12 +470,17 @@ export async function evaluateCompletedV2Assessment(input: {
     }
 
     const pkg = parseStoredValidatedAssessmentPackageV2(row.definition_payload)
+    const routing = resolveLiveRuntimeRoutingDecision({
+      packageSchemaVersion: row.package_schema_version,
+      storedDefinitionPayload: row.definition_payload,
+      packageValidationReport: row.package_validation_report_json,
+    })
     const eligibility = isV2PackageLiveRuntimeExecutable(pkg)
-    if (!pkg || !eligibility.eligible) {
+    if (!pkg || !eligibility.eligible || !routing.liveRuntimeSupported) {
       return {
         kind: 'error' as const,
         httpStatus: 409,
-        error: eligibility.diagnostics[0]?.message ?? 'Assessment is not eligible for live runtime execution.',
+        error: routing.reason ?? eligibility.diagnostics[0]?.message ?? 'Assessment is not eligible for live runtime execution.',
       }
     }
 
@@ -558,37 +570,26 @@ export async function evaluateCompletedV2Assessment(input: {
   }
 
   try {
-    const runtimeSupport = evaluatePackageV2LiveRuntimeSupport(lifecycle.pkg)
-    if (!runtimeSupport.supported) {
-      throw new Error(runtimeSupport.issues[0]?.message ?? 'Package Contract v2 could not be executed safely on the live runtime.')
-    }
-
-    const compiled = compileAssessmentPackageV2(lifecycle.pkg)
-    if (!compiled.ok || !compiled.executablePackage) {
-      throw new Error(compiled.diagnostics.find((entry) => entry.severity === 'error')?.message ?? 'Package Contract v2 could not be compiled for live execution.')
-    }
-
-    const evaluation = evaluateAssessmentPackageV2(compiled.executablePackage, lifecycle.responses, {
-      includeTrace: true,
-      evaluationId: `live-${input.assessmentId}`,
-    })
-    const materializedOutputs = materializeAssessmentOutputsV2(compiled.executablePackage, evaluation)
     const scoredAt = new Date().toISOString()
-
-    const payload: V2PersistedEvaluationArtifact = {
-      contractVersion: 'package_contract_v2',
-      runtimeVersion: compiled.executablePackage.runtimeVersion,
-      packageSchemaVersion: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
-      packageMetadata: {
-        assessmentKey: compiled.executablePackage.metadata.assessmentKey,
-        assessmentName: compiled.executablePackage.metadata.assessmentName,
-        packageSemver: compiled.executablePackage.metadata.compatibility.packageSemver,
-      },
-      evaluation,
-      materializedOutputs,
+    const executed = executeLiveRuntimeBundleWithCompatibility({
+      storedDefinitionPayload: lifecycle.assessment.definition_payload,
+      packageValidationReport: lifecycle.assessment.package_validation_report_json,
+      responses: lifecycle.responses,
+      evaluationId: `live-${input.assessmentId}`,
+      evaluationTimestamp: scoredAt,
+    })
+    const runtimeExecution = executed.executionResult.executionResult
+    if (!runtimeExecution) {
+      throw new Error('Live runtime execution did not produce a compiled execution result.')
+    }
+    const payload: V2PersistedEvaluationArtifact = mapLiveRuntimeExecutionToPersistedCompatibilityPayload({
+      bundle: executed.bundle,
+      execution: runtimeExecution,
+      evaluation: executed.compatibility.evaluation,
+      materializedOutputs: executed.compatibility.materializedOutputs,
       completedAt: lifecycle.assessment.completed_at,
       scoredAt,
-    }
+    })
 
     const persisted = await runInTransaction(async (client) => {
       const result = await input.persistResult({
@@ -601,9 +602,9 @@ export async function evaluateCompletedV2Assessment(input: {
         resultPayload: payload as unknown as Record<string, unknown>,
         responseQualityPayload: {
           contractVersion: 'package_contract_v2',
-          technicalDiagnostics: materializedOutputs.technicalDiagnostics,
-          integrityNoticeCount: materializedOutputs.integrityNotices.length,
-          webSummaryOutputCount: materializedOutputs.webSummaryOutputs.length,
+          technicalDiagnostics: executed.compatibility.materializedOutputs.technicalDiagnostics,
+          integrityNoticeCount: executed.compatibility.materializedOutputs.integrityNotices.length,
+          webSummaryOutputCount: executed.compatibility.materializedOutputs.webSummaryOutputs.length,
         },
       }, client)
       await client.query(
