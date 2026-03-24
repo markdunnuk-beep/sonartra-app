@@ -39,6 +39,16 @@ export interface RuntimeExecutionDiagnostic {
   details?: Record<string, unknown>
 }
 
+function getLiveRuntimeRoutingErrorMessage(routing: ReturnType<typeof resolveLiveRuntimeRoutingDecision>, fallback: string): string {
+  if (routing.reason) {
+    return routing.reason
+  }
+  if (routing.blockedReasons.length > 0) {
+    return routing.blockedReasons[0]?.detail ?? fallback
+  }
+  return fallback
+}
+
 export interface V2LiveQuestionOptionPayload {
   id: string
   code: string | null
@@ -372,7 +382,12 @@ export async function saveV2AssessmentResponse(
     if (!pkg || !eligibility.eligible || !routing.liveRuntimeSupported) {
       return {
         status: 409 as const,
-        body: { error: routing.reason ?? eligibility.diagnostics[0]?.message ?? 'Assessment is not eligible for live runtime execution.' },
+        body: {
+          error: getLiveRuntimeRoutingErrorMessage(
+            routing,
+            eligibility.diagnostics[0]?.message ?? 'Assessment is not eligible for live runtime execution.',
+          ),
+        },
       }
     }
 
@@ -480,7 +495,10 @@ export async function evaluateCompletedV2Assessment(input: {
       return {
         kind: 'error' as const,
         httpStatus: 409,
-        error: routing.reason ?? eligibility.diagnostics[0]?.message ?? 'Assessment is not eligible for live runtime execution.',
+        error: getLiveRuntimeRoutingErrorMessage(
+          routing,
+          eligibility.diagnostics[0]?.message ?? 'Assessment is not eligible for live runtime execution.',
+        ),
       }
     }
 
@@ -605,6 +623,13 @@ export async function evaluateCompletedV2Assessment(input: {
           technicalDiagnostics: executed.compatibility.materializedOutputs.technicalDiagnostics,
           integrityNoticeCount: executed.compatibility.materializedOutputs.integrityNotices.length,
           webSummaryOutputCount: executed.compatibility.materializedOutputs.webSummaryOutputs.length,
+          runtimeRouting: {
+            supported: executed.routing.liveRuntimeSupported,
+            reasonCode: executed.routing.reasonCode,
+            reason: executed.routing.reason,
+            blockedReasons: executed.routing.blockedReasons,
+            debug: executed.routing.debug,
+          },
         },
       }, client)
       await client.query(

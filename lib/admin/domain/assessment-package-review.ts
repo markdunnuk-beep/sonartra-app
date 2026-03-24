@@ -8,6 +8,7 @@ import {
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
 import { evaluatePackageV2LiveRuntimeSupport } from '@/lib/package-contract-v2-live-runtime'
 import { preparePackageExecutionBundleForAssessmentVersion } from '@/lib/admin/domain/runtime-execution-adapter-v2'
+import { resolveLiveRuntimeRoutingDecision } from '@/lib/server/live-runtime-execution-adapter'
 import type {
   AdminAssessmentReleaseCheck,
   AdminAssessmentReleaseCheckStatus,
@@ -346,13 +347,20 @@ export function getAdminAssessmentPackagePreviewSummary(version: Pick<AdminAsses
 }
 
 export function getAdminAssessmentVersionReadiness(
-  version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage' | 'storedDefinitionPayload' | 'lifecycleStatus'> & Partial<Pick<AdminAssessmentVersionRecord, 'savedScenarios' | 'latestSuiteSnapshot'>>,
+  version: Pick<AdminAssessmentVersionRecord, 'packageInfo' | 'normalizedPackage' | 'storedDefinitionPayload' | 'lifecycleStatus'>
+    & Partial<Pick<AdminAssessmentVersionRecord, 'savedScenarios' | 'latestSuiteSnapshot'>>
+    & { packageValidationReport?: unknown },
 ): AdminAssessmentVersionReadiness {
   const packageInfo = normalizePackageInfoRuntime(version.packageInfo)
   const classifiedPayload = classifyPackageContract(version.storedDefinitionPayload ?? version.normalizedPackage)
   const pkg = parseStoredNormalizedAssessmentPackage(version.normalizedPackage)
   const pkgV2 = packageInfo.schemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 ? parseStoredValidatedAssessmentPackageV2(version.storedDefinitionPayload ?? version.normalizedPackage) : null
   const v2RuntimeSupport = evaluatePackageV2LiveRuntimeSupport(pkgV2)
+  const liveRouting = resolveLiveRuntimeRoutingDecision({
+    packageSchemaVersion: packageInfo.schemaVersion,
+    storedDefinitionPayload: version.storedDefinitionPayload ?? version.normalizedPackage,
+    packageValidationReport: version.packageValidationReport ?? null,
+  })
   const runtimeFoundation = preparePackageExecutionBundleForAssessmentVersion({
     storedPackage: version.storedDefinitionPayload ?? version.normalizedPackage,
   })
@@ -409,11 +417,11 @@ export function getAdminAssessmentVersionReadiness(
   addCheck(
     'runtime_execution_path',
     'Current runtime can execute this contract version',
-    isImportedV2Package && !v2RuntimeSupport.supported ? 'fail' : 'pass',
+    isImportedV2Package && !liveRouting.liveRuntimeSupported ? 'fail' : 'pass',
     isImportedV2Package
-      ? (v2RuntimeSupport.supported
+      ? (liveRouting.liveRuntimeSupported
           ? 'Current runtime execution path is compatible with Package Contract v2 for live execution.'
-          : `Package Contract v2 is importable and structurally valid, but publish stays blocked until the live runtime supports the full execution path. ${v2RuntimeSupport.issues[0]?.message ?? ''}`.trim())
+          : `Package Contract v2 is importable and structurally valid, but publish stays blocked until the live runtime supports the full execution path. ${liveRouting.reason ?? v2RuntimeSupport.issues[0]?.message ?? ''}`.trim())
       : 'Current runtime execution path is compatible with the stored package contract.',
   )
   addCheck(
@@ -485,7 +493,7 @@ export function getAdminAssessmentVersionReadiness(
     const status: AdminAssessmentReleaseReadinessStatus = blockingIssues.length > 0 ? 'not_ready' : warnings.length > 0 ? 'ready_with_warnings' : 'ready'
     const verdict: AdminAssessmentPublishReadinessVerdict = status === 'not_ready' ? 'blocked' : status
     const summaryText = isImportedV2Package
-      ? (v2RuntimeSupport.supported
+      ? (liveRouting.liveRuntimeSupported
           ? 'Package Contract v2 is ready for publish review through the live execution path.'
           : 'Publish is blocked because this version uses Package Contract v2 and the live execution path is not ready for it yet.')
       : status === 'not_ready'

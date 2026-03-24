@@ -104,6 +104,12 @@ test('getQuestionsByAssessmentIdWithDependencies returns a safe v2 live delivery
             is_active: true,
             package_schema_version: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
             definition_payload: pkg,
+            package_validation_report_json: {
+              analysis: {
+                classifier: 'runtime_contract_v2',
+                readinessState: { capabilities: { liveRuntimeSupported: true } },
+              },
+            },
           }],
         } as never
       }
@@ -135,6 +141,12 @@ test('saveV2AssessmentResponse validates and persists live v2 responses safely',
             package_schema_version: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
             package_status: 'valid',
             definition_payload: pkg,
+            package_validation_report_json: {
+              analysis: {
+                classifier: 'runtime_contract_v2',
+                readinessState: { capabilities: { liveRuntimeSupported: true } },
+              },
+            },
             assessment_status: 'in_progress',
             total_questions: 4,
             metadata_json: null,
@@ -168,6 +180,53 @@ test('saveV2AssessmentResponse validates and persists live v2 responses safely',
   }, { withTransactionFn })
   assert.equal(invalid.status, 400)
   assert.equal((invalid.body as { error: string }).error.includes('expects a valid option id'), true)
+})
+
+test('saveV2AssessmentResponse blocks conservatively when report metadata is present but incomplete', async () => {
+  const pkg = await loadExamplePackage()
+  const module = await import('../lib/server/live-assessment-v2')
+
+  const withTransactionFn = (async <T>(work: (client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }) => Promise<T>) => work({
+    query: async (sql: string) => {
+      if (/FROM assessments a\s+INNER JOIN assessment_versions av/i.test(sql)) {
+        return {
+          rows: [{
+            assessment_id: 'assessment-v2',
+            assessment_version_id: 'version-v2',
+            assessment_version_key: 'signals-v2-live',
+            assessment_version_name: 'Signals v2 Live',
+            package_schema_version: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+            package_status: 'valid',
+            definition_payload: pkg,
+            package_validation_report_json: {
+              analysis: {
+                classifier: 'runtime_contract_v2',
+              },
+            },
+            assessment_status: 'in_progress',
+            total_questions: 4,
+            metadata_json: null,
+            completed_at: null,
+            scoring_status: 'not_scored',
+          }],
+        }
+      }
+      if (/UPDATE assessments/i.test(sql)) {
+        throw new Error(`update should not run when runtime routing is blocked: ${sql}`)
+      }
+      throw new Error(`Unexpected query: ${sql}`)
+    },
+  } as never)) as never
+
+  const blocked = await module.saveV2AssessmentResponse({
+    assessmentId: 'assessment-v2',
+    appUserId: 'user-1',
+    questionId: 'q1',
+    response: 'often',
+  }, { withTransactionFn })
+
+  assert.equal(blocked.status, 409)
+  assert.match((blocked.body as { error: string }).error, /missing explicit live runtime support metadata/i)
 })
 
 test('getAssessmentResultReadModel returns stable v2 live result outputs', async () => {
@@ -264,12 +323,48 @@ test('getAdminAssessmentVersionReadiness keeps publish gating truthful for runna
     normalizedPackage: null,
     storedDefinitionPayload: pkg,
     lifecycleStatus: 'draft',
+    packageValidationReport: {
+      analysis: {
+        classifier: 'runtime_contract_v2',
+        readinessState: {
+          capabilities: {
+            liveRuntimeSupported: true,
+          },
+        },
+      },
+    },
     savedScenarios: [],
     latestSuiteSnapshot: null,
   })
 
   assert.notEqual(readiness.status, 'not_ready')
   assert.equal(readiness.checks.find((check) => check.key === 'runtime_execution_path')?.status, 'pass')
+})
+
+test('getAdminAssessmentVersionReadiness does not overstate live support when runtime report evidence is missing', async () => {
+  const pkg = await loadExamplePackage()
+  const readiness = getAdminAssessmentVersionReadiness({
+    packageInfo: {
+      status: 'valid',
+      detectedVersion: 'package_contract_v2',
+      schemaVersion: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+      sourceType: 'manual_import',
+      importedAt: '2026-03-23T12:00:00.000Z',
+      importedByName: 'Rina Patel',
+      sourceFilename: 'signals-v2.json',
+      summary: null,
+      errors: [],
+      warnings: [],
+    },
+    normalizedPackage: null,
+    storedDefinitionPayload: pkg,
+    lifecycleStatus: 'draft',
+    savedScenarios: [],
+    latestSuiteSnapshot: null,
+  })
+
+  assert.equal(readiness.checks.find((check) => check.key === 'runtime_execution_path')?.status, 'fail')
+  assert.equal(readiness.status, 'not_ready')
 })
 
 test('evaluateCompletedV2Assessment treats duplicate submits during scoring handoff as pending instead of regenerating results', async () => {
@@ -297,6 +392,12 @@ test('evaluateCompletedV2Assessment treats duplicate submits during scoring hand
               package_schema_version: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
               package_status: 'valid',
               definition_payload: pkg,
+              package_validation_report_json: {
+                analysis: {
+                  classifier: 'runtime_contract_v2',
+                  readinessState: { capabilities: { liveRuntimeSupported: true } },
+                },
+              },
               assessment_status: 'completed',
               total_questions: 4,
               metadata_json: {
