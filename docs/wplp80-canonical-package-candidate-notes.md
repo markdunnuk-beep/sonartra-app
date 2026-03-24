@@ -43,3 +43,28 @@ This document captures authoring decisions and contract-fit pressure points for 
 - Add a canonical `language`/`narrativeCatalog` block to separate localized narrative assets from output trigger declarations.
 - Add first-class integrity expression helpers for patterned response quality metrics.
 - Clarify whether future WPLP-80 psychometric keys require per-family weighting matrices for derived dimensions.
+
+## Task 2 import/compile pass findings (March 24, 2026)
+
+### What broke in the first real end-to-end run
+
+- The package itself classified and validated, but two previously documented pressure points were effectively silent during import:
+  - `normalization.groups` declarations were accepted but dropped from runtime behavior without an explicit diagnostic.
+  - `integrity.rules[*].kind = response_pattern` compiled as generic predicates, but there was no explicit compiler warning that advanced response-pattern primitives are still limited.
+
+### Engine fixes made in Task 2
+
+- Added a canonical-validation warning when `normalization.groups` is present to make the metadata-only behavior explicit during import analysis.
+- Added a compiler warning for `response_pattern` integrity rules clarifying that advanced statistical response-pattern primitives are not yet first-class runtime semantics.
+- Added WPLP-80 regression coverage for:
+  - canonical v2 classification,
+  - canonical validation,
+  - canonical→runtime compilation,
+  - runtime-plan compilation,
+  - diagnostics boundary partitioning and readiness milestone assertions.
+
+### What remains intentionally deferred
+
+- **Language catalog gap** remains deferred to **Task 3** (contract/runtime authoring model extension), because it does not block import or plan compilation.
+- **Full normalization-group execution semantics** remain deferred to **Task 4** (execution/report semantics expansion). Task 2 now surfaces this limitation explicitly at import time.
+- **Psychometric source-weight ambiguity** remains a package authoring/data-governance concern and is not resolved by engine compile-path changes.

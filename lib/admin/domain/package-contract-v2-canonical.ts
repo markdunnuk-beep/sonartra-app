@@ -597,6 +597,13 @@ export function normalizeCanonicalPackageContractV2(input: unknown): CanonicalPa
       if (!dimensionKeys.has(ref) && !derivedDimensionKeys.has(ref)) pushIssue(errors, `${path}.comparisonOrder`, `Unknown comparisonOrder reference "${ref}".`)
     }
   }
+  if (normalizationGroupsInput.length > 0) {
+    pushIssue(
+      warnings,
+      'normalization.groups',
+      'Normalization groups are currently metadata-only for import/review and do not execute during runtime normalization plan compilation.',
+    )
+  }
 
   const normalizedNormalization: SonartraAssessmentPackageV2NormalizationBlock = { rules: normalizationRules }
 
