@@ -145,11 +145,12 @@ export function detectAssessmentPackageVersion(input: unknown): PackageVersionDe
   if (input.packageVersion === '2' || topLevelSchemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
     const metadata = isRecord(input.metadata) ? input.metadata : null
     const compatibility = metadata && isRecord(metadata.compatibility) ? metadata.compatibility : null
+    const identity = isRecord(input.identity) ? input.identity : null
     return {
       detectedVersion: 'package_contract_v2',
       schemaVersion: topLevelSchemaVersion,
-      packageName: metadata ? asTrimmedString(metadata.assessmentName) : null,
-      versionLabel: compatibility ? asTrimmedString(compatibility.packageSemver) : null,
+      packageName: (metadata ? asTrimmedString(metadata.assessmentName) : null) ?? (identity ? asTrimmedString(identity.title) : null),
+      versionLabel: (compatibility ? asTrimmedString(compatibility.packageSemver) : null) ?? (identity ? asTrimmedString(identity.versionLabel) : null),
     }
   }
 
