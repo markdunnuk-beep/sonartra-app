@@ -11,6 +11,10 @@ import {
   type AssessmentReportArtifactRecord,
   type AssessmentReportAvailabilityState,
 } from '@/lib/reports/assessment-report-v2'
+import {
+  getAssessmentResultReportArtifactSelectProjection,
+  hasAssessmentResultReportArtifactColumn,
+} from '@/lib/server/assessment-result-schema-capabilities'
 
 interface OwnedAssessmentResultRow extends AssessmentResultRow {
   owner_user_id: string
@@ -45,10 +49,11 @@ export type AssessmentReportArtifactServiceResult =
 
 const defaultDependencies: AssessmentReportArtifactDependencies = {
   async getOwnedResultById(resultId, ownerUserId) {
+    const reportArtifactProjection = await getAssessmentResultReportArtifactSelectProjection('ar.report_artifact_json')
     const result = await queryDb<OwnedAssessmentResultRow>(
       `SELECT ar.id, ar.assessment_id, ar.assessment_version_id, ar.version_key, ar.scoring_model_key,
               ar.snapshot_version, ar.status, ar.result_payload, ar.response_quality_payload,
-              ar.completed_at, ar.scored_at, ar.created_at, ar.updated_at, ar.report_artifact_json,
+              ar.completed_at, ar.scored_at, ar.created_at, ar.updated_at, ${reportArtifactProjection},
               a.user_id AS owner_user_id
        FROM assessment_results ar
        INNER JOIN assessments a ON a.id = ar.assessment_id
@@ -61,6 +66,11 @@ const defaultDependencies: AssessmentReportArtifactDependencies = {
     return result.rows[0] ?? null
   },
   async updateArtifactRecord(resultId, artifactRecord) {
+    const hasReportArtifactColumn = await hasAssessmentResultReportArtifactColumn()
+    if (!hasReportArtifactColumn) {
+      return
+    }
+
     await queryDb(
       `UPDATE assessment_results
        SET report_artifact_json = $2::jsonb,

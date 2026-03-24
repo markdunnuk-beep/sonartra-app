@@ -7,6 +7,7 @@ import {
   ResultFailureMetadata,
 } from '@/lib/scoring/types';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
+import { getAssessmentResultReportArtifactSelectProjection } from '@/lib/server/assessment-result-schema-capabilities';
 
 export interface IndividualIntelligenceSignalSummary extends PersistedAssessmentResultSignal {}
 
@@ -75,9 +76,10 @@ const defaultDependencies: IndividualIntelligenceDependencies = {
     return result.rows[0] ?? null;
   },
   async getPreferredResultForAssessment(assessmentId) {
+    const reportArtifactProjection = await getAssessmentResultReportArtifactSelectProjection('report_artifact_json')
     const result = await queryDb<AssessmentResultRow>(
       `SELECT id, assessment_id, assessment_version_id, version_key, scoring_model_key, snapshot_version, status,
-              result_payload, response_quality_payload, report_artifact_json, completed_at, scored_at, created_at, updated_at
+              result_payload, response_quality_payload, ${reportArtifactProjection}, completed_at, scored_at, created_at, updated_at
        FROM assessment_results
        WHERE assessment_id = $1
          AND status IN ('complete', 'failed')
