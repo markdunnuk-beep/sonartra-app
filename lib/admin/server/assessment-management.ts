@@ -506,7 +506,7 @@ function normalisePackageSummary(value: unknown): SonartraAssessmentPackageSumma
 }
 
 function normaliseDetectedPackageVersion(value: unknown): AdminAssessmentPackageDetectedVersion | null {
-  return value === 'legacy_v1' || value === 'package_contract_v2' || value === 'unknown'
+  return value === 'legacy_v1' || value === 'package_contract_v2' || value === 'runtime_contract_v2' || value === 'unknown'
     ? value
     : null
 }

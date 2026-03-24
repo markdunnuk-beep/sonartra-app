@@ -1,9 +1,10 @@
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V1, validateSonartraAssessmentPackage, type AssessmentPackageStatus, type SonartraAssessmentPackageSummary, type SonartraAssessmentPackageValidationIssue } from '@/lib/admin/domain/assessment-package'
 import { compileAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2-compiler'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, validateSonartraAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
+import { SONARTRA_EXECUTABLE_RUNTIME_PACKAGE_V2_SCHEMA, validateRuntimeContractV2 } from '@/lib/admin/domain/package-runtime-v2'
 import type { AssessmentImportConflict, AssessmentPackageIdentity } from '@/lib/admin/domain/assessment-management'
 
-export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contract_v2' | 'unknown'
+export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contract_v2' | 'runtime_contract_v2' | 'unknown'
 
 export interface AdminAssessmentPackageReadinessFlags {
   structurallyValid: boolean
@@ -142,8 +143,18 @@ export function detectAssessmentPackageVersion(input: unknown): PackageVersionDe
   }
 
   const topLevelSchemaVersion = asTrimmedString(input.schemaVersion)
+  const metadata = isRecord(input.metadata) ? input.metadata : null
+
+  if ((input.contractKind === 'runtime_v2' || (metadata && metadata.runtimeSchemaVersion === SONARTRA_EXECUTABLE_RUNTIME_PACKAGE_V2_SCHEMA)) && input.packageVersion === '2') {
+    return {
+      detectedVersion: 'runtime_contract_v2',
+      schemaVersion: metadata ? asTrimmedString(metadata.runtimeSchemaVersion) : null,
+      packageName: metadata ? asTrimmedString(metadata.title) : null,
+      versionLabel: metadata ? asTrimmedString(metadata.versionLabel) : null,
+    }
+  }
+
   if (input.packageVersion === '2' || topLevelSchemaVersion === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
-    const metadata = isRecord(input.metadata) ? input.metadata : null
     const compatibility = metadata && isRecord(metadata.compatibility) ? metadata.compatibility : null
     const identity = isRecord(input.identity) ? input.identity : null
     return {
@@ -214,6 +225,47 @@ export function importAssessmentPackagePayload(input: unknown): ImportedAssessme
         definitionPayload: validation.normalizedPackage,
       })
     }
+
+    case 'runtime_contract_v2': {
+      const validation = validateRuntimeContractV2(input)
+      const packageStatus: AssessmentPackageStatus = !validation.ok ? 'invalid' : validation.warnings.length > 0 ? 'valid_with_warnings' : 'valid'
+      const readiness: AdminAssessmentPackageReadinessFlags = {
+        structurallyValid: validation.ok,
+        importable: false,
+        compilable: true,
+        evaluatable: false,
+        simulatable: false,
+        runtimeExecutable: validation.ok,
+        liveRuntimeEnabled: false,
+        publishable: false,
+      }
+
+      return withValidationSummary({
+        detectedVersion: detected.detectedVersion,
+        schemaVersion: validation.runtimePackage?.metadata.runtimeSchemaVersion ?? detected.schemaVersion,
+        packageName: validation.runtimePackage?.metadata.title ?? detected.packageName,
+        versionLabel: validation.runtimePackage?.metadata.versionLabel ?? detected.versionLabel,
+        packageStatus,
+        validationStatus: packageStatus,
+        errors: validation.errors,
+        warnings: validation.warnings,
+        summary: buildGenericSummary({
+          packageName: validation.runtimePackage?.metadata.title ?? detected.packageName,
+          versionLabel: validation.runtimePackage?.metadata.versionLabel ?? detected.versionLabel,
+          assessmentKey: validation.runtimePackage?.metadata.assessmentId ?? null,
+          questionsCount: validation.runtimePackage?.itemBank.questions.length ?? 0,
+          dimensionsCount: (validation.runtimePackage?.dimensions.raw.length ?? 0) + (validation.runtimePackage?.dimensions.derived.length ?? 0),
+          sectionCount: validation.runtimePackage?.itemBank.sections.length ?? 0,
+          derivedDimensionCount: validation.runtimePackage?.dimensions.derived.length ?? 0,
+          normalizationRuleCount: validation.runtimePackage?.normalization.rules.length ?? 0,
+          outputRuleCount: validation.runtimePackage?.outputs.rules.length ?? 0,
+          integrityRuleCount: validation.runtimePackage?.integrity.rules.length ?? 0,
+        }),
+        readiness,
+        definitionPayload: validation.runtimePackage,
+      })
+    }
+
     case 'package_contract_v2': {
       const validation = validateSonartraAssessmentPackageV2(input)
       const packageStatus: AssessmentPackageStatus = !validation.ok ? 'invalid' : validation.warnings.length > 0 ? 'valid_with_warnings' : 'valid'
