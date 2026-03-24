@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { postCompleteAssessment } from '../app/api/assessments/complete/route'
+import { postCompleteAssessment } from '../lib/server/complete-assessment-route'
 
 test('complete route preserves successful completion response when assignment lifecycle update fails', async () => {
   let readyCalls = 0
