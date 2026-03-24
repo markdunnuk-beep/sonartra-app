@@ -168,6 +168,8 @@ test('published + assigned + completed hybrid result appears as results ready', 
     status: 'complete',
     result_payload: {
       contractVersion: 'hybrid_mvp_v1',
+      overviewSummary: { id: 'summary-1', headline: 'Ready', text: 'Hybrid output ready' },
+      normalizedSignalPercentages: { 'signal-1': 80 },
       report: {
         summary: { id: 'summary-1', headline: 'Ready', text: 'Hybrid output ready' },
         sections: [
@@ -187,6 +189,22 @@ test('published + assigned + completed hybrid result appears as results ready', 
           rawScore: 10,
           normalizedScore: 0.8,
           rank: 1,
+        },
+      ],
+      topSignal: {
+        signalId: 'signal-1',
+        signalKey: 'adaptability',
+        signalLabel: 'Adaptability',
+        normalizedPercent: 80,
+        rank: 1,
+      },
+      domainSummaries: [
+        {
+          domainId: 'execution',
+          totalRawScore: 10,
+          signalCount: 1,
+          topSignalId: 'signal-1',
+          topSignalNormalizedPercent: 80,
         },
       ],
     },

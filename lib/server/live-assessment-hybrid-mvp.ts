@@ -5,6 +5,7 @@ import {
   HYBRID_MVP_CONTRACT_VERSION,
   scoreHybridMvpAssessment,
   type HybridMvpAssessmentDefinition,
+  type HybridMvpScoringResult,
   type HybridMvpResponseSet,
   type HybridMvpResponseValue,
 } from '@/lib/assessment/hybrid-mvp-scoring'
@@ -191,6 +192,95 @@ function resolveHybridDefinition(row: HybridCompletionRuntimeRow): {
   }
 
   return null
+}
+
+function toPercent(score: number): number {
+  return Number((Math.max(0, score) * 100).toFixed(2))
+}
+
+function buildHybridResultPayload(input: {
+  definition: HybridMvpAssessmentDefinition
+  scored: HybridMvpScoringResult
+  assessmentMeta: {
+    assessmentVersionId: string
+    assessmentVersionKey: string
+    assessmentVersionName: string
+    sourceDefinitionVersionId: string
+    sourceDefinitionVersionKey: string
+    sourceDefinitionVersionName: string
+  }
+}): Record<string, unknown> {
+  const signalById = input.definition.signals.reduce<Record<string, { label: string; key: string; domainId: string | null }>>((acc, signal) => {
+    acc[signal.id] = {
+      label: signal.label,
+      key: signal.key,
+      domainId: signal.domainId ?? null,
+    }
+    return acc
+  }, {})
+
+  const domainById = input.definition.domains.reduce<Record<string, { label: string; key: string }>>((acc, domain) => {
+    acc[domain.id] = { label: domain.label, key: domain.key }
+    return acc
+  }, {})
+
+  const normalizedSignalPercentages = Object.entries(input.scored.normalizedSignalScores).reduce<Record<string, number>>((acc, [signalId, score]) => {
+    acc[signalId] = toPercent(score)
+    return acc
+  }, {})
+
+  const rankedSignals = input.scored.rankedSignals.map((signal) => ({
+    ...signal,
+    normalizedPercent: normalizedSignalPercentages[signal.signalId] ?? 0,
+    signalLabel: signalById[signal.signalId]?.label ?? signal.signalKey,
+  }))
+
+  const topSignal = rankedSignals[0] ?? null
+
+  const domainSummaries = input.scored.aggregationVectors.byDomain.map((domainVector) => {
+    const topRankedSignal = domainVector.vector[0] ?? null
+    const topSignalMeta = topRankedSignal ? signalById[topRankedSignal.signalId] : null
+    const domainMeta = domainVector.domainId ? domainById[domainVector.domainId] : null
+
+    return {
+      domainId: domainVector.domainId,
+      domainKey: domainVector.domainId ? (domainMeta?.key ?? domainVector.domainId) : 'cross_domain',
+      domainLabel: domainVector.domainId ? (domainMeta?.label ?? domainVector.domainId) : 'Cross-domain',
+      totalRawScore: domainVector.totalRawScore,
+      signalCount: domainVector.vector.length,
+      topSignalId: topRankedSignal?.signalId ?? null,
+      topSignalKey: topRankedSignal ? (signalById[topRankedSignal.signalId]?.key ?? topRankedSignal.signalId) : null,
+      topSignalLabel: topSignalMeta?.label ?? null,
+      topSignalNormalizedPercent: topRankedSignal ? toPercent(topRankedSignal.normalizedScore) : null,
+      rankedSignals: domainVector.vector.map((signal) => ({
+        ...signal,
+        normalizedPercent: toPercent(signal.normalizedScore),
+      })),
+    }
+  })
+
+  return {
+    contractVersion: HYBRID_MVP_CONTRACT_VERSION,
+    assessmentMeta: {
+      assessmentId: input.scored.assessmentId,
+      assessmentKey: input.scored.assessmentKey,
+      assessmentVersionId: input.assessmentMeta.assessmentVersionId,
+      assessmentVersionKey: input.assessmentMeta.assessmentVersionKey,
+      assessmentVersionName: input.assessmentMeta.assessmentVersionName,
+      sourceDefinitionVersionId: input.assessmentMeta.sourceDefinitionVersionId,
+      sourceDefinitionVersionKey: input.assessmentMeta.sourceDefinitionVersionKey,
+      sourceDefinitionVersionName: input.assessmentMeta.sourceDefinitionVersionName,
+    },
+    rawSignalScores: input.scored.rawSignalScores,
+    normalizedSignalScores: input.scored.normalizedSignalScores,
+    normalizedSignalPercentages,
+    rankedSignals,
+    topSignal,
+    domainSummaries,
+    overviewSummary: input.scored.report.summary,
+    report: input.scored.report,
+    aggregationVectors: input.scored.aggregationVectors,
+  }
 }
 
 export async function saveHybridAssessmentResponse(
@@ -404,11 +494,10 @@ export async function evaluateCompletedHybridAssessment(input: {
     }
 
     const scoredAt = new Date().toISOString()
-    const payload = {
-      contractVersion: HYBRID_MVP_CONTRACT_VERSION,
+    const payload = buildHybridResultPayload({
+      definition: lifecycle.resolved.definition,
+      scored: scored.result,
       assessmentMeta: {
-        assessmentId: scored.result.assessmentId,
-        assessmentKey: scored.result.assessmentKey,
         assessmentVersionId: lifecycle.assessment.assessment_version_id,
         assessmentVersionKey: lifecycle.assessment.assessment_version_key,
         assessmentVersionName: lifecycle.assessment.assessment_version_name,
@@ -416,12 +505,7 @@ export async function evaluateCompletedHybridAssessment(input: {
         sourceDefinitionVersionKey: lifecycle.resolved.sourceVersionKey,
         sourceDefinitionVersionName: lifecycle.resolved.sourceVersionName,
       },
-      rawSignalScores: scored.result.rawSignalScores,
-      normalizedSignalScores: scored.result.normalizedSignalScores,
-      rankedSignals: scored.result.rankedSignals,
-      aggregationVectors: scored.result.aggregationVectors,
-      report: scored.result.report,
-    }
+    })
 
     const persisted = await runInTransaction(async (client) => {
       const result = await input.persistResult({

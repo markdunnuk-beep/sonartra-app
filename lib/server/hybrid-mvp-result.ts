@@ -49,6 +49,14 @@ export interface HybridMvpResultPayloadViewModel {
   sections: HybridMvpResultSectionViewModel[]
   rankedSignals: HybridMvpRankedSignalViewModel[]
   normalizedSignalScores: Record<string, number>
+  normalizedSignalPercentages: Record<string, number>
+  topSignal: {
+    signalId: string
+    signalKey: string
+    signalLabel: string | null
+    normalizedPercent: number
+    rank: number
+  } | null
   domainSummaries: HybridMvpDomainSummaryViewModel[]
 }
 
@@ -155,6 +163,21 @@ function parseNormalizedScores(value: unknown): Record<string, number> {
 }
 
 function parseDomainSummaries(value: unknown): HybridMvpDomainSummaryViewModel[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => {
+      if (!isRecord(entry)) return []
+      return [{
+        domainId: toStringOrNull(entry.domainId),
+        totalRawScore: toNumber(entry.totalRawScore),
+        signalCount: Math.max(0, Math.trunc(toNumber(entry.signalCount))),
+        topSignalId: toStringOrNull(entry.topSignalId),
+        topNormalizedScore: entry.topSignalNormalizedPercent !== undefined
+          ? toNumber(entry.topSignalNormalizedPercent) / 100
+          : toNumber(entry.topNormalizedScore),
+      }]
+    })
+  }
+
   if (!isRecord(value)) return []
 
   const byDomain = Array.isArray(value.byDomain) ? value.byDomain : []
@@ -177,6 +200,22 @@ function parseDomainSummaries(value: unknown): HybridMvpDomainSummaryViewModel[]
   })
 }
 
+function parseTopSignal(value: unknown): HybridMvpResultPayloadViewModel['topSignal'] {
+  if (!isRecord(value)) return null
+
+  const signalId = toStringOrNull(value.signalId)
+  const signalKey = toStringOrNull(value.signalKey)
+  if (!signalId || !signalKey) return null
+
+  return {
+    signalId,
+    signalKey,
+    signalLabel: toStringOrNull(value.signalLabel),
+    normalizedPercent: toNumber(value.normalizedPercent),
+    rank: Math.max(1, Math.trunc(toNumber(value.rank))),
+  }
+}
+
 export function parseHybridMvpResultPayload(payload: Record<string, unknown> | null): HybridMvpResultPayloadViewModel | null {
   if (!isRecord(payload) || payload.contractVersion !== 'hybrid_mvp_v1') {
     return null
@@ -187,8 +226,12 @@ export function parseHybridMvpResultPayload(payload: Record<string, unknown> | n
 
   const sections = parseSections(report?.sections)
   const rankedSignals = parseRankedSignals(payload.rankedSignals)
+  const normalizedSignalPercentages = parseNormalizedScores(payload.normalizedSignalPercentages)
+  const topSignal = parseTopSignal(payload.topSignal)
+  const domainSummaries = parseDomainSummaries(payload.domainSummaries ?? payload.aggregationVectors)
+  const summary = parseSummary(payload.overviewSummary ?? report?.summary)
 
-  if (sections.length === 0 || rankedSignals.length === 0) {
+  if (sections.length === 0 || rankedSignals.length === 0 || !summary || domainSummaries.length === 0 || !topSignal || Object.keys(normalizedSignalPercentages).length === 0) {
     return null
   }
 
@@ -200,11 +243,13 @@ export function parseHybridMvpResultPayload(payload: Record<string, unknown> | n
       assessmentVersionKey: toStringOrNull(assessmentMeta?.assessmentVersionKey),
       assessmentVersionName: toStringOrNull(assessmentMeta?.assessmentVersionName),
     },
-    summary: parseSummary(report?.summary),
+    summary,
     sections,
     rankedSignals,
     normalizedSignalScores: parseNormalizedScores(payload.normalizedSignalScores),
-    domainSummaries: parseDomainSummaries(payload.aggregationVectors),
+    normalizedSignalPercentages,
+    topSignal,
+    domainSummaries,
   }
 }
 
