@@ -102,10 +102,10 @@ interface ReadyResultContextRow extends AssessmentResultRow {
 
 interface IndividualResultsDependencies {
   resolveAuthenticatedUserId: () => Promise<string | null>;
-  getLatestAssessmentForUser: (userId: string) => Promise<AssessmentContextRow | null>;
+  getLatestAssessmentForUser: (userId: string, definitionId?: string | null) => Promise<AssessmentContextRow | null>;
   getLatestResultForAssessment: (assessmentId: string) => Promise<AssessmentResultRow | null>;
   getResultById: (resultId: string) => Promise<AssessmentResultRow | null>;
-  getLatestReadyResultForUser: (userId: string) => Promise<ReadyResultContextRow | null>;
+  getLatestReadyResultForUser: (userId: string, definitionId?: string | null) => Promise<ReadyResultContextRow | null>;
   getSignalsByResultId: (resultId: string) => Promise<AssessmentResultSignalRow[]>;
 }
 
@@ -268,18 +268,34 @@ function toAssessmentMetadata(
 }
 
 export async function getLatestIndividualResultForUser(
+  optionsOrDependencies: { definitionId?: string | null } | Partial<IndividualResultsDependencies> = {},
   dependencies: Partial<IndividualResultsDependencies> = {},
 ): Promise<IndividualResultApiResponse> {
-  const resolvedDependencies = { ...defaultDependencies, ...dependencies };
+  const isDependencyBag = typeof optionsOrDependencies === 'object'
+    && optionsOrDependencies !== null
+    && (
+      'resolveAuthenticatedUserId' in optionsOrDependencies
+      || 'getLatestAssessmentForUser' in optionsOrDependencies
+      || 'getLatestReadyResultForUser' in optionsOrDependencies
+    )
+
+  const options = isDependencyBag ? {} : (optionsOrDependencies as { definitionId?: string | null })
+  const resolvedDependencies = {
+    ...defaultDependencies,
+    ...(isDependencyBag ? (optionsOrDependencies as Partial<IndividualResultsDependencies>) : dependencies),
+  };
 
   try {
-    const lifecycle = await resolveIndividualLifecycleState({
-      resolveAuthenticatedUserId: resolvedDependencies.resolveAuthenticatedUserId,
-      getLatestAssessmentForUser: resolvedDependencies.getLatestAssessmentForUser,
-      getLatestResultForAssessment: resolvedDependencies.getLatestResultForAssessment,
-      getSignalCountByResultId: async (resultId) => (await resolvedDependencies.getSignalsByResultId(resultId)).length,
-      getLatestReadyResultForUser: resolvedDependencies.getLatestReadyResultForUser,
-    });
+    const lifecycle = await resolveIndividualLifecycleState(
+      { definitionId: options.definitionId ?? null },
+      {
+        resolveAuthenticatedUserId: resolvedDependencies.resolveAuthenticatedUserId,
+        getLatestAssessmentForUser: resolvedDependencies.getLatestAssessmentForUser,
+        getLatestResultForAssessment: resolvedDependencies.getLatestResultForAssessment,
+        getSignalCountByResultId: async (resultId) => (await resolvedDependencies.getSignalsByResultId(resultId)).length,
+        getLatestReadyResultForUser: resolvedDependencies.getLatestReadyResultForUser,
+      },
+    );
 
     if (lifecycle.authState === 'unauthenticated') {
       return { ok: false, state: 'unauthenticated', message: 'Authentication required.' };

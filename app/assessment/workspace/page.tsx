@@ -20,7 +20,7 @@ function getSearchParamValue(value: string | string[] | undefined): string | nul
 export default async function AssessmentWorkspacePage({ searchParams }: AssessmentWorkspacePageProps) {
   const requestedAssessmentId = getSearchParamValue(searchParams?.assessmentId)
   const requestedDefinitionId = getSearchParamValue(searchParams?.definitionId)
-  const resolved = await resolveIndividualLifecycleState()
+  const resolved = await resolveIndividualLifecycleState({ definitionId: requestedDefinitionId })
 
   if (resolved.authState === 'unauthenticated') {
     redirect('/sign-in')

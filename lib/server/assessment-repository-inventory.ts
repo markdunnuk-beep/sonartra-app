@@ -14,10 +14,9 @@ import type {
 import { SIGNALS_ASSESSMENT_WORKSPACE_PATH } from '@/lib/server/assessment-entry-routing'
 import type { AssessmentResultRow, AssessmentRow } from '@/lib/assessment-types'
 import { queryDb } from '@/lib/db'
-import { hasUserFacingV2Summary, isPackageContractV2Result } from '@/lib/server/live-assessment-user-result'
-import { isHybridMvpReadyResult } from '@/lib/server/hybrid-mvp-result'
 import { getCurrentAssessmentRepositoryContext } from '@/lib/assessment/assessment-repository-context'
 import { getAssessmentResultReportArtifactSelectProjection } from '@/lib/server/assessment-result-schema-capabilities'
+import { reconcileIndividualLifecycle } from '@/lib/server/individual-assessment-lifecycle-reconciliation'
 
 interface AssignmentStateRow {
   id: string
@@ -114,37 +113,23 @@ function resolveLifecycleState(args: {
   latestAssessment: AssessmentInventoryAssessmentRow | null
   latestAssessmentResult: AssessmentResultRow | null
   latestAssessmentSignalCount: number
+  latestReadyResult: AssessmentInventoryReadyResultRow | null
+  latestReadyResultSignalCount: number
   latestAssignmentStatus: AssignmentStateRow['status']
 }): AssessmentRepositoryLifecycleState {
-  const { latestAssessment, latestAssessmentResult, latestAssessmentSignalCount, latestAssignmentStatus } = args
+  const { latestAssessment, latestAssessmentResult, latestAssessmentSignalCount, latestReadyResult, latestReadyResultSignalCount, latestAssignmentStatus } = args
+  const resolved = reconcileIndividualLifecycle({
+    hasAssessment: Boolean(latestAssessment),
+    isAssessmentEffectivelyCompleted: latestAssessment ? isEffectivelyCompleted(latestAssessment) : false,
+    assessmentCompletedAt: latestAssessment?.completed_at ?? latestReadyResult?.assessment_completed_at ?? null,
+    latestAssessmentResult,
+    latestAssessmentSignalCount,
+    latestReadyResult,
+    latestReadyResultSignalCount,
+    assignmentStatus: latestAssignmentStatus,
+  })
 
-  if (!latestAssessment) {
-    if (latestAssignmentStatus === 'assigned') return 'not_started'
-    if (latestAssignmentStatus === 'in_progress') return 'in_progress'
-    if (latestAssignmentStatus === 'completed_processing') return 'completed_processing'
-    if (latestAssignmentStatus === 'results_ready') return 'ready'
-    if (latestAssignmentStatus === 'failed') return 'error'
-
-    return 'not_started'
-  }
-
-  if (!isEffectivelyCompleted(latestAssessment)) {
-    return 'in_progress'
-  }
-
-  if (!latestAssessmentResult) {
-    return 'completed_processing'
-  }
-
-  if (latestAssessmentResult.status === 'failed') {
-    return 'error'
-  }
-
-  if (latestAssessmentResult.status === 'complete' && (latestAssessmentSignalCount > 0 || (isPackageContractV2Result(latestAssessmentResult) && hasUserFacingV2Summary(latestAssessmentResult)) || isHybridMvpReadyResult(latestAssessmentResult))) {
-    return 'ready'
-  }
-
-  return 'completed_processing'
+  return resolved.state === 'failed' ? 'error' : resolved.state
 }
 
 function mapLifecycleToStatus(lifecycleState: AssessmentRepositoryLifecycleState): AssessmentRepositoryStatus {
@@ -332,13 +317,19 @@ export async function loadLiveAssessmentRepositoryInventory(
       userId,
       assignment.assessment_definition_id,
     )
+    const latestReadySignalCount = latestReadyResult
+      ? await getSignalCountByResultId(deps.queryDb, latestReadyResult.id)
+      : 0
 
     const lifecycleState = resolveLifecycleState({
       latestAssessment,
       latestAssessmentResult,
       latestAssessmentSignalCount,
+      latestReadyResult,
+      latestReadyResultSignalCount: latestReadySignalCount,
       latestAssignmentStatus: assignment.status,
     })
+
     const status = mapLifecycleToStatus(lifecycleState)
     const defaultStatusNote = meta.definition
       ? buildStatusNote(meta.definition, status)

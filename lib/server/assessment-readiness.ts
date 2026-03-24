@@ -1,9 +1,10 @@
 import { AssessmentResultRow, AssessmentRow } from '@/lib/assessment-types';
-import { hasUserFacingV2Summary, isPackageContractV2Result } from '@/lib/server/live-assessment-user-result';
-import { isHybridMvpReadyResult } from '@/lib/server/hybrid-mvp-result';
 import { queryDb } from '@/lib/db';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 import { getAssessmentResultReportArtifactSelectProjection } from '@/lib/server/assessment-result-schema-capabilities';
+import type { AssessmentAssignmentStatus } from '@/lib/server/assessment-assignments';
+import { markAssignmentFailed, markAssignmentResultReady } from '@/lib/server/assessment-assignments';
+import { reconcileIndividualLifecycle } from '@/lib/server/individual-assessment-lifecycle-reconciliation';
 
 export type IndividualLifecycleState = 'not_started' | 'in_progress' | 'completed_processing' | 'ready' | 'error';
 
@@ -54,10 +55,17 @@ export interface IndividualLifecycleResolution {
 
 interface LifecycleDependencies {
   resolveAuthenticatedUserId: () => Promise<string | null>;
-  getLatestAssessmentForUser: (userId: string) => Promise<AssessmentContextRow | null>;
+  getLatestAssessmentForUser: (userId: string, definitionId?: string | null) => Promise<AssessmentContextRow | null>;
   getLatestResultForAssessment: (assessmentId: string) => Promise<AssessmentResultRow | null>;
   getSignalCountByResultId: (resultId: string) => Promise<number>;
-  getLatestReadyResultForUser: (userId: string) => Promise<ReadyResultContextRow | null>;
+  getLatestReadyResultForUser: (userId: string, definitionId?: string | null) => Promise<ReadyResultContextRow | null>;
+  getLatestAssignmentStatusForUser: (userId: string, definitionId?: string | null) => Promise<AssessmentAssignmentStatus | null>;
+  markAssignmentResultReady: typeof markAssignmentResultReady;
+  markAssignmentFailed: typeof markAssignmentFailed;
+}
+interface LifecycleResolutionOptions {
+  definitionId?: string | null
+  staleProcessingThresholdMinutes?: number
 }
 
 const defaultDependencies: LifecycleDependencies = {
@@ -65,7 +73,7 @@ const defaultDependencies: LifecycleDependencies = {
     const appUser = await resolveAuthenticatedAppUser();
     return appUser?.dbUserId ?? null;
   },
-  async getLatestAssessmentForUser(userId) {
+  async getLatestAssessmentForUser(userId, definitionId) {
     const result = await queryDb<AssessmentContextRow>(
       `SELECT a.id, a.user_id, a.organisation_id, a.assessment_version_id, a.status, a.started_at,
               a.completed_at, a.last_activity_at, a.progress_count, a.progress_percent,
@@ -74,9 +82,10 @@ const defaultDependencies: LifecycleDependencies = {
        FROM assessments a
        LEFT JOIN assessment_versions av ON av.id = a.assessment_version_id
        WHERE a.user_id = $1 AND a.organisation_id IS NULL
+         AND ($2::uuid IS NULL OR av.assessment_definition_id = $2::uuid)
        ORDER BY a.created_at DESC
        LIMIT 1`,
-      [userId],
+      [userId, definitionId ?? null],
     );
 
     return result.rows[0] ?? null;
@@ -105,7 +114,7 @@ const defaultDependencies: LifecycleDependencies = {
 
     return Number(result.rows[0]?.signal_count ?? 0);
   },
-  async getLatestReadyResultForUser(userId) {
+  async getLatestReadyResultForUser(userId, definitionId) {
     const reportArtifactProjection = await getAssessmentResultReportArtifactSelectProjection('ar.report_artifact_json')
     const result = await queryDb<ReadyResultContextRow>(
       `SELECT ar.id, ar.assessment_id, ar.assessment_version_id, ar.version_key, ar.scoring_model_key, ar.snapshot_version,
@@ -116,6 +125,7 @@ const defaultDependencies: LifecycleDependencies = {
        LEFT JOIN assessment_versions av ON av.id = a.assessment_version_id
        WHERE a.user_id = $1
          AND a.organisation_id IS NULL
+         AND ($2::uuid IS NULL OR av.assessment_definition_id = $2::uuid)
          AND ar.status = 'complete'
          AND (
            EXISTS (
@@ -125,11 +135,27 @@ const defaultDependencies: LifecycleDependencies = {
          )
        ORDER BY a.completed_at DESC NULLS LAST, ar.created_at DESC
        LIMIT 1`,
-      [userId],
+      [userId, definitionId ?? null],
     );
 
     return result.rows[0] ?? null;
   },
+  async getLatestAssignmentStatusForUser(userId, definitionId) {
+    const result = await queryDb<{ status: AssessmentAssignmentStatus }>(
+      `SELECT ara.status
+       FROM assessment_repository_assignments ara
+       WHERE ara.target_user_id = $1
+         AND ($2::uuid IS NULL OR ara.assessment_definition_id = $2::uuid)
+         AND ara.status <> 'cancelled'
+       ORDER BY ara.assigned_at DESC, ara.created_at DESC
+       LIMIT 1`,
+      [userId, definitionId ?? null],
+    );
+
+    return result.rows[0]?.status ?? null;
+  },
+  markAssignmentResultReady,
+  markAssignmentFailed,
 };
 
 function toAssessmentSummary(assessment: AssessmentContextRow): IndividualLifecycleAssessmentSummary {
@@ -180,26 +206,62 @@ function isEffectivelyCompleted(assessment: AssessmentContextRow): boolean {
 }
 
 export async function resolveIndividualLifecycleState(
+  optionsOrDependencies: LifecycleResolutionOptions | Partial<LifecycleDependencies> = {},
   dependencies: Partial<LifecycleDependencies> = {},
 ): Promise<{ authState: 'unauthenticated' } | { authState: 'authenticated'; userId: string; lifecycle: IndividualLifecycleResolution }> {
-  const deps = { ...defaultDependencies, ...dependencies };
+  const isDependencyBag = typeof optionsOrDependencies === 'object'
+    && optionsOrDependencies !== null
+    && (
+      'resolveAuthenticatedUserId' in optionsOrDependencies
+      || 'getLatestAssessmentForUser' in optionsOrDependencies
+      || 'getLatestReadyResultForUser' in optionsOrDependencies
+    )
+
+  const options: LifecycleResolutionOptions = isDependencyBag ? {} : (optionsOrDependencies as LifecycleResolutionOptions)
+  const mergedDependencies = isDependencyBag
+    ? (optionsOrDependencies as Partial<LifecycleDependencies>)
+    : dependencies
+  const deps = { ...defaultDependencies, ...mergedDependencies };
+  const definitionId = options.definitionId ?? null;
   const userId = await deps.resolveAuthenticatedUserId();
 
   if (!userId) return { authState: 'unauthenticated' };
 
-  const latestAssessment = await deps.getLatestAssessmentForUser(userId);
-  const latestReadyResult = await deps.getLatestReadyResultForUser(userId);
+  const latestAssessment = await deps.getLatestAssessmentForUser(userId, definitionId);
+  const latestReadyResult = await deps.getLatestReadyResultForUser(userId, definitionId);
+  let latestAssignmentStatus: AssessmentAssignmentStatus | null = null
+  try {
+    latestAssignmentStatus = await deps.getLatestAssignmentStatusForUser(userId, definitionId);
+  } catch (error) {
+    console.error('[assessment-readiness] assignment status lookup failed; continuing with result evidence only', {
+      userId,
+      definitionId,
+      message: error instanceof Error ? error.message : 'unknown error',
+    })
+  }
 
+  const latestReadySignalCount = latestReadyResult ? await deps.getSignalCountByResultId(latestReadyResult.id) : 0;
   const readySummary = latestReadyResult
-    ? toSnapshotSummary(latestReadyResult, await deps.getSignalCountByResultId(latestReadyResult.id))
+    ? toSnapshotSummary(latestReadyResult, latestReadySignalCount)
     : null;
 
   if (!latestAssessment) {
+    const reconciled = reconcileIndividualLifecycle({
+      hasAssessment: false,
+      isAssessmentEffectivelyCompleted: false,
+      assessmentCompletedAt: null,
+      latestAssessmentResult: null,
+      latestAssessmentSignalCount: 0,
+      latestReadyResult,
+      latestReadyResultSignalCount: latestReadySignalCount,
+      assignmentStatus: latestAssignmentStatus,
+      staleProcessingThresholdMinutes: options.staleProcessingThresholdMinutes,
+    })
     return {
       authState: 'authenticated',
       userId,
       lifecycle: {
-        state: readySummary ? 'ready' : 'not_started',
+        state: reconciled.state === 'failed' ? 'error' : reconciled.state,
         latestAssessment: null,
         latestAssessmentResult: null,
         latestReadyResult: readySummary,
@@ -211,11 +273,22 @@ export async function resolveIndividualLifecycleState(
   const assessmentSummary = toAssessmentSummary(latestAssessment);
 
   if (!isEffectivelyCompleted(latestAssessment)) {
+    const reconciled = reconcileIndividualLifecycle({
+      hasAssessment: true,
+      isAssessmentEffectivelyCompleted: false,
+      assessmentCompletedAt: latestAssessment.completed_at,
+      latestAssessmentResult: null,
+      latestAssessmentSignalCount: 0,
+      latestReadyResult,
+      latestReadyResultSignalCount: latestReadySignalCount,
+      assignmentStatus: latestAssignmentStatus,
+      staleProcessingThresholdMinutes: options.staleProcessingThresholdMinutes,
+    })
     return {
       authState: 'authenticated',
       userId,
       lifecycle: {
-        state: readySummary ? 'ready' : 'in_progress',
+        state: reconciled.state === 'failed' ? 'error' : reconciled.state,
         latestAssessment: assessmentSummary,
         latestAssessmentResult: null,
         latestReadyResult: readySummary,
@@ -229,11 +302,22 @@ export async function resolveIndividualLifecycleState(
   const latestAssessmentResult = await deps.getLatestResultForAssessment(latestAssessment.id);
 
   if (!latestAssessmentResult) {
+    const reconciled = reconcileIndividualLifecycle({
+      hasAssessment: true,
+      isAssessmentEffectivelyCompleted: true,
+      assessmentCompletedAt: latestAssessment.completed_at,
+      latestAssessmentResult: null,
+      latestAssessmentSignalCount: 0,
+      latestReadyResult,
+      latestReadyResultSignalCount: latestReadySignalCount,
+      assignmentStatus: latestAssignmentStatus,
+      staleProcessingThresholdMinutes: options.staleProcessingThresholdMinutes,
+    })
     return {
       authState: 'authenticated',
       userId,
       lifecycle: {
-        state: readySummary ? 'ready' : 'completed_processing',
+        state: reconciled.state === 'failed' ? 'error' : reconciled.state,
         latestAssessment: assessmentSummary,
         latestAssessmentResult: null,
         latestReadyResult: readySummary,
@@ -246,24 +330,33 @@ export async function resolveIndividualLifecycleState(
 
   const signalCount = await deps.getSignalCountByResultId(latestAssessmentResult.id);
   const latestSnapshotSummary = toSnapshotSummary(latestAssessmentResult, signalCount);
+  const reconciled = reconcileIndividualLifecycle({
+    hasAssessment: true,
+    isAssessmentEffectivelyCompleted: true,
+    assessmentCompletedAt: latestAssessment.completed_at,
+    latestAssessmentResult,
+    latestAssessmentSignalCount: signalCount,
+    latestReadyResult,
+    latestReadyResultSignalCount: latestReadySignalCount,
+    assignmentStatus: latestAssignmentStatus,
+    staleProcessingThresholdMinutes: options.staleProcessingThresholdMinutes,
+  })
 
-  if (latestAssessmentResult.status === 'failed') {
-    return {
-      authState: 'authenticated',
-      userId,
-      lifecycle: {
-        state: readySummary ? 'ready' : 'error',
-        latestAssessment: assessmentSummary,
-        latestAssessmentResult: latestSnapshotSummary,
-        latestReadyResult: readySummary,
-        message: readySummary
-          ? 'Latest attempt failed to generate a result; showing latest ready snapshot instead.'
-          : 'Result generation failed for the latest completed assessment.',
-      },
-    };
+  if (reconciled.needsAssignmentRepair === 'mark_assignment_ready') {
+    try {
+      await deps.markAssignmentResultReady({ assessmentId: latestAssessment.id, resultId: latestAssessmentResult.id })
+    } catch (error) {
+      console.error('[assessment-readiness] assignment repair failed (mark ready)', { assessmentId: latestAssessment.id, message: error instanceof Error ? error.message : 'unknown error' })
+    }
+  } else if (reconciled.needsAssignmentRepair === 'mark_assignment_failed') {
+    try {
+      await deps.markAssignmentFailed({ assessmentId: latestAssessment.id, resultId: latestAssessmentResult.id })
+    } catch (error) {
+      console.error('[assessment-readiness] assignment repair failed (mark failed)', { assessmentId: latestAssessment.id, message: error instanceof Error ? error.message : 'unknown error' })
+    }
   }
 
-  if (latestAssessmentResult.status === 'complete' && (signalCount > 0 || (isPackageContractV2Result(latestAssessmentResult) && hasUserFacingV2Summary(latestAssessmentResult)) || isHybridMvpReadyResult(latestAssessmentResult))) {
+  if (reconciled.state === 'ready') {
     return {
       authState: 'authenticated',
       userId,
@@ -281,13 +374,15 @@ export async function resolveIndividualLifecycleState(
     authState: 'authenticated',
     userId,
     lifecycle: {
-      state: readySummary ? 'ready' : 'completed_processing',
+      state: reconciled.state === 'failed' ? 'error' : 'completed_processing',
       latestAssessment: assessmentSummary,
       latestAssessmentResult: latestSnapshotSummary,
       latestReadyResult: readySummary,
-      message: readySummary
-        ? 'Latest completed attempt is still processing; showing latest ready snapshot.'
-        : 'Completed assessment is waiting for a valid persisted result.',
+      message: reconciled.state === 'failed'
+        ? 'Result processing exceeded the recovery window without retrievable outputs.'
+        : readySummary
+          ? 'Latest completed attempt is still processing; showing latest ready snapshot.'
+          : 'Completed assessment is waiting for a valid persisted result.',
     },
   };
 }
