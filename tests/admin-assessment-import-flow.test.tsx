@@ -11,8 +11,12 @@ import {
   type AdminAssessmentVersionRecord,
 } from '../lib/admin/domain/assessment-management'
 import { getAdminAssessmentPackagePreviewSummary } from '../lib/admin/domain/assessment-package-review'
+import { getAdminAssessmentReportPreviewWorkspaceStatus } from '../lib/admin/domain/assessment-report-output'
+import { getAdminAssessmentSimulationWorkspaceStatus } from '../lib/admin/domain/assessment-simulation'
 import type { SonartraAssessmentPackageV1 } from '../lib/admin/domain/assessment-package'
 import examplePackageV2 from './fixtures/package-contract-v2-example.json'
+import wplp80CanonicalCandidate from './fixtures/package-contract-v2-wplp80-canonical-candidate.json'
+import { importAssessmentPackagePayload } from '../lib/admin/server/assessment-package-import'
 
 const normalizedPackage: SonartraAssessmentPackageV1 = {
   meta: {
@@ -332,4 +336,74 @@ test('assessment import surface renders inline fallback content when optional fi
   assert.match(html, /Import assessment package/)
   assert.match(html, /Package preview unavailable|No package attached/)
   assert.match(html, /No internal release notes recorded yet\./)
+})
+
+test('WPLP-80 canonical candidate import keeps post-import admin readiness and reachability coherent', () => {
+  const imported = importAssessmentPackagePayload(wplp80CanonicalCandidate)
+
+  assert.equal(imported.validationSummary.success, true)
+  assert.equal(imported.detectedVersion, 'package_contract_v2')
+  assert.equal(imported.analysis.classifier, 'canonical_contract_v2')
+  assert.equal(imported.summary?.questionsCount, 80)
+  assert.equal(imported.summary?.packageName, 'WPLP-80 Workplace Pattern & Leadership Profile')
+  assert.equal(imported.validationSummary.readiness.simulatable, true)
+  assert.equal(imported.validationSummary.readiness.runtimeExecutable, false)
+  assert.equal(imported.validationSummary.readiness.publishable, false)
+  assert.ok(imported.warnings.length > 0)
+
+  const simulationStatus = getAdminAssessmentSimulationWorkspaceStatus({
+    packageInfo: {
+      status: imported.packageStatus,
+      detectedVersion: imported.detectedVersion,
+      schemaVersion: imported.schemaVersion,
+      sourceType: 'manual_import',
+      importedAt: '2026-03-24T10:00:00.000Z',
+      importedByName: 'WPLP Rehearsal Admin',
+      sourceFilename: 'package-contract-v2-wplp80-canonical-candidate.json',
+      summary: imported.summary,
+      errors: imported.errors,
+      warnings: imported.warnings,
+    },
+    normalizedPackage: imported.definitionPayload as never,
+  })
+  assert.equal(simulationStatus.canRunSimulation, true)
+  assert.match(simulationStatus.summary, /can run/i)
+
+  const previewStatus = getAdminAssessmentReportPreviewWorkspaceStatus({
+    packageInfo: {
+      status: imported.packageStatus,
+      detectedVersion: imported.detectedVersion,
+      schemaVersion: imported.schemaVersion,
+      sourceType: 'manual_import',
+      importedAt: '2026-03-24T10:00:00.000Z',
+      importedByName: 'WPLP Rehearsal Admin',
+      sourceFilename: 'package-contract-v2-wplp80-canonical-candidate.json',
+      summary: imported.summary,
+      errors: imported.errors,
+      warnings: imported.warnings,
+    },
+    normalizedPackage: imported.definitionPayload as never,
+  })
+  assert.equal(previewStatus.canGeneratePreview, true)
+  assert.match(previewStatus.summary, /runtime-v2/i)
+
+  const previewSummary = getAdminAssessmentPackagePreviewSummary({
+    packageInfo: {
+      status: imported.packageStatus,
+      detectedVersion: imported.detectedVersion,
+      schemaVersion: imported.schemaVersion,
+      sourceType: 'manual_import',
+      importedAt: '2026-03-24T10:00:00.000Z',
+      importedByName: 'WPLP Rehearsal Admin',
+      sourceFilename: 'package-contract-v2-wplp80-canonical-candidate.json',
+      summary: imported.summary,
+      errors: imported.errors,
+      warnings: imported.warnings,
+    },
+    normalizedPackage: imported.definitionPayload as never,
+  })
+  assert.equal(previewSummary.state, 'ready')
+  assert.equal(previewSummary.metrics.questionsCount, 80)
+  assert.equal(previewSummary.metrics.dimensionsCount, 45)
+  assert.match(previewSummary.scoringSummary, /cannot execute v2 scoring/i)
 })
