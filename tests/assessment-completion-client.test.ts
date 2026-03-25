@@ -24,14 +24,13 @@ test('completion submission plan includes the current answer on the final questi
 test('completion outcome redirects to results when scoring is ready immediately', () => {
   const outcome = resolveAssessmentCompletionClientOutcome({
     ok: true,
+    status: 'ready',
     assessmentId: 'assessment-1',
-    assessmentStatus: 'completed',
-    resultStatus: 'succeeded',
     resultId: 'result-1',
   })
 
   assert.deepEqual(outcome, {
-    redirectTo: '/individual/results',
+    redirectTo: '/individual/results/result-1',
     lifecycleState: 'ready',
     workspaceEntryState: 'results_ready',
     clearActiveAssessment: true,
@@ -42,10 +41,8 @@ test('completion outcome redirects to results when scoring is ready immediately'
 test('completion outcome redirects to results while scoring is still pending', () => {
   const outcome = resolveAssessmentCompletionClientOutcome({
     ok: true,
+    status: 'processing',
     assessmentId: 'assessment-1',
-    assessmentStatus: 'completed',
-    resultStatus: 'pending',
-    resultId: null,
   })
 
   assert.deepEqual(outcome, {
@@ -57,24 +54,33 @@ test('completion outcome redirects to results while scoring is still pending', (
   })
 })
 
+test('completion outcome does not fallback to dashboard-style redirects', () => {
+  const outcome = resolveAssessmentCompletionClientOutcome({
+    ok: true,
+    status: 'processing',
+    assessmentId: 'assessment-1',
+  })
+
+  assert.equal(outcome.redirectTo, '/individual/results')
+  assert.notEqual(outcome.redirectTo, '/dashboard')
+})
+
 test('completion outcome redirects to results and surfaces explicit failure state and warning copy', () => {
   const outcome = resolveAssessmentCompletionClientOutcome({
     ok: true,
+    status: 'failed',
     assessmentId: 'assessment-1',
-    assessmentStatus: 'completed',
-    resultStatus: 'failed',
-    resultId: 'result-1',
-    warning: {
+    failure: {
       code: 'RESULT_GENERATION_FAILED',
       message: 'Assessment was completed but result generation failed.',
     },
   })
 
   assert.deepEqual(outcome, {
-    redirectTo: '/individual/results',
+    redirectTo: null,
     lifecycleState: 'error',
     workspaceEntryState: 'attention_required',
-    clearActiveAssessment: true,
+    clearActiveAssessment: false,
     notice: 'Assessment was completed but result generation failed.',
   })
 })
