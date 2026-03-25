@@ -141,6 +141,34 @@ test('organisation registry row mapping skips incomplete rows and normalises cou
   })
 })
 
+test('organisation registry row mapping retains persisted organisations with zero memberships', () => {
+  const mapped = mapOrganisationRegistryRows([
+    {
+      id: 'org-empty',
+      name: 'Empty Tenant',
+      slug: 'empty-tenant',
+      country: 'United States',
+      status: 'active',
+      plan_tier: 'growth',
+      created_at: '2026-03-15T00:00:00Z',
+      updated_at: '2026-03-20T00:00:00Z',
+      membership_count: 0,
+      active_membership_count: 0,
+      invited_membership_count: 0,
+      inactive_membership_count: 0,
+      owner_count: 0,
+      admin_count: 0,
+      multi_org_member_count: 0,
+      last_membership_activity_at: null,
+      last_audit_activity_at: null,
+    },
+  ])
+
+  assert.equal(mapped.length, 1)
+  assert.equal(mapped[0]?.id, 'org-empty')
+  assert.equal(mapped[0]?.membershipCount, 0)
+})
+
 test('organisation registry domain mapping and filters preserve lifecycle and posture contracts', () => {
   const data = mapOrganisationRegistryDtosToDomainData([
     {

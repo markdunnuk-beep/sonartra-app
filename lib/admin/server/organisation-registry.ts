@@ -192,3 +192,5 @@ export async function getAdminOrganisationRegistryData(): Promise<AdminOrganisat
 
   return mapOrganisationRegistryRows(result.rows ?? [])
 }
+
+export const listAdminOrganisations = getAdminOrganisationRegistryData

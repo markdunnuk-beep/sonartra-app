@@ -157,6 +157,19 @@ test('admin access registry loader sequences collection queries to avoid pool fa
       return { rows: [{ identity_id: 'identity-1', key: 'internal_admin', label: 'Internal admin', organisation_id: null }] }
     }
 
+    if (/from users/i.test(sql)) {
+      return {
+        rows: [{
+          id: 'user-1',
+          email: 'alex@example.com',
+          first_name: 'Alex',
+          last_name: 'Mercer',
+          external_auth_id: 'user_123',
+          created_at: '2026-03-01T10:00:00.000Z',
+        }],
+      }
+    }
+
     if (/from organisation_memberships/i.test(sql)) {
       return {
         rows: [{
@@ -198,15 +211,45 @@ test('admin access registry loader sequences collection queries to avoid pool fa
   assert.deepEqual(
     tracked.calls.map(({ sql }) => {
       if (/from admin_identities/i.test(sql)) return 'identities'
+      if (/from users/i.test(sql)) return 'users'
       if (/from admin_identity_roles/i.test(sql)) return 'roles'
       if (/from organisation_memberships/i.test(sql)) return 'memberships'
       if (/from access_audit_events/i.test(sql)) return 'audit'
       return 'unknown'
     }),
-    ['identities', 'roles', 'memberships', 'audit'],
+    ['identities', 'users', 'roles', 'memberships', 'audit'],
   )
   assert.equal(result[0]?.id, 'identity-1')
   assert.equal(result[0]?.roles?.length, 1)
+})
+
+test('admin access registry includes persisted app users even when admin registry identity rows are missing', async () => {
+  const tracked = createTrackedQueryDb((sql) => {
+    if (/from admin_identities/i.test(sql)) return { rows: [] }
+    if (/from users/i.test(sql)) {
+      return {
+        rows: [{
+          id: 'user-standalone-1',
+          email: 'dummy.user@example.com',
+          first_name: 'Dummy',
+          last_name: 'User',
+          external_auth_id: 'clerk_dummy_user',
+          created_at: '2026-03-24T09:00:00.000Z',
+        }],
+      }
+    }
+    if (/from admin_identity_roles/i.test(sql)) return { rows: [] }
+    if (/from organisation_memberships/i.test(sql)) return { rows: [] }
+    if (/from access_audit_events/i.test(sql)) return { rows: [] }
+
+    throw new Error(`Unexpected SQL in access-registry synthetic-user test: ${sql}`)
+  })
+
+  const result = await getAdminAccessRegistryData({ queryDb: tracked.queryDb as never })
+
+  assert.equal(result.length, 1)
+  assert.equal(result[0]?.email, 'dummy.user@example.com')
+  assert.equal(result[0]?.memberships?.length ?? 0, 0)
 })
 
 test('admin audit workspace loader runs schema, event, and lookup queries without overlapping DB work', async () => {
