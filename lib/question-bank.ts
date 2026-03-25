@@ -2,6 +2,7 @@ import { AssessmentRow, AssessmentVersionRow } from '@/lib/assessment-types';
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2';
 import { HYBRID_MVP_CONTRACT_VERSION, type HybridMvpAssessmentDefinition } from '@/lib/assessment/hybrid-mvp-scoring';
 import { buildV2QuestionDeliveryContract } from '@/lib/server/live-assessment-v2';
+import { getMaterializedRuntimeVersionByAssessmentVersionId, getRuntimeV2OptionsForQuestions, getRuntimeV2Questions } from '@/lib/server/runtime-v2-repository';
 import { queryDb } from '@/lib/db';
 import {
   AssessmentQuestionSetRow,
@@ -100,6 +101,40 @@ function mapV2ContractToLegacyQuestions(runtime: ReturnType<typeof buildV2Questi
       numeric_value: toLegacyNumericOptionValue(option.value, optionIndex + 1),
     })),
   }))
+}
+
+function mapRuntimeV2RowsToLegacyQuestions(input: {
+  questions: Array<{ question_id: string; text: string; display_order: number }>
+  options: Array<{ option_id: string; question_id: string; text: string; display_order: number }>
+}): QuestionPayload[] {
+  const optionsByQuestion = new Map<string, Array<{ option_id: string; text: string; display_order: number }>>()
+
+  for (const option of input.options) {
+    const list = optionsByQuestion.get(option.question_id) ?? []
+    list.push({ option_id: option.option_id, text: option.text, display_order: option.display_order })
+    optionsByQuestion.set(option.question_id, list)
+  }
+
+  return input.questions
+    .slice()
+    .sort((left, right) => left.display_order - right.display_order || left.question_id.localeCompare(right.question_id))
+    .map((question, index) => ({
+      question_number: index + 1,
+      question_key: question.question_id,
+      prompt: question.text,
+      section_key: 'runtime_v2',
+      section_name: 'Runtime V2',
+      reverse_scored: false,
+      options: (optionsByQuestion.get(question.question_id) ?? [])
+        .slice()
+        .sort((left, right) => left.display_order - right.display_order || left.option_id.localeCompare(right.option_id))
+        .map((option) => ({
+          option_key: option.option_id,
+          option_text: option.text,
+          display_order: option.display_order,
+          numeric_value: option.display_order,
+        })),
+    }))
 }
 
 function mapV2ResponsesToLegacyRows(input: {
@@ -365,6 +400,48 @@ export async function getQuestionsByAssessmentIdWithDependencies(
   if (!version) return null;
 
   if (version.package_schema_version === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
+    const runtimeVersion = await getMaterializedRuntimeVersionByAssessmentVersionId(version.id)
+    if (runtimeVersion) {
+      const [runtimeQuestions, runtimeOptions] = await Promise.all([
+        getRuntimeV2Questions(runtimeVersion.id),
+        getRuntimeV2OptionsForQuestions(runtimeVersion.id),
+      ])
+      const questions = mapRuntimeV2RowsToLegacyQuestions({ questions: runtimeQuestions, options: runtimeOptions })
+
+      const responsesResult = await dependencies.queryDb<AssessmentResponseLiteRow>(
+        `SELECT question_id, response_value, response_time_ms, is_changed, updated_at
+         FROM assessment_responses
+         WHERE assessment_id = $1
+         ORDER BY question_id ASC`,
+        [assessmentId]
+      )
+
+      return {
+        assessment: {
+          id: assessment.id,
+          status: assessment.status,
+          progressCount: assessment.progress_count,
+          progressPercent: Number(assessment.progress_percent),
+          currentQuestionIndex: assessment.current_question_index,
+        },
+        version: {
+          id: version.id,
+          key: version.key,
+          name: version.name,
+          totalQuestions: version.total_questions,
+          isActive: version.is_active,
+        },
+        questionSet: {
+          id: `runtime-v2:${runtimeVersion.id}`,
+          key: `runtime-v2:${version.key}`,
+          name: `${version.name} Runtime Contract v2`,
+          description: 'Materialized Runtime Contract v2 question delivery model.',
+        },
+        questions,
+        responses: responsesResult.rows,
+      }
+    }
+
     const pkg = parseStoredValidatedAssessmentPackageV2(version.definition_payload)
     if (!pkg) return null
 
