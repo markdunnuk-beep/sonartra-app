@@ -1,7 +1,6 @@
 import type { AssessmentResultRow } from '@/lib/assessment-types'
 import type { AssessmentRepositoryItem } from '@/lib/assessment/assessment-repository-types'
 import { loadLiveAssessmentRepositoryInventory } from '@/lib/server/assessment-repository-inventory'
-import { INDIVIDUAL_ASSESSMENT_DEFINITION_CATEGORY_SQL } from '@/lib/server/assessment-definition-category'
 import { queryDb } from '@/lib/db'
 import { buildIndividualResultsCategorySqlPredicate } from '@/lib/assessment/assessment-category-taxonomy'
 
@@ -121,7 +120,6 @@ export async function loadIndividualResultsViewModel(
      LEFT JOIN assessment_versions av ON av.id = COALESCE(ar.assessment_version_id, a.assessment_version_id)
      LEFT JOIN assessment_definitions ad ON ad.id = av.assessment_definition_id
      WHERE a.user_id = $1
-       AND a.organisation_id IS NULL
        AND (
          ${buildIndividualResultsCategorySqlPredicate('ad.category')}
        )
