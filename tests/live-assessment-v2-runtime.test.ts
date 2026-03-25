@@ -345,7 +345,7 @@ test('getAdminAssessmentVersionReadiness keeps publish gating truthful for runna
   assert.equal(readiness.checks.find((check) => check.key === 'runtime_execution_path')?.status, 'pass')
 })
 
-test('getAdminAssessmentVersionReadiness does not overstate live support when runtime report evidence is missing', async () => {
+test('getAdminAssessmentVersionReadiness treats canonical v2 packages as runtime-ready when live runtime support is derivable', async () => {
   const pkg = await loadExamplePackage()
   const readiness = getAdminAssessmentVersionReadiness({
     packageInfo: {
@@ -367,8 +367,8 @@ test('getAdminAssessmentVersionReadiness does not overstate live support when ru
     latestSuiteSnapshot: null,
   })
 
-  assert.equal(readiness.checks.find((check) => check.key === 'runtime_execution_path')?.status, 'fail')
-  assert.equal(readiness.status, 'not_ready')
+  assert.equal(readiness.checks.find((check) => check.key === 'runtime_execution_path')?.status, 'pass')
+  assert.notEqual(readiness.status, 'not_ready')
 })
 
 test('evaluateCompletedV2Assessment treats duplicate submits during scoring handoff as pending instead of regenerating results', async () => {
