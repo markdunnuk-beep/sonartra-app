@@ -389,6 +389,14 @@ export async function evaluateCompletedHybridAssessment(input: {
 }> {
   const runInTransaction = deps.withTransactionFn ?? withTransaction
   const getLatestResultSnapshot = deps.getLatestResultSnapshot ?? getLatestAssessmentResultSnapshot
+  let stage:
+    | 'lifecycle_load'
+    | 'score'
+    | 'build_payload'
+    | 'persist_complete_result'
+    | 'persist_failed_result'
+    | 'update_scoring_status'
+    = 'lifecycle_load'
 
   const lifecycle = await runInTransaction(async (client) => {
     const row = await loadHybridCompletionRuntimeRow(input.assessmentId, input.ownerUserId, client, { forUpdate: true })
@@ -482,6 +490,7 @@ export async function evaluateCompletedHybridAssessment(input: {
   }
 
   try {
+    stage = 'score'
     const scored = scoreHybridMvpAssessment(lifecycle.resolved.definition, lifecycle.responses)
     if (!scored.ok) {
       return {
@@ -494,6 +503,7 @@ export async function evaluateCompletedHybridAssessment(input: {
     }
 
     const scoredAt = new Date().toISOString()
+    stage = 'build_payload'
     const payload = buildHybridResultPayload({
       definition: lifecycle.resolved.definition,
       scored: scored.result,
@@ -507,6 +517,7 @@ export async function evaluateCompletedHybridAssessment(input: {
       },
     })
 
+    stage = 'persist_complete_result'
     const persisted = await runInTransaction(async (client) => {
       const result = await input.persistResult({
         assessmentId: input.assessmentId,
@@ -524,6 +535,7 @@ export async function evaluateCompletedHybridAssessment(input: {
         },
       }, client)
 
+      stage = 'update_scoring_status'
       await client.query(
         `UPDATE assessments
          SET scoring_status = 'scored',
@@ -545,38 +557,60 @@ export async function evaluateCompletedHybridAssessment(input: {
       },
     }
   } catch (error) {
-    const failedResult = await runInTransaction(async (client) => {
-      const result = await input.persistResult({
-        assessmentId: input.assessmentId,
-        assessmentVersionId: lifecycle.assessment.assessment_version_id,
-        versionKey: lifecycle.assessment.assessment_version_key,
-        status: 'failed',
-        completedAt: lifecycle.assessment.completed_at,
-        scoredAt: null,
-        resultPayload: {
-          contractVersion: HYBRID_MVP_CONTRACT_VERSION,
-          failure: {
-            stage: 'completion_orchestration',
-            category: 'runtime_error',
-            code: 'RESULT_GENERATION_FAILED',
-            message: error instanceof Error ? error.message : 'Unexpected hybrid runtime failure.',
-            occurredAt: new Date().toISOString(),
-            assessmentVersionKey: lifecycle.assessment.assessment_version_key,
-          },
-        },
-        responseQualityPayload: null,
-      }, client)
-
-      await client.query(
-        `UPDATE assessments
-         SET scoring_status = 'failed',
-             updated_at = NOW()
-         WHERE id = $1`,
-        [input.assessmentId],
-      )
-
-      return result
+    const err = error instanceof Error ? error : new Error('Unexpected hybrid runtime failure.')
+    console.error('[assessment.complete.hybrid] completion failed', {
+      assessmentId: input.assessmentId,
+      stage,
+      message: err.message,
+      stack: err.stack,
     })
+
+    let failedResultId: string | null = null
+    try {
+      stage = 'persist_failed_result'
+      const failedResult = await runInTransaction(async (client) => {
+        const result = await input.persistResult({
+          assessmentId: input.assessmentId,
+          assessmentVersionId: lifecycle.assessment.assessment_version_id,
+          versionKey: lifecycle.assessment.assessment_version_key,
+          status: 'failed',
+          completedAt: lifecycle.assessment.completed_at,
+          scoredAt: null,
+          resultPayload: {
+            contractVersion: HYBRID_MVP_CONTRACT_VERSION,
+            failure: {
+              stage: 'completion_orchestration',
+              category: 'runtime_error',
+              code: 'RESULT_GENERATION_FAILED',
+              message: err.message,
+              occurredAt: new Date().toISOString(),
+              assessmentVersionKey: lifecycle.assessment.assessment_version_key,
+            },
+          },
+          responseQualityPayload: null,
+        }, client)
+
+        stage = 'update_scoring_status'
+        await client.query(
+          `UPDATE assessments
+           SET scoring_status = 'failed',
+               updated_at = NOW()
+           WHERE id = $1`,
+          [input.assessmentId],
+        )
+
+        return result
+      })
+      failedResultId = failedResult.assessmentResultId
+    } catch (persistError) {
+      const persistErr = persistError instanceof Error ? persistError : new Error('Unknown failed-result persist error')
+      console.error('[assessment.complete.hybrid] unable to persist failed result', {
+        assessmentId: input.assessmentId,
+        stage,
+        message: persistErr.message,
+        stack: persistErr.stack,
+      })
+    }
 
     return {
       httpStatus: 200,
@@ -585,7 +619,7 @@ export async function evaluateCompletedHybridAssessment(input: {
         assessmentId: input.assessmentId,
         assessmentStatus: 'completed',
         resultStatus: 'failed',
-        resultId: failedResult.assessmentResultId,
+        resultId: failedResultId,
         warning: {
           code: 'RESULT_GENERATION_FAILED',
           message: 'Assessment was completed but result generation failed.',

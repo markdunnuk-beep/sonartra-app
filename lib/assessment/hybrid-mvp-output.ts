@@ -54,7 +54,14 @@ function formatPercent(value: number): string {
 }
 
 function renderTemplate(template: string, tokens: Record<string, string>): string {
-  return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, tokenKey: string) => tokens[tokenKey] ?? '')
+  return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, tokenKey: string) => {
+    const token = tokens[tokenKey]
+    return typeof token === 'string' ? token : ''
+  })
+}
+
+function resolveTemplateString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null
 }
 
 function defaultSignalNarrative(input: {
@@ -83,7 +90,7 @@ function resolveSignalNarrative(input: {
   rank: number
 }): { text: string; templateRef: string } {
   const templateSet = input.definition.outputTemplates?.signalNarratives?.[input.signalId]
-  const selectedTemplate = templateSet?.[input.bucket] ?? templateSet?.default
+  const selectedTemplate = resolveTemplateString(templateSet?.[input.bucket] ?? templateSet?.default)
 
   const tokens = {
     signalLabel: input.signalLabel,
@@ -92,7 +99,7 @@ function resolveSignalNarrative(input: {
     rank: String(input.rank),
   }
 
-  if (selectedTemplate) {
+  if (selectedTemplate !== null) {
     return {
       text: renderTemplate(selectedTemplate, tokens),
       templateRef: `signal:${input.signalId}:${templateSet?.[input.bucket] ? input.bucket : 'default'}`,
@@ -115,8 +122,8 @@ function resolveOverviewNarrative(input: {
 
   if (templateSet && input.topBucket) {
     const key = input.topBucket === 'high' ? 'highPerformer' : input.topBucket === 'low' ? 'developingProfile' : 'balancedProfile'
-    const selectedTemplate = templateSet[key] ?? templateSet.default
-    if (selectedTemplate) {
+    const selectedTemplate = resolveTemplateString(templateSet[key] ?? templateSet.default)
+    if (selectedTemplate !== null) {
       return {
         text: renderTemplate(selectedTemplate, {
           assessmentLabel: input.definition.assessmentKey,
@@ -288,9 +295,11 @@ export function buildHybridMvpTemplatedReport(input: HybridMvpOutputInput): Hybr
     const topDomainSignal = domainVector.vector[0]
     const topDomainSignalMeta = topDomainSignal ? signalById[topDomainSignal.signalId] : null
     const domainLabel = domainVector.domainId ? (domainById[domainVector.domainId]?.label ?? domainVector.domainId) : 'Cross-domain'
-    const template = domainVector.domainId ? input.definition.outputTemplates?.domainNarratives?.[domainVector.domainId]?.summary : null
+    const template = domainVector.domainId
+      ? resolveTemplateString(input.definition.outputTemplates?.domainNarratives?.[domainVector.domainId]?.summary)
+      : null
 
-    const body = template
+    const body = template !== null
       ? renderTemplate(template, {
           domainLabel,
           topSignalLabel: topDomainSignalMeta?.label ?? 'No dominant signal',
@@ -305,7 +314,7 @@ export function buildHybridMvpTemplatedReport(input: HybridMvpOutputInput): Hybr
       sourceType: 'domain',
       sourceId: domainVector.domainId ?? 'global',
       reason: 'one summary block per aggregation domain in deterministic order',
-      templateRef: template ? `domain:${domainVector.domainId}:summary` : 'default:domain:summary',
+      templateRef: template !== null ? `domain:${domainVector.domainId}:summary` : 'default:domain:summary',
     })
 
     return {
@@ -316,7 +325,7 @@ export function buildHybridMvpTemplatedReport(input: HybridMvpOutputInput): Hybr
       meta: {
         sourceType: 'domain',
         sourceId: domainVector.domainId ?? 'global',
-        templateRef: template ? `domain:${domainVector.domainId}:summary` : 'default:domain:summary',
+        templateRef: template !== null ? `domain:${domainVector.domainId}:summary` : 'default:domain:summary',
       },
     }
   })
