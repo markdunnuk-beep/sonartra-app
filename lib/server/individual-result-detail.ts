@@ -3,7 +3,6 @@ import { queryDb } from '@/lib/db'
 import { buildIndividualResultsCategorySqlPredicate } from '@/lib/assessment/assessment-category-taxonomy'
 import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
-import { INDIVIDUAL_ASSESSMENT_DEFINITION_CATEGORY_SQL } from '@/lib/server/assessment-definition-category'
 import { parseHybridMvpResultPayload } from '@/lib/server/hybrid-mvp-result'
 import {
   buildLiveAssessmentUserResultContract,
@@ -108,7 +107,6 @@ export async function loadIndividualResultDetailById(
      LEFT JOIN assessment_definitions ad ON ad.id = av.assessment_definition_id
      WHERE ar.id = $1
        AND a.user_id = $2
-       AND a.organisation_id IS NULL
        AND (
          ${buildIndividualResultsCategorySqlPredicate('ad.category')}
        )
