@@ -1,6 +1,7 @@
 import type { AssessmentResultRow, AssessmentRow } from '@/lib/assessment-types'
 import type { IntegrityOutputNoticeV2, WebSummaryOutputV2 } from '@/lib/admin/domain/assessment-package-v2-materialization'
 import { getUserFacingAssessmentReportViewModel, type UserFacingAssessmentReportViewModel } from '@/lib/server/assessment-report-artifacts'
+import { parseRuntimeV2ReadyPayload } from '@/lib/server/runtime-v2-readiness'
 
 export type LiveAssessmentResultStatus =
   | 'not_started'
@@ -81,7 +82,8 @@ function isIntegrityNotice(value: unknown): value is IntegrityOutputNoticeV2 {
 }
 
 export function isPackageContractV2Result(result: AssessmentResultRow | null | undefined): boolean {
-  return Boolean(isRecord(result?.result_payload) && result?.result_payload.contractVersion === 'package_contract_v2')
+  if (!isRecord(result?.result_payload)) return false
+  return result.result_payload.contractVersion === 'package_contract_v2' || result.result_payload.resultFormat === 'runtime_v2'
 }
 
 export function hasUserFacingV2Summary(result: AssessmentResultRow | null | undefined): boolean {
@@ -94,7 +96,35 @@ export function hasUserFacingV2Summary(result: AssessmentResultRow | null | unde
   return outputs.some((entry) => isWebSummaryOutput(entry) && entry.visibleInProduct !== false)
 }
 
+
+function buildRuntimeV2SummaryCards(result: AssessmentResultRow): LiveAssessmentSummaryCard[] {
+  const parsed = parseRuntimeV2ReadyPayload(result.result_payload)
+  if (parsed.state !== 'ready') {
+    return []
+  }
+
+  return parsed.payload.rankedSignals.slice(0, 3).map((signal) => ({
+    id: signal.signalKey,
+    key: signal.signalKey,
+    title: signal.signalKey,
+    label: `${Math.round(signal.percentage * 100) / 100}%`,
+    status: 'available',
+    severity: null,
+    band: signal.domain ?? null,
+    score: signal.percentage,
+    rawScore: signal.score,
+    percentile: null,
+    descriptor: signal.domain ?? null,
+    explanation: `Rank #${signal.rank}`,
+  }))
+}
+
 function buildSummaryCards(result: AssessmentResultRow): LiveAssessmentSummaryCard[] {
+  const runtimeV2Cards = buildRuntimeV2SummaryCards(result)
+  if (runtimeV2Cards.length > 0) {
+    return runtimeV2Cards
+  }
+
   if (!isPackageContractV2Result(result) || !isRecord(result.result_payload)) {
     return []
   }

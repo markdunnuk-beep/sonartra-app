@@ -6,8 +6,6 @@ import {
   type SonartraAssessmentPackageV2ResponseModel,
   type SonartraAssessmentPackageV2ValidatedImport,
 } from '@/lib/admin/domain/assessment-package-v2'
-import type { AssessmentEvaluationResultV2 } from '@/lib/admin/domain/assessment-package-v2-evaluator'
-import type { MaterializedAssessmentOutputsV2 } from '@/lib/admin/domain/assessment-package-v2-materialization'
 import type { AssessmentRow } from '@/lib/assessment-types'
 import { queryDb, withTransaction } from '@/lib/db'
 import {
@@ -16,13 +14,14 @@ import {
   normalizeV2LiveResponseValue,
 } from '@/lib/package-contract-v2-live-runtime'
 import { getLatestAssessmentResultSnapshot } from '@/lib/server/assessment-results'
-import { executeLiveRuntimeBundleWithCompatibility, resolveLiveRuntimeRoutingDecision } from '@/lib/server/live-runtime-execution-adapter'
-import { mapLiveRuntimeExecutionToPersistedCompatibilityPayload } from '@/lib/server/live-runtime-result-compat'
+import { resolveLiveRuntimeRoutingDecision } from '@/lib/server/live-runtime-execution-adapter'
+import { normalizeRuntimeV2Scores } from '@/lib/server/runtime-v2-normalizer'
+import { buildRuntimeV2ResultPayload } from '@/lib/server/runtime-v2-result-builder'
+import { parseRuntimeV2ReadyPayload } from '@/lib/server/runtime-v2-readiness'
+import { scoreRuntimeV2Assessment } from '@/lib/server/runtime-v2-scorer'
 import {
-  getMaterializedRuntimeVersionByAssessmentVersionId,
-  getRuntimeV2MappingsForOptions,
-  getRuntimeV2OptionsForQuestions,
-  getRuntimeV2Questions,
+  getMaterializationFingerprint,
+  getRuntimeV2AssessmentExecutionModelByVersionId,
 } from '@/lib/server/runtime-v2-repository'
 
 export type LiveAssessmentContractVersion = 'legacy_v1' | 'package_contract_v2'
@@ -100,23 +99,6 @@ export interface V2LiveQuestionDeliveryContract {
     updatedAt: string | null
   }>
 }
-
-export interface V2PersistedEvaluationArtifact {
-  contractVersion: 'package_contract_v2'
-  runtimeVersion: string
-  packageSchemaVersion: typeof SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2
-  packageMetadata: {
-    assessmentKey: string
-    assessmentName: string
-    packageSemver: string
-  }
-  evaluation: AssessmentEvaluationResultV2
-  materializedOutputs: V2PersistedMaterializedOutputs
-  completedAt: string | null
-  scoredAt: string | null
-}
-
-export type V2PersistedMaterializedOutputs = MaterializedAssessmentOutputsV2
 
 export interface LiveRuntimeEligibilityResult {
   eligible: boolean
@@ -597,8 +579,10 @@ export async function evaluateCompletedV2Assessment(input: {
   }
 
   try {
-    const runtimeVersion = await getMaterializedRuntimeVersionByAssessmentVersionId(lifecycle.assessment.assessment_version_id)
-    if (!runtimeVersion) {
+    const executionModel = await getRuntimeV2AssessmentExecutionModelByVersionId({
+      assessmentVersionId: lifecycle.assessment.assessment_version_id,
+    })
+    if (!executionModel) {
       return {
         httpStatus: 409,
         body: {
@@ -608,49 +592,55 @@ export async function evaluateCompletedV2Assessment(input: {
       }
     }
 
-    const [runtimeQuestions, runtimeOptions, runtimeMappings] = await Promise.all([
-      getRuntimeV2Questions(runtimeVersion.id),
-      getRuntimeV2OptionsForQuestions(runtimeVersion.id),
-      getRuntimeV2MappingsForOptions(runtimeVersion.id),
-    ])
-    const optionByQuestionAndOrder = new Map(runtimeOptions.map((option) => [`${option.question_id}:${option.display_order}`, option.option_id]))
-    const mappedQuestionIds = new Set(runtimeQuestions.map((question) => question.question_id))
+    const optionByQuestionAndOrder = new Map(
+      Object.entries(executionModel.optionsByQuestionId)
+        .flatMap(([questionId, options]) => options.map((option) => [`${questionId}:${option.display_order}`, option.option_id] as const)),
+    )
 
-    for (const [questionId, value] of Object.entries(lifecycle.responses)) {
-      if (!mappedQuestionIds.has(questionId)) {
-        throw new Error(`Runtime v2 completion input has unknown question id "${questionId}".`)
+    const resolvedResponses = Object.entries(lifecycle.responses).flatMap(([questionId, responseValue]) => {
+      if (typeof responseValue === 'string' && responseValue.length > 0) {
+        return [{ questionId, optionId: responseValue }]
       }
-      if (typeof value === 'number' && !optionByQuestionAndOrder.get(`${questionId}:${value}`)) {
-        throw new Error(`Runtime v2 completion input has unknown option for question "${questionId}" and response "${value}".`)
+      if (typeof responseValue === 'number') {
+        const optionId = optionByQuestionAndOrder.get(`${questionId}:${responseValue}`)
+        if (optionId) {
+          return [{ questionId, optionId }]
+        }
       }
+      return []
+    })
+
+    const scoring = scoreRuntimeV2Assessment({
+      runtimeVersionId: executionModel.runtimeVersionId,
+      responses: resolvedResponses,
+      executionModel,
+    })
+    const normalization = normalizeRuntimeV2Scores({
+      rawSignalScores: scoring.rawSignalScores,
+      executionModel,
+    })
+    const materializationFingerprint = await getMaterializationFingerprint(lifecycle.assessment.assessment_version_id)
+    const payload = buildRuntimeV2ResultPayload({
+      executionModel,
+      scoring,
+      normalization,
+      assessmentVersionId: lifecycle.assessment.assessment_version_id,
+      materializationFingerprint: materializationFingerprint ?? undefined,
+    })
+
+    const readiness = parseRuntimeV2ReadyPayload(payload)
+    if (readiness.state !== 'ready') {
+      throw new Error(`Runtime v2 result payload failed readiness validation before persistence: ${readiness.reason}`)
     }
 
     const scoredAt = new Date().toISOString()
-    const executed = executeLiveRuntimeBundleWithCompatibility({
-      storedDefinitionPayload: lifecycle.assessment.definition_payload,
-      packageValidationReport: lifecycle.assessment.package_validation_report_json,
-      responses: lifecycle.responses,
-      evaluationId: `live-${input.assessmentId}`,
-      evaluationTimestamp: scoredAt,
+    console.info('[live-assessment-v2] runtime-v2 completion', {
+      assessmentId: input.assessmentId,
+      runtimeVersionId: executionModel.runtimeVersionId,
+      matchedResponseCount: scoring.matchedResponseCount,
+      unmatchedResponseCount: scoring.unmatchedResponses.length,
+      topSignalKey: normalization.topSignalKey,
     })
-    const runtimeExecution = executed.executionResult.executionResult
-    if (!runtimeExecution) {
-      throw new Error('Live runtime execution did not produce a compiled execution result.')
-    }
-    const payload: V2PersistedEvaluationArtifact = mapLiveRuntimeExecutionToPersistedCompatibilityPayload({
-      bundle: executed.bundle,
-      execution: runtimeExecution,
-      evaluation: executed.compatibility.evaluation,
-      materializedOutputs: executed.compatibility.materializedOutputs,
-      completedAt: lifecycle.assessment.completed_at,
-      scoredAt,
-    })
-    ;(payload as unknown as Record<string, unknown>).runtimeV2InputResolution = {
-      runtimeVersionId: runtimeVersion.id,
-      questionCount: runtimeQuestions.length,
-      optionCount: runtimeOptions.length,
-      mappingCount: runtimeMappings.length,
-    }
 
     const persisted = await runInTransaction(async (client) => {
       const result = await input.persistResult({
@@ -662,17 +652,11 @@ export async function evaluateCompletedV2Assessment(input: {
         scoredAt,
         resultPayload: payload as unknown as Record<string, unknown>,
         responseQualityPayload: {
-          contractVersion: 'package_contract_v2',
-          technicalDiagnostics: executed.compatibility.materializedOutputs.technicalDiagnostics,
-          integrityNoticeCount: executed.compatibility.materializedOutputs.integrityNotices.length,
-          webSummaryOutputCount: executed.compatibility.materializedOutputs.webSummaryOutputs.length,
-          runtimeRouting: {
-            supported: executed.routing.liveRuntimeSupported,
-            reasonCode: executed.routing.reasonCode,
-            reason: executed.routing.reason,
-            blockedReasons: executed.routing.blockedReasons,
-            debug: executed.routing.debug,
-          },
+          contractVersion: 'runtime_v2',
+          runtimeVersionId: executionModel.runtimeVersionId,
+          matchedResponseCount: scoring.matchedResponseCount,
+          unmatchedResponseCount: scoring.unmatchedResponses.length,
+          unmatchedResponses: scoring.unmatchedResponses,
         },
       }, client)
       await client.query(

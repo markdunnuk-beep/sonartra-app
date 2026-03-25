@@ -5,6 +5,7 @@ import { getAssessmentResultReportArtifactSelectProjection } from '@/lib/server/
 import type { AssessmentAssignmentStatus } from '@/lib/server/assessment-assignments';
 import { markAssignmentFailed, markAssignmentResultReady } from '@/lib/server/assessment-assignments';
 import { reconcileIndividualLifecycle } from '@/lib/server/individual-assessment-lifecycle-reconciliation';
+import { parseRuntimeV2ReadyPayload } from '@/lib/server/runtime-v2-readiness';
 
 export type IndividualLifecycleState = 'not_started' | 'in_progress' | 'completed_processing' | 'ready' | 'error';
 
@@ -240,8 +241,22 @@ export async function resolveIndividualLifecycleState(
     })
   }
 
-  const latestReadySignalCount = latestReadyResult ? await deps.getSignalCountByResultId(latestReadyResult.id) : 0;
-  const readySummary = latestReadyResult
+  const latestRuntimeV2ReadyState = latestReadyResult ? parseRuntimeV2ReadyPayload(latestReadyResult.result_payload) : null
+  if (latestReadyResult && (latestReadyResult.result_payload as Record<string, unknown> | null)?.resultFormat === 'runtime_v2' && latestRuntimeV2ReadyState?.state !== 'ready') {
+    console.warn('[assessment-readiness] runtime-v2 ready snapshot rejected', {
+      resultId: latestReadyResult.id,
+      reason: latestRuntimeV2ReadyState?.reason,
+    })
+  }
+
+  const latestReadyIsUsable = latestReadyResult
+    ? ((latestReadyResult.result_payload as Record<string, unknown> | null)?.resultFormat === 'runtime_v2'
+      ? latestRuntimeV2ReadyState?.state === 'ready'
+      : true)
+    : false
+
+  const latestReadySignalCount = latestReadyResult && latestReadyIsUsable ? await deps.getSignalCountByResultId(latestReadyResult.id) : 0;
+  const readySummary = latestReadyResult && latestReadyIsUsable
     ? toSnapshotSummary(latestReadyResult, latestReadySignalCount)
     : null;
 
