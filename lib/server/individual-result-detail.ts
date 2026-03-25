@@ -1,6 +1,6 @@
 import type { AssessmentResultRow, AssessmentResultSignalRow } from '@/lib/assessment-types'
-import { queryDb } from '@/lib/db'
-import { buildIndividualResultsCategorySqlPredicate } from '@/lib/assessment/assessment-category-taxonomy'
+import { queryDb as defaultQueryDb } from '@/lib/db'
+import { buildIndividualResultsCategorySqlPredicate } from '@/lib/server/assessment-definition-category'
 import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
 import { parseHybridMvpResultPayload } from '@/lib/server/hybrid-mvp-result'
@@ -75,13 +75,25 @@ function buildLayerSummaries(signals: IndividualResultSignalSummary[]): Individu
     })
 }
 
-export async function loadIndividualResultDetailById(resultId: string): Promise<IndividualResultApiResponse> {
-  const appUser = await resolveAuthenticatedAppUser()
+
+interface IndividualResultDetailDependencies {
+  resolveAuthenticatedAppUser: typeof resolveAuthenticatedAppUser
+  queryDb: typeof defaultQueryDb
+}
+
+const defaultDependencies: IndividualResultDetailDependencies = {
+  resolveAuthenticatedAppUser,
+  queryDb: defaultQueryDb,
+}
+
+export async function loadIndividualResultDetailById(resultId: string, dependencies: Partial<IndividualResultDetailDependencies> = {}): Promise<IndividualResultApiResponse> {
+  const deps = { ...defaultDependencies, ...dependencies }
+  const appUser = await deps.resolveAuthenticatedAppUser()
   if (!appUser) {
     return { ok: false, state: 'unauthenticated', message: 'Authentication required.' }
   }
 
-  const resultRow = await queryDb<ResultDetailRow>(
+  const resultRow = await deps.queryDb<ResultDetailRow>(
     `SELECT ar.id, ar.assessment_id, ar.assessment_version_id, ar.version_key, ar.scoring_model_key, ar.snapshot_version,
             ar.status, ar.result_payload, ar.response_quality_payload, ar.completed_at, ar.scored_at, ar.created_at, ar.updated_at,
             a.started_at AS assessment_started_at,
@@ -175,7 +187,7 @@ export async function loadIndividualResultDetailById(resultId: string): Promise<
     }
   }
 
-  const signalsResult = await queryDb<AssessmentResultSignalRow>(
+  const signalsResult = await deps.queryDb<AssessmentResultSignalRow>(
     `SELECT id, assessment_result_id, layer_key, signal_key, raw_total, max_possible,
             normalised_score, relative_share, rank_in_layer, is_primary, is_secondary,
             percentile_placeholder, confidence_flag, created_at

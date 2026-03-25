@@ -2,7 +2,7 @@ import type { AssessmentResultRow } from '@/lib/assessment-types'
 import type { AssessmentRepositoryItem } from '@/lib/assessment/assessment-repository-types'
 import { loadLiveAssessmentRepositoryInventory } from '@/lib/server/assessment-repository-inventory'
 import { queryDb } from '@/lib/db'
-import { buildIndividualResultsCategorySqlPredicate } from '@/lib/assessment/assessment-category-taxonomy'
+import { buildIndividualResultsCategorySqlPredicate } from '@/lib/server/assessment-definition-category'
 
 export type IndividualAssessmentPrimaryAction = 'start' | 'resume' | 'view_status'
 
