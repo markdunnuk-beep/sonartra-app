@@ -50,8 +50,11 @@ test('assessments contract returns start/resume/view-status actions without resu
 })
 
 test('results contract returns persisted result records and detail targets', async () => {
+  const sqlStatements: string[] = []
   const model = await loadIndividualResultsViewModel('user-1', {
-    queryDb: async () => ({
+    queryDb: async (sql) => {
+      sqlStatements.push(sql)
+      return ({
       rows: [
         {
           id: 'result-1',
@@ -88,11 +91,32 @@ test('results contract returns persisted result records and detail targets', asy
           definition_name: 'Sonartra Signals',
         },
       ],
-    }) as never,
+    }) as never
+    },
   })
 
   assert.equal(model.length, 2)
   assert.equal(model[0]?.readinessState, 'ready')
   assert.equal(model[0]?.detailHref, '/individual/results/result-1')
   assert.equal(model[1]?.readinessState, 'processing')
+  assert.ok(sqlStatements.some((sql) => /LOWER\(BTRIM\(ad\.category\)\) = 'individual'/i.test(sql)))
+})
+
+test('results query treats individual category matching as case-insensitive and null-safe', async () => {
+  const sqlStatements: string[] = []
+
+  await loadIndividualResultsViewModel('user-1', {
+    queryDb: async (sql) => {
+      sqlStatements.push(sql)
+      return { rows: [] } as never
+    },
+  })
+
+  assert.ok(
+    sqlStatements.some(
+      (sql) =>
+        /ad\.category IS NULL/i.test(sql)
+        && /LOWER\(BTRIM\(ad\.category\)\) = 'individual'/i.test(sql),
+    ),
+  )
 })
