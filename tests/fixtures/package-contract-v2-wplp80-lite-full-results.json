@@ -1,0 +1,1082 @@
+{
+  "packageVersion": "2",
+  "schemaVersion": "sonartra-assessment-package/v2",
+  "contractVersion": "2",
+  "assessmentId": "wplp-80-lite-full-results",
+  "metadata": {
+    "assessmentKey": "wplp-80-lite-full-results",
+    "assessmentName": "WPLP-80 Lite (Full Results)",
+    "slug": "wplp-80-lite-full-results",
+    "category": "behaviour",
+    "description": "Compact WPLP-80 package-contract-v2 fixture with complete output narratives for full individual results dashboard testing.",
+    "locales": {
+      "defaultLocale": "en-US",
+      "supportedLocales": [
+        "en-US"
+      ]
+    },
+    "authoring": {
+      "author": "OpenAI Codex",
+      "organization": "Sonartra",
+      "source": "wplp-80-lite-full-results-fixture"
+    },
+    "compatibility": {
+      "packageSemver": "2.0.0-lite-full-results.1",
+      "contractVersion": "2",
+      "compatibleRuntimeRange": ">=2.0.0"
+    },
+    "tags": [
+      "wplp80",
+      "lite",
+      "behaviour",
+      "package-first",
+      "full-results",
+      "individual-results"
+    ]
+  },
+  "responseModels": {
+    "optionSets": [],
+    "models": [
+      {
+        "id": "bs-single-select",
+        "type": "single_select",
+        "options": [
+          {
+            "id": "a",
+            "label": "Drive pace and commit quickly.",
+            "value": 1,
+            "scoreMap": {
+              "bs-driver": 4,
+              "bs-influencer": 1
+            }
+          },
+          {
+            "id": "b",
+            "label": "Validate assumptions before committing.",
+            "value": 2,
+            "scoreMap": {
+              "bs-analyst": 4,
+              "bs-driver": 1
+            }
+          },
+          {
+            "id": "c",
+            "label": "Align people before accelerating.",
+            "value": 3,
+            "scoreMap": {
+              "bs-influencer": 4,
+              "bs-analyst": 1
+            }
+          },
+          {
+            "id": "d",
+            "label": "Balance speed, evidence, and buy-in.",
+            "value": 4,
+            "scoreMap": {
+              "bs-driver": 2,
+              "bs-analyst": 2,
+              "bs-influencer": 2
+            }
+          }
+        ]
+      },
+      {
+        "id": "mo-single-select",
+        "type": "single_select",
+        "options": [
+          {
+            "id": "a",
+            "label": "Stretch outcomes and visible wins.",
+            "value": 1,
+            "scoreMap": {
+              "mo-achievement": 4,
+              "mo-mastery": 1
+            }
+          },
+          {
+            "id": "b",
+            "label": "Deep skill growth and technical quality.",
+            "value": 2,
+            "scoreMap": {
+              "mo-mastery": 4,
+              "mo-stability": 1
+            }
+          },
+          {
+            "id": "c",
+            "label": "Reliable expectations and operating rhythm.",
+            "value": 3,
+            "scoreMap": {
+              "mo-stability": 4,
+              "mo-achievement": 1
+            }
+          },
+          {
+            "id": "d",
+            "label": "A blend of challenge, growth, and consistency.",
+            "value": 4,
+            "scoreMap": {
+              "mo-achievement": 2,
+              "mo-mastery": 2,
+              "mo-stability": 2
+            }
+          }
+        ]
+      },
+      {
+        "id": "ld-single-select",
+        "type": "single_select",
+        "options": [
+          {
+            "id": "a",
+            "label": "Set outcomes and enforce accountability.",
+            "value": 1,
+            "scoreMap": {
+              "ld-results": 4,
+              "ld-process": 1
+            }
+          },
+          {
+            "id": "b",
+            "label": "Coach people and build ownership.",
+            "value": 2,
+            "scoreMap": {
+              "ld-people": 4,
+              "ld-results": 1
+            }
+          },
+          {
+            "id": "c",
+            "label": "Strengthen process and delivery discipline.",
+            "value": 3,
+            "scoreMap": {
+              "ld-process": 4,
+              "ld-people": 1
+            }
+          },
+          {
+            "id": "d",
+            "label": "Integrate outcomes, people, and process.",
+            "value": 4,
+            "scoreMap": {
+              "ld-results": 2,
+              "ld-people": 2,
+              "ld-process": 2
+            }
+          }
+        ]
+      },
+      {
+        "id": "cu-single-select",
+        "type": "single_select",
+        "options": [
+          {
+            "id": "a",
+            "label": "High standards and measurable performance.",
+            "value": 1,
+            "scoreMap": {
+              "cu-performance": 4,
+              "cu-innovation": 1
+            }
+          },
+          {
+            "id": "b",
+            "label": "Shared ownership and team partnership.",
+            "value": 2,
+            "scoreMap": {
+              "cu-collaboration": 4,
+              "cu-performance": 1
+            }
+          },
+          {
+            "id": "c",
+            "label": "Experimentation and continuous adaptation.",
+            "value": 3,
+            "scoreMap": {
+              "cu-innovation": 4,
+              "cu-collaboration": 1
+            }
+          },
+          {
+            "id": "d",
+            "label": "Execution excellence with collaborative learning.",
+            "value": 4,
+            "scoreMap": {
+              "cu-performance": 2,
+              "cu-collaboration": 2,
+              "cu-innovation": 2
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "sections": [
+    {
+      "id": "behaviour-style",
+      "title": "Behaviour Style",
+      "description": "How a person drives pace, judgement, and influence.",
+      "order": 1,
+      "completion": {
+        "kind": "all_required"
+      }
+    },
+    {
+      "id": "motivators",
+      "title": "Motivators",
+      "description": "What conditions sustain strong contribution.",
+      "order": 2,
+      "completion": {
+        "kind": "all_required"
+      }
+    },
+    {
+      "id": "leadership",
+      "title": "Leadership",
+      "description": "How someone leads outcomes, people, and execution.",
+      "order": 3,
+      "completion": {
+        "kind": "all_required"
+      }
+    },
+    {
+      "id": "culture",
+      "title": "Culture",
+      "description": "Which team environment enables best performance.",
+      "order": 4,
+      "completion": {
+        "kind": "all_required"
+      }
+    }
+  ],
+  "dimensions": [
+    {
+      "id": "bs-driver",
+      "label": "Driver",
+      "scoringMethod": "average",
+      "inputQuestionIds": [
+        "q1",
+        "q2",
+        "q3",
+        "q4"
+      ],
+      "minimumAnswered": 4,
+      "missingDataPolicy": "minimum_answer_threshold"
+    },
+    {
+      "id": "bs-analyst",
+      "label": "Analyst",
+      "scoringMethod": "average",
+      "inputQuestionIds": [
+        "q1",
+        "q2",
+        "q3",
+        "q4"
+      ],
+      "minimumAnswered": 4,
+      "missingDataPolicy": "minimum_answer_threshold"
+    },
+    {
+      "id": "bs-influencer",
+      "label": "Influencer",
+      "scoringMethod": "average",
+      "inputQuestionIds": [
+        "q1",
+        "q2",
+        "q3",
+        "q4"
+      ],
+      "minimumAnswered": 4,
+      "missingDataPolicy": "minimum_answer_threshold"
+    },
+    {
+      "id": "mo-achievement",
+      "label": "Achievement",
+      "scoringMethod": "average",
+      "inputQuestionIds": [
+        "q5",
+        "q6",
+        "q7",
+        "q8"
+      ],
+      "minimumAnswered": 4,
+      "missingDataPolicy": "minimum_answer_threshold"
+    },
+    {
+      "id": "mo-mastery",
+      "label": "Mastery",
+      "scoringMethod": "average",
+      "inputQuestionIds": [
+        "q5",
+        "q6",
+        "q7",
+        "q8"
+      ],
+      "minimumAnswered": 4,
+      "missingDataPolicy": "minimum_answer_threshold"
+    },
+    {
+      "id": "mo-stability",
+      "label": "Stability",
+      "scoringMethod": "average",
+      "inputQuestionIds": [
+        "q5",
+        "q6",
+        "q7",
+        "q8"
+      ],
+      "minimumAnswered": 4,
+      "missingDataPolicy": "minimum_answer_threshold"
+    },
+    {
+      "id": "ld-results",
+      "label": "Results",
+      "scoringMethod": "average",
+      "inputQuestionIds": [
+        "q9",
+        "q10",
+        "q11",
+        "q12"
+      ],
+      "minimumAnswered": 4,
+      "missingDataPolicy": "minimum_answer_threshold"
+    },
+    {
+      "id": "ld-people",
+      "label": "People",
+      "scoringMethod": "average",
+      "inputQuestionIds": [
+        "q9",
+        "q10",
+        "q11",
+        "q12"
+      ],
+      "minimumAnswered": 4,
+      "missingDataPolicy": "minimum_answer_threshold"
+    },
+    {
+      "id": "ld-process",
+      "label": "Process",
+      "scoringMethod": "average",
+      "inputQuestionIds": [
+        "q9",
+        "q10",
+        "q11",
+        "q12"
+      ],
+      "minimumAnswered": 4,
+      "missingDataPolicy": "minimum_answer_threshold"
+    },
+    {
+      "id": "cu-performance",
+      "label": "Performance",
+      "scoringMethod": "average",
+      "inputQuestionIds": [
+        "q13",
+        "q14",
+        "q15",
+        "q16"
+      ],
+      "minimumAnswered": 4,
+      "missingDataPolicy": "minimum_answer_threshold"
+    },
+    {
+      "id": "cu-collaboration",
+      "label": "Collaboration",
+      "scoringMethod": "average",
+      "inputQuestionIds": [
+        "q13",
+        "q14",
+        "q15",
+        "q16"
+      ],
+      "minimumAnswered": 4,
+      "missingDataPolicy": "minimum_answer_threshold"
+    },
+    {
+      "id": "cu-innovation",
+      "label": "Innovation",
+      "scoringMethod": "average",
+      "inputQuestionIds": [
+        "q13",
+        "q14",
+        "q15",
+        "q16"
+      ],
+      "minimumAnswered": 4,
+      "missingDataPolicy": "minimum_answer_threshold"
+    }
+  ],
+  "questions": [
+    {
+      "id": "q1",
+      "code": "WPLP80L-BS-01",
+      "prompt": "When a project starts, your default is to:",
+      "responseModelId": "bs-single-select",
+      "sectionIds": [
+        "behaviour-style"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "bs-driver"
+        },
+        {
+          "dimensionId": "bs-analyst"
+        },
+        {
+          "dimensionId": "bs-influencer"
+        }
+      ]
+    },
+    {
+      "id": "q2",
+      "code": "WPLP80L-BS-02",
+      "prompt": "In weekly execution meetings, you are most likely to:",
+      "responseModelId": "bs-single-select",
+      "sectionIds": [
+        "behaviour-style"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "bs-driver"
+        },
+        {
+          "dimensionId": "bs-analyst"
+        },
+        {
+          "dimensionId": "bs-influencer"
+        }
+      ]
+    },
+    {
+      "id": "q3",
+      "code": "WPLP80L-BS-03",
+      "prompt": "When priorities conflict, you typically:",
+      "responseModelId": "bs-single-select",
+      "sectionIds": [
+        "behaviour-style"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "bs-driver"
+        },
+        {
+          "dimensionId": "bs-analyst"
+        },
+        {
+          "dimensionId": "bs-influencer"
+        }
+      ]
+    },
+    {
+      "id": "q4",
+      "code": "WPLP80L-BS-04",
+      "prompt": "Your strongest contribution in fast-moving work is to:",
+      "responseModelId": "bs-single-select",
+      "sectionIds": [
+        "behaviour-style"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "bs-driver"
+        },
+        {
+          "dimensionId": "bs-analyst"
+        },
+        {
+          "dimensionId": "bs-influencer"
+        }
+      ]
+    },
+    {
+      "id": "q5",
+      "code": "WPLP80L-MO-01",
+      "prompt": "You feel most motivated when your work:",
+      "responseModelId": "mo-single-select",
+      "sectionIds": [
+        "motivators"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "mo-achievement"
+        },
+        {
+          "dimensionId": "mo-mastery"
+        },
+        {
+          "dimensionId": "mo-stability"
+        }
+      ]
+    },
+    {
+      "id": "q6",
+      "code": "WPLP80L-MO-02",
+      "prompt": "A role feels rewarding when it gives you:",
+      "responseModelId": "mo-single-select",
+      "sectionIds": [
+        "motivators"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "mo-achievement"
+        },
+        {
+          "dimensionId": "mo-mastery"
+        },
+        {
+          "dimensionId": "mo-stability"
+        }
+      ]
+    },
+    {
+      "id": "q7",
+      "code": "WPLP80L-MO-03",
+      "prompt": "When evaluating an opportunity, you prioritise:",
+      "responseModelId": "mo-single-select",
+      "sectionIds": [
+        "motivators"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "mo-achievement"
+        },
+        {
+          "dimensionId": "mo-mastery"
+        },
+        {
+          "dimensionId": "mo-stability"
+        }
+      ]
+    },
+    {
+      "id": "q8",
+      "code": "WPLP80L-MO-04",
+      "prompt": "The environment that sustains your best work is:",
+      "responseModelId": "mo-single-select",
+      "sectionIds": [
+        "motivators"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "mo-achievement"
+        },
+        {
+          "dimensionId": "mo-mastery"
+        },
+        {
+          "dimensionId": "mo-stability"
+        }
+      ]
+    },
+    {
+      "id": "q9",
+      "code": "WPLP80L-LD-01",
+      "prompt": "When leading a critical initiative, you first focus on:",
+      "responseModelId": "ld-single-select",
+      "sectionIds": [
+        "leadership"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "ld-results"
+        },
+        {
+          "dimensionId": "ld-people"
+        },
+        {
+          "dimensionId": "ld-process"
+        }
+      ]
+    },
+    {
+      "id": "q10",
+      "code": "WPLP80L-LD-02",
+      "prompt": "If delivery starts slipping, your default response is to:",
+      "responseModelId": "ld-single-select",
+      "sectionIds": [
+        "leadership"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "ld-results"
+        },
+        {
+          "dimensionId": "ld-people"
+        },
+        {
+          "dimensionId": "ld-process"
+        }
+      ]
+    },
+    {
+      "id": "q11",
+      "code": "WPLP80L-LD-03",
+      "prompt": "You are at your best as a leader when you:",
+      "responseModelId": "ld-single-select",
+      "sectionIds": [
+        "leadership"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "ld-results"
+        },
+        {
+          "dimensionId": "ld-people"
+        },
+        {
+          "dimensionId": "ld-process"
+        }
+      ]
+    },
+    {
+      "id": "q12",
+      "code": "WPLP80L-LD-04",
+      "prompt": "In cross-functional work, you create momentum by:",
+      "responseModelId": "ld-single-select",
+      "sectionIds": [
+        "leadership"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "ld-results"
+        },
+        {
+          "dimensionId": "ld-people"
+        },
+        {
+          "dimensionId": "ld-process"
+        }
+      ]
+    },
+    {
+      "id": "q13",
+      "code": "WPLP80L-CU-01",
+      "prompt": "You are most engaged in teams that:",
+      "responseModelId": "cu-single-select",
+      "sectionIds": [
+        "culture"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "cu-performance"
+        },
+        {
+          "dimensionId": "cu-collaboration"
+        },
+        {
+          "dimensionId": "cu-innovation"
+        }
+      ]
+    },
+    {
+      "id": "q14",
+      "code": "WPLP80L-CU-02",
+      "prompt": "When assessing team health, you look first for:",
+      "responseModelId": "cu-single-select",
+      "sectionIds": [
+        "culture"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "cu-performance"
+        },
+        {
+          "dimensionId": "cu-collaboration"
+        },
+        {
+          "dimensionId": "cu-innovation"
+        }
+      ]
+    },
+    {
+      "id": "q15",
+      "code": "WPLP80L-CU-03",
+      "prompt": "A high-performing culture should primarily reward:",
+      "responseModelId": "cu-single-select",
+      "sectionIds": [
+        "culture"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "cu-performance"
+        },
+        {
+          "dimensionId": "cu-collaboration"
+        },
+        {
+          "dimensionId": "cu-innovation"
+        }
+      ]
+    },
+    {
+      "id": "q16",
+      "code": "WPLP80L-CU-04",
+      "prompt": "In uncertain periods, the strongest culture response is to:",
+      "responseModelId": "cu-single-select",
+      "sectionIds": [
+        "culture"
+      ],
+      "scoring": [
+        {
+          "dimensionId": "cu-performance"
+        },
+        {
+          "dimensionId": "cu-collaboration"
+        },
+        {
+          "dimensionId": "cu-innovation"
+        }
+      ]
+    }
+  ],
+  "derivedDimensions": [],
+  "scoring": {
+    "transforms": [],
+    "rules": []
+  },
+  "normalization": {
+    "groups": [
+      {
+        "id": "wplp80-lite-full-results-domains",
+        "label": "WPLP-80 Lite Domains",
+        "dimensionIds": [
+          "bs-driver",
+          "bs-analyst",
+          "bs-influencer",
+          "mo-achievement",
+          "mo-mastery",
+          "mo-stability",
+          "ld-results",
+          "ld-people",
+          "ld-process",
+          "cu-performance",
+          "cu-collaboration",
+          "cu-innovation"
+        ],
+        "comparisonOrder": [
+          "bs-driver",
+          "bs-analyst",
+          "bs-influencer",
+          "mo-achievement",
+          "mo-mastery",
+          "mo-stability",
+          "ld-results",
+          "ld-people",
+          "ld-process",
+          "cu-performance",
+          "cu-collaboration",
+          "cu-innovation"
+        ]
+      }
+    ],
+    "rules": [
+      {
+        "id": "normalize-wplp80-lite-dimensions",
+        "method": "band_table",
+        "appliesTo": {
+          "dimensionIds": [
+            "bs-driver",
+            "bs-analyst",
+            "bs-influencer",
+            "mo-achievement",
+            "mo-mastery",
+            "mo-stability",
+            "ld-results",
+            "ld-people",
+            "ld-process",
+            "cu-performance",
+            "cu-collaboration",
+            "cu-innovation"
+          ],
+          "groupKey": "wplp80-lite-full-results-domains"
+        },
+        "version": "1.0.0",
+        "table": [
+          {
+            "rawMin": 1,
+            "rawMax": 1.74,
+            "normalizedValue": 25,
+            "percentile": 20,
+            "band": "Developing",
+            "label": "Early signal"
+          },
+          {
+            "rawMin": 1.75,
+            "rawMax": 2.49,
+            "normalizedValue": 50,
+            "percentile": 45,
+            "band": "Balanced",
+            "label": "Reliable signal"
+          },
+          {
+            "rawMin": 2.5,
+            "rawMax": 3.24,
+            "normalizedValue": 75,
+            "percentile": 70,
+            "band": "Strong",
+            "label": "Strong signal"
+          },
+          {
+            "rawMin": 3.25,
+            "rawMax": 4,
+            "normalizedValue": 92,
+            "percentile": 90,
+            "band": "Standout",
+            "label": "Standout signal"
+          }
+        ]
+      }
+    ]
+  },
+  "integrity": {
+    "rules": []
+  },
+  "outputs": {
+    "rules": [
+      {
+        "id": "overview-summary",
+        "key": "overview-summary",
+        "type": "summary",
+        "predicate": {
+          "type": "comparison",
+          "operator": "gte",
+          "left": {
+            "type": "dimension_score",
+            "dimensionId": "bs-driver"
+          },
+          "right": {
+            "type": "constant",
+            "value": 0
+          }
+        },
+        "severity": "info",
+        "metadata": {
+          "label": "Overview summary",
+          "narrativeKey": "overview-summary",
+          "explanation": "Complete profile overview for dashboard summary rendering."
+        }
+      },
+      {
+        "id": "top-signal-summary",
+        "key": "top-signal-summary",
+        "type": "summary",
+        "predicate": {
+          "type": "comparison",
+          "operator": "gte",
+          "left": {
+            "type": "dimension_score",
+            "dimensionId": "mo-achievement"
+          },
+          "right": {
+            "type": "constant",
+            "value": 0
+          }
+        },
+        "severity": "info",
+        "metadata": {
+          "label": "Top signal summary",
+          "narrativeKey": "top-signal-summary",
+          "explanation": "Top signal interpretation to anchor coaching conversations."
+        }
+      },
+      {
+        "id": "behaviour-domain-summary",
+        "key": "behaviour-domain-summary",
+        "type": "report_section",
+        "predicate": {
+          "type": "comparison",
+          "operator": "gte",
+          "left": {
+            "type": "dimension_score",
+            "dimensionId": "bs-analyst"
+          },
+          "right": {
+            "type": "constant",
+            "value": 0
+          }
+        },
+        "severity": "info",
+        "metadata": {
+          "label": "Behaviour Style domain summary",
+          "narrativeKey": "behaviour-domain-summary",
+          "explanation": "Behaviour Style domain report section."
+        }
+      },
+      {
+        "id": "motivators-domain-summary",
+        "key": "motivators-domain-summary",
+        "type": "report_section",
+        "predicate": {
+          "type": "comparison",
+          "operator": "gte",
+          "left": {
+            "type": "dimension_score",
+            "dimensionId": "mo-mastery"
+          },
+          "right": {
+            "type": "constant",
+            "value": 0
+          }
+        },
+        "severity": "info",
+        "metadata": {
+          "label": "Motivators domain summary",
+          "narrativeKey": "motivators-domain-summary",
+          "explanation": "Motivators domain report section."
+        }
+      },
+      {
+        "id": "leadership-domain-summary",
+        "key": "leadership-domain-summary",
+        "type": "report_section",
+        "predicate": {
+          "type": "comparison",
+          "operator": "gte",
+          "left": {
+            "type": "dimension_score",
+            "dimensionId": "ld-people"
+          },
+          "right": {
+            "type": "constant",
+            "value": 0
+          }
+        },
+        "severity": "info",
+        "metadata": {
+          "label": "Leadership domain summary",
+          "narrativeKey": "leadership-domain-summary",
+          "explanation": "Leadership domain report section."
+        }
+      },
+      {
+        "id": "culture-domain-summary",
+        "key": "culture-domain-summary",
+        "type": "report_section",
+        "predicate": {
+          "type": "comparison",
+          "operator": "gte",
+          "left": {
+            "type": "dimension_score",
+            "dimensionId": "cu-innovation"
+          },
+          "right": {
+            "type": "constant",
+            "value": 0
+          }
+        },
+        "severity": "info",
+        "metadata": {
+          "label": "Culture domain summary",
+          "narrativeKey": "culture-domain-summary",
+          "explanation": "Culture domain report section."
+        }
+      },
+      {
+        "id": "ranked-signal-summary",
+        "key": "ranked-signal-summary",
+        "type": "report_section",
+        "predicate": {
+          "type": "comparison",
+          "operator": "gte",
+          "left": {
+            "type": "dimension_score",
+            "dimensionId": "cu-performance"
+          },
+          "right": {
+            "type": "constant",
+            "value": 0
+          }
+        },
+        "severity": "info",
+        "metadata": {
+          "label": "Ranked signal summary",
+          "narrativeKey": "ranked-signal-summary",
+          "explanation": "Ranked signal interpretation to support prioritisation."
+        }
+      },
+      {
+        "id": "development-priority-summary",
+        "key": "development-priority-summary",
+        "type": "recommendation",
+        "predicate": {
+          "type": "comparison",
+          "operator": "gte",
+          "left": {
+            "type": "dimension_score",
+            "dimensionId": "ld-process"
+          },
+          "right": {
+            "type": "constant",
+            "value": 0
+          }
+        },
+        "severity": "warning",
+        "metadata": {
+          "label": "Development priority summary",
+          "narrativeKey": "development-priority-summary",
+          "explanation": "Practical next-step guidance for development planning."
+        }
+      }
+    ]
+  },
+  "report": {
+    "content": [
+      {
+        "key": "overview-summary",
+        "label": "Assessment Overview",
+        "contentRef": "report.wplp80lite.full.overview",
+        "severity": "info",
+        "explanation": "This profile combines Behaviour Style, Motivators, Leadership, and Culture into one practical view of how the person is likely to operate day to day. Use it to align role expectations, communication cadence, and support needs before performance pressure rises."
+      },
+      {
+        "key": "top-signal-summary",
+        "label": "Top Signal",
+        "contentRef": "report.wplp80lite.full.top-signal",
+        "severity": "info",
+        "explanation": "Treat the strongest signal as a dependable advantage. Put that strength in high-value work, then pair it with one counterbalance habit so performance stays sustainable instead of becoming overextended."
+      },
+      {
+        "key": "behaviour-domain-summary",
+        "label": "Behaviour Style Summary",
+        "contentRef": "report.wplp80lite.full.domain.behaviour-style",
+        "severity": "info",
+        "explanation": "Behaviour Style indicates how quickly decisions are made, how evidence is weighed, and how influence is applied. Strong results point to a repeatable operating posture; lower results suggest where clearer decision rules or communication structure will help."
+      },
+      {
+        "key": "motivators-domain-summary",
+        "label": "Motivators Summary",
+        "contentRef": "report.wplp80lite.full.domain.motivators",
+        "severity": "info",
+        "explanation": "Motivators describe the conditions that keep contribution high. Use this section to calibrate challenge level, learning depth, and operating stability so the person can sustain output over longer cycles."
+      },
+      {
+        "key": "leadership-domain-summary",
+        "label": "Leadership Summary",
+        "contentRef": "report.wplp80lite.full.domain.leadership",
+        "severity": "info",
+        "explanation": "Leadership results highlight how outcomes, people, and process are balanced. Use the profile to decide whether the person should lean into directive execution, coaching ownership, or system discipline in their next stretch assignment."
+      },
+      {
+        "key": "culture-domain-summary",
+        "label": "Culture Summary",
+        "contentRef": "report.wplp80lite.full.domain.culture",
+        "severity": "info",
+        "explanation": "Culture fit signals which team environment is most energising. Match this pattern to team norms on pace, collaboration, and experimentation to improve onboarding speed and reduce friction."
+      },
+      {
+        "key": "ranked-signal-summary",
+        "label": "Ranked Signals",
+        "contentRef": "report.wplp80lite.full.ranked-signals",
+        "severity": "info",
+        "explanation": "Review signals from highest to lowest to decide what to double down on now and what to develop next. This ranking is most useful when paired with current role priorities and manager observations."
+      },
+      {
+        "key": "development-priority-summary",
+        "label": "Development Priorities",
+        "contentRef": "report.wplp80lite.full.development-priorities",
+        "severity": "warning",
+        "explanation": "Convert the lower-ranked or less stable signals into one or two specific development commitments. Keep actions observable, time-bound, and connected to live work so progress is easy to verify."
+      }
+    ]
+  }
+}
