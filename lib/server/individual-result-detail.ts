@@ -1,6 +1,6 @@
 import type { AssessmentResultRow, AssessmentResultSignalRow } from '@/lib/assessment-types'
-import { queryDb } from '@/lib/db'
-import { buildIndividualResultsCategorySqlPredicate } from '@/lib/assessment/assessment-category-taxonomy'
+import { queryDb as defaultQueryDb } from '@/lib/db'
+import { buildIndividualResultsCategorySqlPredicate } from '@/lib/server/assessment-definition-category'
 import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
 import { INDIVIDUAL_ASSESSMENT_DEFINITION_CATEGORY_SQL } from '@/lib/server/assessment-definition-category'

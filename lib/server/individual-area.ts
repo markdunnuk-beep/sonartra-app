@@ -3,7 +3,7 @@ import type { AssessmentRepositoryItem } from '@/lib/assessment/assessment-repos
 import { loadLiveAssessmentRepositoryInventory } from '@/lib/server/assessment-repository-inventory'
 import { INDIVIDUAL_ASSESSMENT_DEFINITION_CATEGORY_SQL } from '@/lib/server/assessment-definition-category'
 import { queryDb } from '@/lib/db'
-import { buildIndividualResultsCategorySqlPredicate } from '@/lib/assessment/assessment-category-taxonomy'
+import { buildIndividualResultsCategorySqlPredicate } from '@/lib/server/assessment-definition-category'
 
 export type IndividualAssessmentPrimaryAction = 'start' | 'resume' | 'view_status'
 
