@@ -1,6 +1,7 @@
 import type { AssessmentResultRow } from '@/lib/assessment-types'
 import type { AssessmentRepositoryItem } from '@/lib/assessment/assessment-repository-types'
 import { loadLiveAssessmentRepositoryInventory } from '@/lib/server/assessment-repository-inventory'
+import { INDIVIDUAL_ASSESSMENT_DEFINITION_CATEGORY_SQL } from '@/lib/server/assessment-definition-category'
 import { queryDb } from '@/lib/db'
 
 export type IndividualAssessmentPrimaryAction = 'start' | 'resume' | 'view_status'
@@ -120,10 +121,7 @@ export async function loadIndividualResultsViewModel(
      INNER JOIN assessment_definitions ad ON ad.id = av.assessment_definition_id
      WHERE a.user_id = $1
        AND a.organisation_id IS NULL
-       AND (
-         ad.category IS NULL
-         OR LOWER(BTRIM(ad.category)) = 'individual'
-       )
+       AND ${INDIVIDUAL_ASSESSMENT_DEFINITION_CATEGORY_SQL}
      ORDER BY ar.created_at DESC`,
     [userId],
   )

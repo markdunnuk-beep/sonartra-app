@@ -33,9 +33,10 @@ test('individual result detail page resolves by result id and renders via existi
 
 test('individual result detail loader keeps individual-category filtering case-insensitive and null-safe', async () => {
   const source = await readFile(new URL('../lib/server/individual-result-detail.ts', import.meta.url), 'utf8')
+  const listSource = await readFile(new URL('../lib/server/individual-area.ts', import.meta.url), 'utf8')
 
-  assert.match(source, /ad\.category IS NULL/)
-  assert.match(source, /LOWER\(BTRIM\(ad\.category\)\) = 'individual'/)
+  assert.match(source, /INDIVIDUAL_ASSESSMENT_DEFINITION_CATEGORY_SQL/)
+  assert.match(listSource, /INDIVIDUAL_ASSESSMENT_DEFINITION_CATEGORY_SQL/)
 })
 
 test('legacy individual results route explicitly redirects to the new individual results section', async () => {
