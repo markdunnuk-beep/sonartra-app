@@ -93,7 +93,10 @@ export async function loadIndividualResultDetailById(resultId: string): Promise<
      WHERE ar.id = $1
        AND a.user_id = $2
        AND a.organisation_id IS NULL
-       AND ad.category = 'individual'
+       AND (
+         ad.category IS NULL
+         OR LOWER(BTRIM(ad.category)) = 'individual'
+       )
      LIMIT 1`,
     [resultId, appUser.dbUserId],
   )
