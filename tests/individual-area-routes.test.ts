@@ -37,3 +37,12 @@ test('legacy individual results route explicitly redirects to the new individual
   assert.match(source, /redirect\('\/individual\/results'\)/)
   assert.match(source, /Transitional compatibility route/)
 })
+
+
+test('legacy route shims stay forward-only and do not embed business loaders', async () => {
+  const assessmentShim = await readFile(new URL('../app/assessment/page.tsx', import.meta.url), 'utf8')
+  const resultShim = await readFile(new URL('../app/results/individual/page.tsx', import.meta.url), 'utf8')
+
+  assert.doesNotMatch(assessmentShim, /loadIndividual|queryDb|resolve/i)
+  assert.doesNotMatch(resultShim, /loadIndividual|queryDb|resolveIndividual/i)
+})

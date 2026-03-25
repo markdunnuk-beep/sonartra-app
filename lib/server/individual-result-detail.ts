@@ -2,11 +2,7 @@ import type { AssessmentResultRow, AssessmentResultSignalRow } from '@/lib/asses
 import { queryDb } from '@/lib/db'
 import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
-import { parseHybridMvpResultPayload } from '@/lib/server/hybrid-mvp-result'
-import {
-  buildLiveAssessmentUserResultContract,
-  isPackageContractV2Result,
-} from '@/lib/server/live-assessment-user-result'
+import { classifyIndividualResultContract } from '@/lib/server/individual-result-contract'
 import type {
   IndividualResultApiResponse,
   IndividualResultLayerSummary,
@@ -111,8 +107,23 @@ export async function loadIndividualResultDetailById(resultId: string): Promise<
     return { ok: false, state: 'error', message: 'This result failed during processing.' }
   }
 
-  const hybridPayload = parseHybridMvpResultPayload(snapshot.result_payload)
-  if (hybridPayload) {
+  const contractShape = classifyIndividualResultContract(snapshot)
+
+  if (contractShape.kind === 'canonical_v2') {
+    const contract = contractShape.contract
+    if (contract.status === 'completed') {
+      return { ok: true, state: 'ready_v2', data: contract }
+    }
+
+    return {
+      ok: true,
+      state: contract.status === 'pending' ? 'completed_processing' : 'results_unavailable',
+      message: contract.statusMessage,
+      userResult: contract,
+    }
+  }
+
+  if (contractShape.kind === 'historic_hybrid') {
     return {
       ok: true,
       state: 'ready_hybrid',
@@ -132,43 +143,8 @@ export async function loadIndividualResultDetailById(resultId: string): Promise<
           updatedAt: snapshot.updated_at,
           scoredAt: snapshot.scored_at,
         },
-        hybrid: hybridPayload,
+        hybrid: contractShape.payload,
       },
-    }
-  }
-
-  if (isPackageContractV2Result(snapshot)) {
-    const contract = buildLiveAssessmentUserResultContract({
-      assessment: {
-        id: snapshot.assessment_id,
-        user_id: appUser.dbUserId,
-        organisation_id: null,
-        assessment_version_id: snapshot.assessment_version_id,
-        status: 'completed',
-        started_at: snapshot.assessment_started_at,
-        completed_at: snapshot.assessment_completed_at,
-        last_activity_at: snapshot.assessment_completed_at,
-        progress_count: 0,
-        progress_percent: '100',
-        current_question_index: 0,
-        scoring_status: 'scored',
-        source: 'web',
-        metadata_json: null,
-        created_at: snapshot.created_at,
-        updated_at: snapshot.updated_at,
-      },
-      result: snapshot,
-    })
-
-    if (contract.status === 'completed') {
-      return { ok: true, state: 'ready_v2', data: contract }
-    }
-
-    return {
-      ok: true,
-      state: contract.status === 'pending' ? 'completed_processing' : 'results_unavailable',
-      message: contract.statusMessage,
-      userResult: contract,
     }
   }
 
