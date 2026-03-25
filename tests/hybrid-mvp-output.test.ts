@@ -138,3 +138,32 @@ test('missing templates gracefully fall back to deterministic defaults with trac
   assert.equal(scored.result.report.trace.some((entry) => entry.templateRef.startsWith('default:signal:')), true)
   assert.equal(scored.result.report.trace.some((entry) => entry.sectionKey === 'domain_summaries'), true)
 })
+
+test('template rendering remains safe when runtime template payload contains non-string values', () => {
+  const malformedTemplateDefinition = {
+    ...definition,
+    outputTemplates: {
+      ...definition.outputTemplates,
+      overview: {
+        default: { text: 'unexpected object payload' },
+      },
+      signalNarratives: {
+        sig_a: {
+          high: ['unexpected', 'array'],
+        },
+      },
+      domainNarratives: {
+        style: {
+          summary: 42,
+        },
+      },
+    },
+  } as unknown as HybridMvpAssessmentDefinition
+
+  const scored = scoreHybridMvpAssessment(malformedTemplateDefinition, { q1: 'q1_a', q2: 'q2_a' })
+  assert.equal(scored.ok, true)
+  if (!scored.ok) return
+
+  assert.match(scored.result.report.summary?.text ?? '', /strongest signal|response pattern/i)
+  assert.equal(scored.result.report.trace.some((entry) => entry.templateRef.startsWith('default:')), true)
+})

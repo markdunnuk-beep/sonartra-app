@@ -37,6 +37,9 @@ const defaultDependencies: CompleteRouteDependencies = {
 };
 
 export async function postCompleteAssessment(request: Request, dependencies: CompleteRouteDependencies = defaultDependencies) {
+  let step = 'resolve_authenticated_user';
+  let loggedAssessmentId: string | null = null;
+
   try {
     const appUser = await dependencies.resolveAuthenticatedAppUser();
 
@@ -51,7 +54,9 @@ export async function postCompleteAssessment(request: Request, dependencies: Com
     }
 
     const assessmentId = body.assessmentId;
+    loggedAssessmentId = assessmentId;
 
+    step = 'validate_assessment_ownership';
     const ownership = await dependencies.queryDb<{ id: string }>(
       `SELECT id
        FROM assessments
@@ -63,6 +68,7 @@ export async function postCompleteAssessment(request: Request, dependencies: Com
       return NextResponse.json({ ok: false, error: 'Assessment not found.' }, { status: 404 });
     }
 
+    step = 'complete_assessment_with_results';
     const result = await dependencies.completeAssessmentWithResults(assessmentId);
 
     if (result.body.ok) {
@@ -83,6 +89,14 @@ export async function postCompleteAssessment(request: Request, dependencies: Com
 
     return NextResponse.json(result.body, { status: result.httpStatus });
   } catch (error) {
+    const err = error instanceof Error ? error : new Error('Unknown completion error')
+    console.error('[assessment.complete] unhandled route failure', {
+      route: '/api/assessments/complete',
+      assessmentId: loggedAssessmentId,
+      step,
+      message: err.message,
+      stack: err.stack,
+    })
     logDatabaseError('POST /api/assessments/complete failed.', error, { route: '/api/assessments/complete' });
 
     return NextResponse.json({ ok: false, error: 'Unable to complete assessment.' }, { status: 500 });

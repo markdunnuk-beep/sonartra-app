@@ -82,23 +82,35 @@ test('basic weighted scoring aggregates raw signal totals deterministically', ()
   })
 })
 
-test('normalization distributes score mass within each domain using fixed platform behavior', () => {
+test('normalization distributes score mass globally and sums to one', () => {
   const normalized = normalizeHybridSignalScores({
     rawSignalScores: {
       sig_core_analyst: 2,
       sig_core_driver: 6,
       sig_need_mastery: 4,
     },
-    signalDomainById: {
-      sig_core_analyst: 'style',
-      sig_core_driver: 'style',
-      sig_need_mastery: 'drive',
+  })
+
+  assert.equal(normalized.sig_core_driver, 0.5)
+  assert.equal(normalized.sig_core_analyst, 0.166667)
+  assert.equal(normalized.sig_need_mastery, 0.333333)
+  assert.equal(Number(Object.values(normalized).reduce((sum, value) => sum + value, 0).toFixed(6)), 1)
+})
+
+test('normalization handles zero totals without divide-by-zero failures', () => {
+  const normalized = normalizeHybridSignalScores({
+    rawSignalScores: {
+      sig_core_analyst: 0,
+      sig_core_driver: 0,
+      sig_need_mastery: 0,
     },
   })
 
-  assert.equal(normalized.sig_core_driver, 0.75)
-  assert.equal(normalized.sig_core_analyst, 0.25)
-  assert.equal(normalized.sig_need_mastery, 1)
+  assert.deepEqual(normalized, {
+    sig_core_analyst: 0,
+    sig_core_driver: 0,
+    sig_need_mastery: 0,
+  })
 })
 
 test('ranking behavior is deterministic on normalized score, raw score, then key', () => {

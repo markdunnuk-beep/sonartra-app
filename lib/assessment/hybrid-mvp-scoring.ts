@@ -264,20 +264,12 @@ function normalizeQuestionResponse(question: HybridMvpQuestionDefinition, value:
 
 export function normalizeHybridSignalScores(input: {
   rawSignalScores: Record<string, number>
-  signalDomainById: Record<string, string | null>
 }): Record<string, number> {
-  const domainTotals: Record<string, number> = {}
-
-  for (const [signalId, rawScore] of Object.entries(input.rawSignalScores)) {
-    const bucket = toDomainBucket(input.signalDomainById[signalId] ?? null)
-    domainTotals[bucket] = (domainTotals[bucket] ?? 0) + Math.max(0, rawScore)
-  }
+  const total = Object.values(input.rawSignalScores).reduce((sum, rawScore) => sum + Math.max(0, rawScore), 0)
 
   const normalized: Record<string, number> = {}
   for (const [signalId, rawScore] of Object.entries(input.rawSignalScores)) {
-    const bucket = toDomainBucket(input.signalDomainById[signalId] ?? null)
-    const denominator = domainTotals[bucket] ?? 0
-    normalized[signalId] = denominator > 0 ? Number((Math.max(0, rawScore) / denominator).toFixed(6)) : 0
+    normalized[signalId] = total > 0 ? Number((Math.max(0, rawScore) / total).toFixed(6)) : 0
   }
 
   return normalized
@@ -329,6 +321,7 @@ export function buildHybridAggregationVectors(rankedSignals: HybridMvpRankedSign
   const byDomain = Array.from(grouped.entries())
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([domainId, signals]) => {
+      const domainTotalRawScore = signals.reduce((total, signal) => total + Math.max(0, signal.rawScore), 0)
       const sortedSignals = [...signals].sort((left, right) => {
         if (right.normalizedScore !== left.normalizedScore) return right.normalizedScore - left.normalizedScore
         if (right.rawScore !== left.rawScore) return right.rawScore - left.rawScore
@@ -337,11 +330,11 @@ export function buildHybridAggregationVectors(rankedSignals: HybridMvpRankedSign
 
       return {
         domainId: domainId === GLOBAL_DOMAIN_ID ? null : domainId,
-        totalRawScore: sortedSignals.reduce((total, signal) => total + signal.rawScore, 0),
+        totalRawScore: domainTotalRawScore,
         vector: sortedSignals.map((signal, index) => ({
           signalId: signal.signalId,
           rawScore: signal.rawScore,
-          normalizedScore: signal.normalizedScore,
+          normalizedScore: domainTotalRawScore > 0 ? Number((Math.max(0, signal.rawScore) / domainTotalRawScore).toFixed(6)) : 0,
           rank: index + 1,
         })),
       }
@@ -419,7 +412,7 @@ export function scoreHybridMvpAssessment(definition: HybridMvpAssessmentDefiniti
     return { ok: false, result: null, issues }
   }
 
-  const normalizedSignalScores = normalizeHybridSignalScores({ rawSignalScores, signalDomainById })
+  const normalizedSignalScores = normalizeHybridSignalScores({ rawSignalScores })
   const rankedSignals = rankHybridSignals({ rawSignalScores, normalizedSignalScores, signalKeyById, signalDomainById })
   const aggregationVectors = buildHybridAggregationVectors(rankedSignals)
   const report = buildHybridMvpTemplatedReport({
