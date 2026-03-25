@@ -3986,7 +3986,7 @@ export async function publishAdminAssessmentVersion(
           }
         }
 
-        if (runtimePackageV2.identity.assessmentKey === 'sonartra_signals') {
+        if (runtimePackageV2.metadata.assessmentKey === 'sonartra_signals') {
           const runtimeV2Materialization = await runPublishStage('runtime_v2_materialization', {
             assessmentId: input.assessmentId,
             versionId: input.versionId,
