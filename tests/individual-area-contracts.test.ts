@@ -102,7 +102,7 @@ test('results contract returns persisted result records and detail targets', asy
   assert.ok(sqlStatements.some((sql) => /LOWER\(BTRIM\(ad\.category\)\) IN \('individual', 'behavioural_intelligence'\)/i.test(sql)))
 })
 
-test('results query treats individual category matching as case-insensitive and null-safe', async () => {
+test('results query includes canonical individual-like categories and excludes team-only categories', async () => {
   const sqlStatements: string[] = []
 
   await loadIndividualResultsViewModel('user-1', {
@@ -116,7 +116,8 @@ test('results query treats individual category matching as case-insensitive and 
     sqlStatements.some(
       (sql) =>
         /ad\.category IS NULL/i.test(sql)
-        && /LOWER\(BTRIM\(ad\.category\)\) IN \('individual', 'behavioural_intelligence'\)/i.test(sql),
+        && /LOWER\(BTRIM\(ad\.category\)\) IN \('individual', 'behavioural_intelligence'\)/i.test(sql)
+        && !/team_dynamics/i.test(sql),
     ),
   )
 })

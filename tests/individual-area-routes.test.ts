@@ -31,12 +31,11 @@ test('individual result detail page resolves by result id and renders via existi
   assert.match(source, /IndividualIntelligenceResultView/)
 })
 
-test('individual result detail loader keeps individual-category filtering case-insensitive and null-safe', async () => {
+test('individual result detail loader reuses canonical individual-like category predicate', async () => {
   const source = await readFile(new URL('../lib/server/individual-result-detail.ts', import.meta.url), 'utf8')
   const listSource = await readFile(new URL('../lib/server/individual-area.ts', import.meta.url), 'utf8')
 
-  assert.match(source, /INDIVIDUAL_ASSESSMENT_DEFINITION_CATEGORY_SQL/)
-  assert.match(listSource, /INDIVIDUAL_ASSESSMENT_DEFINITION_CATEGORY_SQL/)
+  assert.match(source, /buildIndividualResultsCategorySqlPredicate/)
 })
 
 test('legacy individual results route explicitly redirects to the new individual results section', async () => {
