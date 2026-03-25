@@ -33,6 +33,7 @@ test('individual result detail page resolves by result id and renders via existi
 
 test('individual result detail loader reuses canonical individual-like category predicate', async () => {
   const source = await readFile(new URL('../lib/server/individual-result-detail.ts', import.meta.url), 'utf8')
+  const listSource = await readFile(new URL('../lib/server/individual-area.ts', import.meta.url), 'utf8')
 
   assert.match(source, /buildIndividualResultsCategorySqlPredicate/)
 })

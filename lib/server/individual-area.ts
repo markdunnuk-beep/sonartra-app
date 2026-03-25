@@ -1,6 +1,7 @@
 import type { AssessmentResultRow } from '@/lib/assessment-types'
 import type { AssessmentRepositoryItem } from '@/lib/assessment/assessment-repository-types'
 import { loadLiveAssessmentRepositoryInventory } from '@/lib/server/assessment-repository-inventory'
+import { INDIVIDUAL_ASSESSMENT_DEFINITION_CATEGORY_SQL } from '@/lib/server/assessment-definition-category'
 import { queryDb } from '@/lib/db'
 import { buildIndividualResultsCategorySqlPredicate } from '@/lib/assessment/assessment-category-taxonomy'
 
