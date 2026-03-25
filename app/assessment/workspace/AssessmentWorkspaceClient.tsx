@@ -20,7 +20,7 @@ import { deriveAssessmentEntryPhase } from '@/lib/assessment-entry-state'
 import { mapLifecyclePresentation } from '@/lib/lifecycle-presentation'
 import { type IndividualLifecycleResolution, type IndividualLifecycleState } from '@/lib/server/assessment-readiness'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CompleteAssessmentResponse } from '@/lib/assessment-types'
+import type { CompleteAssessmentOutcomeResponse } from '@/lib/assessment-types'
 
 const ACTIVE_ASSESSMENT_STORAGE_KEY = 'sonartra_active_assessment_id'
 const WORKSPACE_ASSESSMENT_DEFINITION_ID = 'signals'
@@ -465,7 +465,7 @@ export default function AssessmentPageClient({ initialAssessmentId, initialDefin
         body: JSON.stringify({ assessmentId }),
       })
 
-      const data = (await response.json()) as CompleteAssessmentResponse
+      const data = (await response.json()) as CompleteAssessmentOutcomeResponse
       if (!response.ok || !data.ok) {
         throw new Error(data.ok ? 'Unable to complete assessment.' : data.error ?? 'Unable to complete assessment.')
       }

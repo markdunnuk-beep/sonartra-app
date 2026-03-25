@@ -41,7 +41,7 @@ test('complete route preserves successful completion response when assignment li
   assert.equal(response.status, 200)
   const payload = await response.json()
   assert.equal(payload.ok, true)
-  assert.equal(payload.resultStatus, 'succeeded')
+  assert.equal(payload.status, 'ready')
   assert.equal(payload.resultId, 'result-v2-1')
   assert.equal(readyCalls, 1)
 })
@@ -86,7 +86,45 @@ test('complete route returns structured failure response when completion pipelin
   assert.equal(response.status, 200)
   const payload = await response.json()
   assert.equal(payload.ok, true)
-  assert.equal(payload.resultStatus, 'failed')
-  assert.equal(payload.warning?.code, 'RESULT_GENERATION_FAILED')
+  assert.equal(payload.status, 'failed')
+  assert.equal(payload.failure?.code, 'RESULT_GENERATION_FAILED')
   assert.equal(failedCalls, 1)
+})
+
+test('complete route maps pending completion pipeline state to processing outcome contract', async () => {
+  const response = await postCompleteAssessment(new Request('http://localhost/api/assessments/complete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ assessmentId: 'assessment-v2-processing' }),
+  }), {
+    resolveAuthenticatedAppUser: async () => ({
+      clerkUserId: 'clerk-1',
+      dbUserId: 'user-1',
+      email: 'user@example.com',
+    }),
+    queryDb: async () => ({ rows: [{ id: 'assessment-v2-processing' }] }) as never,
+    completeAssessmentWithResults: async () => ({
+      httpStatus: 200,
+      body: {
+        ok: true,
+        assessmentId: 'assessment-v2-processing',
+        assessmentStatus: 'completed' as const,
+        resultStatus: 'pending' as const,
+        resultId: null,
+      },
+    }),
+    markAssignmentCompletionProcessing: async () => {},
+    markAssignmentResultReady: async () => {
+      throw new Error('should not mark ready while processing')
+    },
+    markAssignmentFailed: async () => {
+      throw new Error('should not mark failed while processing')
+    },
+  })
+
+  assert.equal(response.status, 200)
+  const payload = await response.json()
+  assert.equal(payload.ok, true)
+  assert.equal(payload.status, 'processing')
+  assert.equal(payload.resultId, undefined)
 })

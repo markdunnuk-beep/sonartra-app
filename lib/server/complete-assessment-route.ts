@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { CompleteAssessmentRequest } from '@/lib/assessment-types';
+import { CompleteAssessmentOutcomeResponse, CompleteAssessmentRequest, CompleteAssessmentResponse } from '@/lib/assessment-types';
 import { logDatabaseError, queryDb } from '@/lib/db';
 import { completeAssessmentWithResults } from '@/lib/server/assessment-completion';
 import { markAssignmentCompletionProcessing, markAssignmentFailed, markAssignmentResultReady } from '@/lib/server/assessment-assignments';
@@ -35,6 +35,39 @@ const defaultDependencies: CompleteRouteDependencies = {
   markAssignmentResultReady,
   markAssignmentFailed,
 };
+
+function toOutcomeResponse(body: CompleteAssessmentResponse): CompleteAssessmentOutcomeResponse {
+  if (!body.ok) {
+    return body;
+  }
+
+  if (body.resultStatus === 'succeeded' && body.resultId) {
+    return {
+      ok: true,
+      status: 'ready',
+      assessmentId: body.assessmentId,
+      resultId: body.resultId,
+    };
+  }
+
+  if (body.resultStatus === 'failed') {
+    return {
+      ok: true,
+      status: 'failed',
+      assessmentId: body.assessmentId,
+      failure: {
+        code: 'RESULT_GENERATION_FAILED',
+        message: body.warning?.message ?? 'Assessment was completed but result generation failed.',
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    status: 'processing',
+    assessmentId: body.assessmentId,
+  };
+}
 
 export async function postCompleteAssessment(request: Request, dependencies: CompleteRouteDependencies = defaultDependencies) {
   let step = 'resolve_authenticated_user';
@@ -87,7 +120,7 @@ export async function postCompleteAssessment(request: Request, dependencies: Com
       }
     }
 
-    return NextResponse.json(result.body, { status: result.httpStatus });
+    return NextResponse.json(toOutcomeResponse(result.body), { status: result.httpStatus });
   } catch (error) {
     const err = error instanceof Error ? error : new Error('Unknown completion error')
     console.error('[assessment.complete] unhandled route failure', {
