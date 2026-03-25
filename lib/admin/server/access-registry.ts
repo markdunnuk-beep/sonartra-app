@@ -54,6 +54,15 @@ interface IdentityRow {
   created_at: string | Date | null
 }
 
+interface AppUserRow {
+  id: string | null
+  email: string | null
+  first_name: string | null
+  last_name: string | null
+  external_auth_id: string | null
+  created_at: string | Date | null
+}
+
 interface RoleRow {
   identity_id: string | null
   key: string | null
@@ -309,6 +318,105 @@ async function getIdentityRows(deps: AccessRegistryDependencies, identityIds?: s
   return result.rows ?? []
 }
 
+function buildFallbackFullName(row: AppUserRow): string | null {
+  const firstName = normaliseOptionalString(row.first_name)
+  const lastName = normaliseOptionalString(row.last_name)
+  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim()
+
+  if (fullName) {
+    return fullName
+  }
+
+  const email = normaliseOptionalString(row.email)
+  if (!email) {
+    return null
+  }
+
+  const localPart = email.split('@')[0]?.replace(/[._-]+/g, ' ').trim()
+  if (!localPart) {
+    return null
+  }
+
+  return localPart
+    .split(/\s+/)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ')
+}
+
+async function getAppUserRows(deps: AccessRegistryDependencies, identityIds?: string[]): Promise<AppUserRow[]> {
+  const hasFilter = Boolean(identityIds?.length)
+
+  try {
+    const result = await deps.queryDb<AppUserRow>(
+      `
+        select
+          id,
+          email,
+          first_name,
+          last_name,
+          external_auth_id,
+          created_at
+        from users
+        ${hasFilter ? 'where id = any($1::uuid[])' : ''}
+        order by lower(email) asc
+      `,
+      hasFilter ? [identityIds] : undefined,
+    )
+
+    return result.rows ?? []
+  } catch (error) {
+    logDatabaseError('[admin-access-registry] Failed to load app user rows for admin access registry.', error)
+    return []
+  }
+}
+
+function mergeIdentityRowsWithAppUsers(identityRows: IdentityRow[], appUserRows: AppUserRow[]): IdentityRow[] {
+  const identitiesByAuthSubject = new Set(
+    identityRows
+      .map((row) => normaliseOptionalString(row.auth_subject))
+      .filter((value): value is string => Boolean(value)),
+  )
+  const identitiesByEmail = new Set(
+    identityRows
+      .map((row) => normaliseOptionalString(row.email)?.toLowerCase())
+      .filter((value): value is string => Boolean(value)),
+  )
+
+  const syntheticIdentityRows = appUserRows.flatMap((row) => {
+    const externalAuthId = normaliseOptionalString(row.external_auth_id)
+    const email = normaliseOptionalString(row.email)
+
+    if ((externalAuthId && identitiesByAuthSubject.has(externalAuthId)) || (email && identitiesByEmail.has(email.toLowerCase()))) {
+      return []
+    }
+
+    const id = normaliseRequiredString(row.id, 'app_user.id', { row })
+    const fullName = buildFallbackFullName(row)
+    const createdAt = normaliseTimestamp(row.created_at)
+
+    if (!id || !email || !fullName || !createdAt) {
+      if (!createdAt) {
+        logAccessRegistryInvariant('Missing or invalid app_user.created_at while extending admin access registry data.', { row })
+      }
+      return []
+    }
+
+    return [{
+      id,
+      email,
+      full_name: fullName,
+      identity_type: 'organisation',
+      auth_provider: externalAuthId ? 'clerk' : null,
+      auth_subject: externalAuthId,
+      status: 'active',
+      last_activity_at: null,
+      created_at: createdAt,
+    } satisfies IdentityRow]
+  })
+
+  return [...identityRows, ...syntheticIdentityRows]
+}
+
 async function getRoleRows(deps: AccessRegistryDependencies, identityIds?: string[]): Promise<RoleRow[]> {
   const hasFilter = Boolean(identityIds?.length)
   const result = await deps.queryDb<RoleRow>(
@@ -333,23 +441,56 @@ async function getMembershipRows(deps: AccessRegistryDependencies, identityIds?:
   const hasFilter = Boolean(identityIds?.length)
   const result = await deps.queryDb<MembershipRow>(
     `
-      select
-        om.identity_id,
-        om.organisation_id,
-        o.name as organisation_name,
-        o.slug as organisation_slug,
-        o.country as organisation_country,
-        o.status as organisation_status,
-        o.created_at as organisation_created_at,
-        om.membership_role,
-        om.membership_status,
-        om.joined_at,
-        om.invited_at,
-        om.last_activity_at
-      from organisation_memberships om
-      inner join organisations o on o.id = om.organisation_id
-      ${hasFilter ? 'where om.identity_id = any($1::uuid[])' : ''}
-      order by o.name asc, om.invited_at desc nulls last, om.joined_at desc nulls last
+      with admin_registry_memberships as (
+        select
+          om.identity_id,
+          om.organisation_id,
+          o.name as organisation_name,
+          o.slug as organisation_slug,
+          o.country as organisation_country,
+          o.status as organisation_status,
+          o.created_at as organisation_created_at,
+          om.membership_role,
+          om.membership_status,
+          om.joined_at,
+          om.invited_at,
+          om.last_activity_at
+        from organisation_memberships om
+        inner join organisations o on o.id = om.organisation_id
+      ),
+      app_user_memberships as (
+        select
+          u.id as identity_id,
+          om.organisation_id,
+          o.name as organisation_name,
+          o.slug as organisation_slug,
+          o.country as organisation_country,
+          o.status as organisation_status,
+          o.created_at as organisation_created_at,
+          om.role as membership_role,
+          case
+            when om.member_status in ('active', 'inactive', 'suspended', 'invited') then om.member_status
+            else 'active'
+          end as membership_status,
+          om.joined_at,
+          null::timestamptz as invited_at,
+          null::timestamptz as last_activity_at
+        from organisation_members om
+        inner join organisations o on o.id = om.organisation_id
+        inner join users u on u.id = om.user_id
+        left join admin_identities ai
+          on (u.external_auth_id is not null and ai.auth_subject = u.external_auth_id)
+          or lower(ai.email) = lower(u.email)
+        where ai.id is null
+      )
+      select *
+      from (
+        select * from admin_registry_memberships
+        union all
+        select * from app_user_memberships
+      ) memberships
+      ${hasFilter ? 'where memberships.identity_id = any($1::uuid[])' : ''}
+      order by memberships.organisation_name asc, memberships.invited_at desc nulls last, memberships.joined_at desc nulls last
     `,
     hasFilter ? [identityIds] : undefined,
   )
@@ -383,7 +524,9 @@ export async function getAdminAccessRegistryData(
   deps: AccessRegistryDependencies = defaultAccessRegistryDependencies,
 ): Promise<AdminAccessIdentityDTO[]> {
   try {
-    const identities = await getIdentityRows(deps)
+    const baseIdentities = await getIdentityRows(deps)
+    const appUsers = await getAppUserRows(deps)
+    const identities = mergeIdentityRowsWithAppUsers(baseIdentities, appUsers)
     const roles = await getRoleRows(deps)
     const memberships = await getMembershipRows(deps)
     const auditRows = await getAuditRows(deps)
@@ -400,7 +543,9 @@ export async function getAdminIdentityById(
   deps: AccessRegistryDependencies = defaultAccessRegistryDependencies,
 ): Promise<AdminAccessIdentityDTO | null> {
   try {
-    const identities = await getIdentityRows(deps, [id])
+    const baseIdentities = await getIdentityRows(deps, [id])
+    const appUsers = await getAppUserRows(deps, [id])
+    const identities = mergeIdentityRowsWithAppUsers(baseIdentities, appUsers)
     const roles = await getRoleRows(deps, [id])
     const memberships = await getMembershipRows(deps, [id])
     const auditRows = await getAuditRows(deps, [id])
@@ -411,6 +556,9 @@ export async function getAdminIdentityById(
     return null
   }
 }
+
+export const listAdminUsers = getAdminAccessRegistryData
+export const listOrganisationMemberships = getMembershipRows
 
 export async function getAdminIdentityAuditHistory(
   id: string,
