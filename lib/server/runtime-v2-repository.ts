@@ -216,6 +216,47 @@ export async function getMaterializationStatusSummary(assessmentVersionId: strin
   }
 }
 
+
+export async function getRuntimeV2AssessmentExecutionModelByVersionId(args: { assessmentVersionId: string }): Promise<RuntimeV2ExecutionModel | null> {
+  const runtime = await getMaterializedRuntimeVersionByAssessmentVersionId(args.assessmentVersionId)
+  if (!runtime) {
+    return null
+  }
+
+  const [questionSets, questions, options, mappings] = await Promise.all([
+    getRuntimeV2QuestionSets(runtime.id),
+    getRuntimeV2Questions(runtime.id),
+    getRuntimeV2OptionsForQuestions(runtime.id),
+    getRuntimeV2MappingsForOptions(runtime.id),
+  ])
+
+  const optionsByQuestionId: Record<string, RuntimeOptionRow[]> = {}
+  for (const option of options) {
+    const list = optionsByQuestionId[option.question_id] ?? []
+    list.push(option)
+    optionsByQuestionId[option.question_id] = list
+  }
+
+  const mappingsByQuestionId: Record<string, RuntimeMappingRow[]> = {}
+  for (const mapping of mappings) {
+    const list = mappingsByQuestionId[mapping.question_id] ?? []
+    list.push(mapping)
+    mappingsByQuestionId[mapping.question_id] = list
+  }
+
+  return {
+    runtimeVersionId: runtime.id,
+    metadata: runtime.compiled_metadata_json,
+    questionSets,
+    questions,
+    optionsByQuestionId,
+    mappingsByQuestionId,
+    signalRegistry: runtime.signal_registry_json,
+    scoringConfig: runtime.compiled_scoring_config_json,
+    normalizationConfig: runtime.compiled_normalization_config_json,
+    outputConfig: runtime.compiled_output_config_json,
+  }
+}
 export async function getRuntimeV2AssessmentExecutionModel(args: { definitionId: string }): Promise<RuntimeV2ExecutionModel | null> {
   const runtime = await getMaterializedRuntimeVersionForPublishedDefinition(args.definitionId)
   if (!runtime) {

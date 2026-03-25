@@ -2,6 +2,7 @@ import { AssessmentResultRow, AssessmentResultSignalRow, AssessmentRow } from '@
 import { queryDb } from '@/lib/db';
 import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants';
 import { resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness';
+import { parseRuntimeV2ReadyPayload } from '@/lib/server/runtime-v2-readiness';
 import { parseHybridMvpResultPayload, type HybridMvpResultPayloadViewModel } from '@/lib/server/hybrid-mvp-result';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 import { getAssessmentResultReportArtifactSelectProjection } from '@/lib/server/assessment-result-schema-capabilities';
@@ -360,6 +361,19 @@ export async function getLatestIndividualResultForUser(
     }
 
     if (isPackageContractV2Result(snapshot)) {
+      const runtimeV2Readiness = parseRuntimeV2ReadyPayload(snapshot.result_payload)
+      if (runtimeV2Readiness.state !== 'ready' && (snapshot.result_payload as Record<string, unknown> | null)?.resultFormat === 'runtime_v2') {
+        console.warn('[individual-results] runtime-v2 snapshot rejected by readiness validator', {
+          resultId: snapshot.id,
+          reason: runtimeV2Readiness.reason,
+        })
+        return {
+          ok: true,
+          state: runtimeV2Readiness.state === 'processing' ? 'completed_processing' : 'results_unavailable',
+          message: 'Result snapshot exists but is not structurally ready yet.',
+        }
+      }
+
       const contract = buildLiveAssessmentUserResultContract({
         assessment: {
           id: readySnapshot.assessmentId,

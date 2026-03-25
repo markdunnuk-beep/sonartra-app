@@ -4,6 +4,7 @@ import { buildIndividualResultsCategorySqlPredicate } from '@/lib/assessment/ass
 import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
 import { parseHybridMvpResultPayload } from '@/lib/server/hybrid-mvp-result'
+import { parseRuntimeV2ReadyPayload } from '@/lib/server/runtime-v2-readiness'
 import {
   buildLiveAssessmentUserResultContract,
   isPackageContractV2Result,
@@ -154,6 +155,19 @@ export async function loadIndividualResultDetailById(
   }
 
   if (isPackageContractV2Result(snapshot)) {
+    const runtimeV2Readiness = parseRuntimeV2ReadyPayload(snapshot.result_payload)
+    if (runtimeV2Readiness.state !== 'ready' && (snapshot.result_payload as Record<string, unknown> | null)?.resultFormat === 'runtime_v2') {
+      console.warn('[individual-result-detail] runtime-v2 snapshot rejected by readiness validator', {
+        resultId: snapshot.id,
+        reason: runtimeV2Readiness.reason,
+      })
+      return {
+        ok: true,
+        state: runtimeV2Readiness.state === 'processing' ? 'completed_processing' : 'results_unavailable',
+        message: 'This result exists but is not structurally ready yet.',
+      }
+    }
+
     const contract = buildLiveAssessmentUserResultContract({
       assessment: {
         id: snapshot.assessment_id,
