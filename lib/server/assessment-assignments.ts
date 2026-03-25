@@ -38,6 +38,11 @@ export interface AdminAssessmentAssignmentRecord {
   failedAt: string | null
   assignedByName: string | null
   failureMessage: string | null
+  linkedOrganisationId: string | null
+  linkedOrganisationName: string | null
+  linkedMembershipRole: string | null
+  resultStatus: 'pending' | 'complete' | 'failed' | null
+  resultScoredAt: string | null
 }
 
 export async function markAssignmentInProgressForAssessment(assessmentId: string, client?: Pick<PoolClient, 'query'>) {
@@ -222,11 +227,16 @@ export async function listAdminAssessmentAssignments(assessmentDefinitionId: str
     target_user_id: string
     target_user_email: string
     target_user_name: string | null
-    assessment_version_id: string
-    assessment_version_label: string
+    assessment_version_id: string | null
+    assessment_version_label: string | null
     status: AssessmentAssignmentStatus
-    assessment_id: string | null
+    linked_assessment_id: string | null
+    linked_organisation_id: string | null
+    linked_organisation_name: string | null
+    linked_membership_role: string | null
     latest_result_id: string | null
+    result_status: 'pending' | 'complete' | 'failed' | null
+    result_scored_at: string | null
     assigned_at: string
     started_at: string | null
     completed_at: string | null
@@ -242,8 +252,13 @@ export async function listAdminAssessmentAssignments(assessmentDefinitionId: str
             ara.assessment_version_id,
             coalesce(av.version_label, av.key) AS assessment_version_label,
             ara.status,
-            ara.assessment_id,
-            ara.latest_result_id,
+            COALESCE(ara.assessment_id, fallback_attempt.id) AS linked_assessment_id,
+            COALESCE(linked_attempt.organisation_id, fallback_attempt.organisation_id) AS linked_organisation_id,
+            linked_organisation.name AS linked_organisation_name,
+            COALESCE(legacy_membership.role, admin_membership.membership_role) AS linked_membership_role,
+            COALESCE(ara.latest_result_id, fallback_result.id) AS latest_result_id,
+            COALESCE(linked_result.status, fallback_result.status) AS result_status,
+            COALESCE(linked_result.scored_at, fallback_result.scored_at) AS result_scored_at,
             ara.assigned_at,
             ara.started_at,
             ara.completed_at,
@@ -252,8 +267,36 @@ export async function listAdminAssessmentAssignments(assessmentDefinitionId: str
             assigned_by.full_name AS assigned_by_name,
             ara.failure_message
      FROM assessment_repository_assignments ara
-     INNER JOIN users u ON u.id = ara.target_user_id
-     INNER JOIN assessment_versions av ON av.id = ara.assessment_version_id
+     LEFT JOIN users u ON u.id = ara.target_user_id
+     LEFT JOIN assessment_versions av ON av.id = ara.assessment_version_id
+     LEFT JOIN assessments linked_attempt ON linked_attempt.id = ara.assessment_id
+     -- Hybrid backfill: older assignment rows may not have assessment_id/latest_result_id populated.
+     -- In that case we resolve the latest attempt/result for the same persisted user + version.
+     LEFT JOIN LATERAL (
+       SELECT a.id, a.organisation_id
+       FROM assessments a
+       WHERE a.user_id = ara.target_user_id
+         AND a.assessment_version_id = ara.assessment_version_id
+       ORDER BY COALESCE(a.completed_at, a.started_at, a.created_at) DESC
+       LIMIT 1
+     ) fallback_attempt ON ara.assessment_id IS NULL
+     LEFT JOIN organisations linked_organisation
+       ON linked_organisation.id = COALESCE(linked_attempt.organisation_id, fallback_attempt.organisation_id)
+     LEFT JOIN organisation_members legacy_membership
+       ON legacy_membership.user_id = ara.target_user_id
+      AND legacy_membership.organisation_id = COALESCE(linked_attempt.organisation_id, fallback_attempt.organisation_id)
+     LEFT JOIN admin_identities target_identity ON lower(target_identity.email) = lower(u.email)
+     LEFT JOIN organisation_memberships admin_membership
+       ON admin_membership.identity_id = target_identity.id
+      AND admin_membership.organisation_id = COALESCE(linked_attempt.organisation_id, fallback_attempt.organisation_id)
+     LEFT JOIN assessment_results linked_result ON linked_result.id = ara.latest_result_id
+     LEFT JOIN LATERAL (
+       SELECT ar.id, ar.status, ar.scored_at
+       FROM assessment_results ar
+       WHERE ar.assessment_id = COALESCE(ara.assessment_id, fallback_attempt.id)
+       ORDER BY COALESCE(ar.scored_at, ar.completed_at, ar.created_at) DESC
+       LIMIT 1
+     ) fallback_result ON ara.latest_result_id IS NULL
      LEFT JOIN admin_identities assigned_by ON assigned_by.id = ara.assigned_by_identity_id
      WHERE ara.assessment_definition_id = $1
      ORDER BY ara.assigned_at DESC, ara.created_at DESC`,
@@ -263,12 +306,12 @@ export async function listAdminAssessmentAssignments(assessmentDefinitionId: str
   return result.rows.map((row) => ({
     id: row.id,
     targetUserId: row.target_user_id,
-    targetUserEmail: row.target_user_email,
-    targetUserName: row.target_user_name ?? row.target_user_email,
-    assessmentVersionId: row.assessment_version_id,
-    assessmentVersionLabel: row.assessment_version_label,
+    targetUserEmail: row.target_user_email ?? 'Unknown user',
+    targetUserName: row.target_user_name ?? row.target_user_email ?? 'Unknown user',
+    assessmentVersionId: row.assessment_version_id ?? '',
+    assessmentVersionLabel: row.assessment_version_label ?? 'unknown',
     status: row.status,
-    assessmentId: row.assessment_id,
+    assessmentId: row.linked_assessment_id,
     latestResultId: row.latest_result_id,
     assignedAt: row.assigned_at,
     startedAt: row.started_at,
@@ -277,5 +320,10 @@ export async function listAdminAssessmentAssignments(assessmentDefinitionId: str
     failedAt: row.failed_at,
     assignedByName: row.assigned_by_name,
     failureMessage: row.failure_message,
+    linkedOrganisationId: row.linked_organisation_id,
+    linkedOrganisationName: row.linked_organisation_name,
+    linkedMembershipRole: row.linked_membership_role,
+    resultStatus: row.result_status,
+    resultScoredAt: row.result_scored_at,
   }))
 }

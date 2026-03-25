@@ -49,7 +49,10 @@ export async function AdminAssessmentAssignmentsPanel({ assessmentId }: { assess
                 <p className="text-xs text-textSecondary">{entry.assignedByName ? `By ${entry.assignedByName}` : 'By system'}</p>
               </div>,
               <span key={`${entry.id}-assigned`} className="text-sm text-textSecondary">{formatAdminTimestamp(entry.assignedAt)}</span>,
-              <span key={`${entry.id}-attempt`} className="text-xs text-textSecondary break-all">{entry.assessmentId ?? 'Not started'}</span>,
+              <div key={`${entry.id}-attempt`} className="space-y-1">
+                <p className="text-xs text-textSecondary break-all">{entry.assessmentId ?? 'Not started'}</p>
+                {entry.linkedOrganisationName ? <p className="text-xs text-textSecondary">Org: {entry.linkedOrganisationName}</p> : null}
+              </div>,
               <span key={`${entry.id}-result`} className="text-xs text-textSecondary break-all">{entry.latestResultId ?? (entry.status === 'results_ready' ? 'Ready' : 'Pending')}</span>,
             ])}
           />

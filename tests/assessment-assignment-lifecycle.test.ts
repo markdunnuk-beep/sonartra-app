@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   createAdminAssessmentAssignment,
+  listAdminAssessmentAssignments,
   markAssignmentCompletionProcessing,
   markAssignmentResultReady,
 } from '../lib/server/assessment-assignments'
@@ -18,7 +19,7 @@ test('createAdminAssessmentAssignment creates an assigned row for the current pu
     {
       resolveAdminAccess: async () => ({
         isAuthenticated: true,
-        canAccessAdmin: true,
+        isAllowed: true,
         adminIdentityId: 'admin-1',
         adminIdentityType: 'internal',
       }) as never,
@@ -66,7 +67,7 @@ test('createAdminAssessmentAssignment blocks assignment when assessment has no p
     {
       resolveAdminAccess: async () => ({
         isAuthenticated: true,
-        canAccessAdmin: true,
+        isAllowed: true,
         adminIdentityId: 'admin-1',
         adminIdentityType: 'internal',
       }) as never,
@@ -108,4 +109,94 @@ test('assignment lifecycle transitions from completion processing to results rea
 
   assert.ok(executed.some((sql) => /status = CASE WHEN status IN \('assigned', 'in_progress'\) THEN 'completed_processing'/i.test(sql)))
   assert.ok(executed.some((sql) => /SET status = 'results_ready'/i.test(sql)))
+})
+
+test('listAdminAssessmentAssignments keeps assignment rows visible when linked user membership/org data is missing', async () => {
+  const executed: string[] = []
+
+  const rows = await listAdminAssessmentAssignments('definition-1', {
+    queryDb: async (sql: string) => {
+      executed.push(sql)
+      return {
+        rows: [
+          {
+            id: 'assignment-1',
+            target_user_id: 'user-1',
+            target_user_email: null,
+            target_user_name: null,
+            assessment_version_id: null,
+            assessment_version_label: null,
+            status: 'assigned',
+            linked_assessment_id: null,
+            linked_organisation_id: null,
+            linked_organisation_name: null,
+            linked_membership_role: null,
+            latest_result_id: null,
+            result_status: null,
+            result_scored_at: null,
+            assigned_at: '2026-03-01T10:00:00Z',
+            started_at: null,
+            completed_at: null,
+            results_ready_at: null,
+            failed_at: null,
+            assigned_by_name: null,
+            failure_message: null,
+          },
+        ],
+      } as never
+    },
+  })
+
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0]?.targetUserEmail, 'Unknown user')
+  assert.equal(rows[0]?.assessmentId, null)
+  assert.equal(rows[0]?.linkedOrganisationId, null)
+  assert.equal(rows[0]?.latestResultId, null)
+  assert.equal(rows[0]?.assessmentVersionLabel, 'unknown')
+
+  const sql = executed[0] ?? ''
+  assert.match(sql, /LEFT JOIN users/i)
+  assert.match(sql, /LEFT JOIN assessment_versions/i)
+  assert.match(sql, /LEFT JOIN LATERAL \(\s*SELECT a\.id, a\.organisation_id/i)
+  assert.match(sql, /LEFT JOIN assessment_results linked_result/i)
+})
+
+test('listAdminAssessmentAssignments maps linked attempt, organisation, and fallback result fields for admin visibility', async () => {
+  const rows = await listAdminAssessmentAssignments('definition-1', {
+    queryDb: async () => ({
+      rows: [
+        {
+          id: 'assignment-2',
+          target_user_id: 'user-2',
+          target_user_email: 'person@example.com',
+          target_user_name: 'Person Example',
+          assessment_version_id: 'version-2',
+          assessment_version_label: '2.0.0',
+          status: 'results_ready',
+          linked_assessment_id: 'attempt-2',
+          linked_organisation_id: 'org-1',
+          linked_organisation_name: 'Northwind',
+          linked_membership_role: 'member',
+          latest_result_id: 'result-2',
+          result_status: 'complete',
+          result_scored_at: '2026-03-02T12:00:00Z',
+          assigned_at: '2026-03-01T10:00:00Z',
+          started_at: '2026-03-01T10:05:00Z',
+          completed_at: '2026-03-01T10:30:00Z',
+          results_ready_at: '2026-03-01T10:31:00Z',
+          failed_at: null,
+          assigned_by_name: 'Admin User',
+          failure_message: null,
+        },
+      ],
+    }) as never,
+  })
+
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0]?.assessmentId, 'attempt-2')
+  assert.equal(rows[0]?.linkedOrganisationId, 'org-1')
+  assert.equal(rows[0]?.linkedOrganisationName, 'Northwind')
+  assert.equal(rows[0]?.linkedMembershipRole, 'member')
+  assert.equal(rows[0]?.latestResultId, 'result-2')
+  assert.equal(rows[0]?.resultStatus, 'complete')
 })
