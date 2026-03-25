@@ -1,5 +1,6 @@
 import type { AssessmentResultRow, AssessmentResultSignalRow } from '@/lib/assessment-types'
 import { queryDb } from '@/lib/db'
+import { buildIndividualResultsCategorySqlPredicate } from '@/lib/assessment/assessment-category-taxonomy'
 import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
 import { parseHybridMvpResultPayload } from '@/lib/server/hybrid-mvp-result'
@@ -94,8 +95,7 @@ export async function loadIndividualResultDetailById(resultId: string): Promise<
        AND a.user_id = $2
        AND a.organisation_id IS NULL
        AND (
-         ad.category IS NULL
-         OR LOWER(BTRIM(ad.category)) = 'individual'
+         ${buildIndividualResultsCategorySqlPredicate('ad.category')}
        )
      LIMIT 1`,
     [resultId, appUser.dbUserId],
