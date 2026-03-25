@@ -3884,6 +3884,9 @@ export async function publishAdminAssessmentVersion(
       const totalQuestions = evaluatedVersion.packageInfo.summary?.questionsCount ?? null
       const evaluatedSignOff = evaluatedVersion.releaseGovernance?.signOff ?? { status: 'unsigned' as const, signedOffBy: null, signedOffAt: null, isStale: false, staleReason: null }
       const publishReadiness = getAdminAssessmentVersionReadiness(evaluatedVersion)
+      // Wave-2 publish invariant (TODO): require canonical Package Contract v2 validation pass,
+      // Runtime Contract v2 compilation success, and structurally complete compiled artifact
+      // evidence before allowing lifecycle transition to `published`.
 
       if (publishReadiness.status === 'not_ready') {
         const blockingSummary = publishReadiness.blockingIssues[0] ?? 'The attached package is missing or invalid.'

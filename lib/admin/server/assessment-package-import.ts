@@ -112,12 +112,14 @@ function runCanonicalV2ContractHook(input: unknown): {
   attempted: boolean
   validationErrors: string[]
   compiledArtifact: SonartraRuntimeContractV2 | null
+  compileError: string | null
 } {
   if (!isRecord(input) || !('metadata' in input) || !('questionSets' in input)) {
     return {
       attempted: false,
       validationErrors: [],
       compiledArtifact: null,
+      compileError: null,
     }
   }
 
@@ -127,13 +129,40 @@ function runCanonicalV2ContractHook(input: unknown): {
       attempted: true,
       validationErrors: validation.errors,
       compiledArtifact: null,
+      compileError: null,
     }
   }
 
+  try {
+    return {
+      attempted: true,
+      validationErrors: [],
+      compiledArtifact: compilePackageToRuntimeContract(validation.normalized),
+      compileError: null,
+    }
+  } catch (error) {
+    return {
+      attempted: true,
+      validationErrors: [],
+      compiledArtifact: null,
+      compileError: error instanceof Error ? error.message : 'unknown_compile_error',
+    }
+  }
+}
+
+function summarizeCompiledRuntimeArtifact(artifact: SonartraRuntimeContractV2) {
+  const compiledMappings = Object.values(artifact.compiledSignalMappings).flat()
+  const uniqueQuestionSetIds = new Set(artifact.compiledQuestions.map((question) => question.questionSetId))
+
   return {
-    attempted: true,
-    validationErrors: [],
-    compiledArtifact: compilePackageToRuntimeContract(validation.normalized),
+    definitionId: artifact.metadata.definitionId,
+    version: artifact.metadata.version,
+    questionSetCount: uniqueQuestionSetIds.size,
+    questionCount: artifact.compiledQuestions.length,
+    optionCount: artifact.compiledOptions.length,
+    mappingCount: compiledMappings.length,
+    uniqueSignalCount: artifact.signalRegistry.signalKeys.length,
+    uniqueDomainCount: artifact.signalRegistry.domains.length,
   }
 }
 
@@ -641,9 +670,16 @@ export function analyzePackageForImport(input: unknown): ImportedAssessmentPacka
   if (!additiveCanonicalHookResult.attempted) {
     // no-op: additive hook only runs against canonical package-v2-shaped payloads
   } else if (additiveCanonicalHookResult.compiledArtifact) {
-    console.info('[admin-import-v2-hook] Canonical v2 contract validated and compiled in-memory.')
+    console.info('[admin-import-v2-hook] Canonical v2 contract validated and compiled in-memory.', summarizeCompiledRuntimeArtifact(additiveCanonicalHookResult.compiledArtifact))
   } else if (additiveCanonicalHookResult.validationErrors.length > 0) {
-    console.warn('[admin-import-v2-hook] Canonical v2 contract validation failed.', additiveCanonicalHookResult.validationErrors)
+    console.warn('[admin-import-v2-hook] Canonical v2 contract validation failed.', {
+      errorCount: additiveCanonicalHookResult.validationErrors.length,
+      errors: additiveCanonicalHookResult.validationErrors,
+    })
+  } else if (additiveCanonicalHookResult.compileError) {
+    console.warn('[admin-import-v2-hook] Canonical v2 contract compilation failed.', {
+      error: additiveCanonicalHookResult.compileError,
+    })
   }
 
   const detected = classifyPackageContract(input)
