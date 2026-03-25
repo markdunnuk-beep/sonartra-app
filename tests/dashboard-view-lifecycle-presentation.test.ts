@@ -10,7 +10,7 @@ test('not_started lifecycle maps to start-assessment dashboard detail copy and C
   assert.equal(presentation.dashboardDetailTitle, 'Assessment not started')
   assert.equal(presentation.dashboardDetailBody, 'Complete the assessment to unlock Individual Results.')
   assert.equal(presentation.dashboardActionLabel, 'Start assessment')
-  assert.equal(presentation.dashboardActionHref, '/assessment')
+  assert.equal(presentation.dashboardActionHref, '/individual/assessments')
 })
 
 test('in_progress lifecycle maps to resume-assessment dashboard detail copy and CTA', () => {
@@ -20,7 +20,7 @@ test('in_progress lifecycle maps to resume-assessment dashboard detail copy and 
   assert.equal(presentation.dashboardDetailTitle, 'Assessment in progress')
   assert.equal(presentation.dashboardDetailBody, 'Continue the assessment to complete your profile.')
   assert.equal(presentation.dashboardActionLabel, 'Resume assessment')
-  assert.equal(presentation.dashboardActionHref, '/assessment')
+  assert.equal(presentation.dashboardActionHref, '/individual/assessments')
 })
 
 test('completed_processing lifecycle maps to completed detail copy and does not expose resume CTA', () => {
@@ -42,7 +42,7 @@ test('ready lifecycle maps to results-available detail copy and Individual Resul
   assert.equal(presentation.dashboardDetailTitle, 'Results available')
   assert.equal(presentation.dashboardDetailBody, 'Your latest completed profile is ready to view.')
   assert.equal(presentation.dashboardActionLabel, 'View Results')
-  assert.equal(presentation.dashboardActionHref, '/results/individual')
+  assert.equal(presentation.dashboardActionHref, '/individual/results')
 })
 
 test('error lifecycle maps to safe fallback copy and safe CTA', () => {

@@ -12,12 +12,9 @@ export interface SidebarLink {
 export function getSidebarLinks(hasCompletedAssessment: boolean, adminHref?: string | null): SidebarLink[] {
   const links: SidebarLink[] = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/assessment', label: 'Assessment', icon: ClipboardCheck },
+    { href: '/individual/assessments', label: 'Assessments', icon: ClipboardCheck, startsWith: '/individual/assessments' },
+    { href: '/individual/results', label: 'Results', icon: UserSquare2, startsWith: '/individual/results' },
   ];
-
-  if (hasCompletedAssessment) {
-    links.push({ href: '/results/individual', label: 'Individual Results', icon: UserSquare2, startsWith: '/results/individual' });
-  }
 
   if (adminHref) {
     links.push({ href: adminHref, label: 'Admin', icon: Shield, startsWith: adminHref });

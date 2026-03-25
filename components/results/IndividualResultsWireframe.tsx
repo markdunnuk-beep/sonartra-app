@@ -430,7 +430,7 @@ export function IndividualResultsWireframeContent() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <Button href="/results/individual" variant="secondary">
+              <Button href="/individual/results" variant="secondary">
                 View current live page
               </Button>
               <Button href="/dashboard" variant="ghost">

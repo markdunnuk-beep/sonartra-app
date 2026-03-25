@@ -128,13 +128,13 @@ export function buildDashboardNextActions(
       {
         title: 'Review Leadership',
         description: 'Understand your leadership orientation.',
-        href: '/results/individual',
+        href: '/individual/results',
         status: 'available',
       },
       {
         title: 'Review Behaviour',
         description: 'Revisit your behavioural style.',
-        href: '/results/individual',
+        href: '/individual/results',
         status: 'available',
       },
     )

@@ -6,7 +6,7 @@ import type {
 import { getAssessmentRepositoryInventory, sortAssessments } from '@/lib/assessment/assessment-repository-selectors'
 import type { IndividualResultReadyData } from '@/lib/server/individual-results'
 
-const BASELINE_RESULTS_ROUTE = '/results/individual'
+const BASELINE_RESULTS_ROUTE = '/individual/results'
 const BASELINE_ASSESSMENT_ID = 'signals'
 
 type FollowOnRule = {
