@@ -192,6 +192,25 @@ export async function getAuthenticatedDashboardState(dependencies: Partial<Dashb
     console.error('getAuthenticatedDashboardState lifecycle resolution failed; preserving assessment metrics:', error)
   }
 
+  if (lifecycleStatus === 'completed_processing') {
+    try {
+      const result = await deps.getResult(userId)
+      const canShowResult = result.resultStatus === 'complete' && result.hasResult
+
+      if (canShowResult) {
+        return {
+          status: 'ready',
+          authStatus: 'authenticated',
+          hasCompletedResult: true,
+          assessment: mapAssessmentState(assessment, 'ready'),
+          result,
+        }
+      }
+    } catch (error) {
+      console.error('getAuthenticatedDashboardState completed-processing readiness probe failed:', error)
+    }
+  }
+
   if (lifecycleStatus !== 'ready') {
     return {
       status: 'ready',

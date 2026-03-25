@@ -270,6 +270,69 @@ test('completed_processing lifecycle keeps real completion metrics while result 
   assert.equal(state.assessment.questionsCompleted, 80)
 })
 
+test('completed_processing lifecycle is promoted to ready when a fresh fetch returns a completed result', async () => {
+  const state = await getAuthenticatedDashboardState({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessment: async () => ({ ...inProgressAssessment, status: 'completed', progress_percent: '100', progress_count: 80, completed_at: '2026-01-01T10:10:00.000Z' }),
+    resolveLifecycle: async () => ({
+      authState: 'authenticated',
+      userId: 'user-1',
+      lifecycle: {
+        state: 'completed_processing',
+        latestAssessment: null,
+        latestAssessmentResult: null,
+        latestReadyResult: null,
+        message: 'Assessment completion marker has landed, waiting on readiness.',
+      },
+    }),
+    getResult: async () => completeResult,
+  })
+
+  assert.equal(state.assessment.status, 'ready')
+  assert.equal(state.hasCompletedResult, true)
+  assert.equal(state.result?.resultStatus, 'complete')
+})
+
+test('subsequent refresh can transition dashboard CTA from processing to ready when readiness lands', async () => {
+  let fetchCount = 0
+
+  const getResult = async () => {
+    fetchCount += 1
+    if (fetchCount === 1) {
+      throw new Error('result snapshot not visible yet')
+    }
+
+    return completeResult
+  }
+
+  const dependencies = {
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessment: async () => ({ ...inProgressAssessment, status: 'completed', progress_percent: '100', progress_count: 80, completed_at: '2026-01-01T10:10:00.000Z' }),
+    resolveLifecycle: async () => ({
+      authState: 'authenticated' as const,
+      userId: 'user-1',
+      lifecycle: {
+        state: 'completed_processing' as const,
+        latestAssessment: null,
+        latestAssessmentResult: null,
+        latestReadyResult: null,
+        message: 'Assessment is completed and currently processing.',
+      },
+    }),
+    getResult,
+  }
+
+  const firstState = await getAuthenticatedDashboardState(dependencies)
+  assert.equal(firstState.assessment.status, 'completed_processing')
+  assert.equal(firstState.hasCompletedResult, false)
+  assert.equal(firstState.result, null)
+
+  const secondState = await getAuthenticatedDashboardState(dependencies)
+  assert.equal(secondState.assessment.status, 'ready')
+  assert.equal(secondState.hasCompletedResult, true)
+  assert.equal(secondState.result?.resultStatus, 'complete')
+})
+
 
 test('latest ready result with newer in-progress attempt keeps real progress metrics while preserving ready availability', async () => {
   const state = await getAuthenticatedDashboardState({
