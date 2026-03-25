@@ -8,7 +8,7 @@ import {
   resolveLiveRuntimeRoutingDecision,
 } from '../lib/server/live-runtime-execution-adapter'
 
-test('resolveLiveRuntimeRoutingDecision keeps unsupported v2 routes blocked when classifier semantics are explicit', () => {
+test('resolveLiveRuntimeRoutingDecision derives live support for canonical v2 payloads from runtime compatibility evidence', () => {
   const imported = importAssessmentPackagePayload(examplePackage)
   const decision = resolveLiveRuntimeRoutingDecision({
     packageSchemaVersion: imported.schemaVersion,
@@ -29,10 +29,11 @@ test('resolveLiveRuntimeRoutingDecision keeps unsupported v2 routes blocked when
   })
 
   assert.equal(decision.contractVersion, 'package_contract_v2')
-  assert.equal(decision.liveRuntimeSupported, false)
-  assert.equal(decision.reasonCode, 'classifier_not_runtime_v2')
-  assert.equal(decision.blockedReasons[0]?.source, 'authoritative_report')
-  assert.match(decision.reason ?? '', /not runtime-contract classified/i)
+  assert.equal(decision.classifier, 'canonical_contract_v2')
+  assert.equal(decision.liveRuntimeSupported, true)
+  assert.equal(decision.reasonCode, null)
+  assert.equal(decision.blockedReasons.length, 0)
+  assert.equal(decision.debug.usedFallbackSupportInference, true)
 })
 
 test('resolveLiveRuntimeRoutingDecision allows v2 live execution through explicit runtime support semantics', () => {

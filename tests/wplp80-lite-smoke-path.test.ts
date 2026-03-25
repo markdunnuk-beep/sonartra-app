@@ -9,6 +9,7 @@ import { resolveLiveSignalsPublishedVersionState } from '../lib/server/live-sign
 import { getQuestionsByAssessmentIdWithDependencies } from '../lib/question-bank'
 import { evaluateCompletedV2Assessment } from '../lib/server/live-assessment-v2'
 import { getAssessmentResultReadModel } from '../lib/server/assessment-result-read'
+import { getLatestIndividualResultForUser } from '../lib/server/individual-results'
 import type { AssessmentResultRow } from '../lib/assessment-types'
 
 function buildDeterministicResponses(packagePayload: Record<string, any>) {
@@ -71,10 +72,9 @@ test('WPLP-80 Lite package-first smoke path covers import readiness runtime deli
     latestSuiteSnapshot: null,
   })
 
-  assert.equal(readiness.status, 'not_ready')
   const runtimeReadinessCheck = readiness.checks.find((check) => check.key === 'runtime_execution_path')
-  assert.equal(runtimeReadinessCheck?.status, 'fail')
-  assert.match(runtimeReadinessCheck?.detail ?? '', /not runtime-contract classified/i)
+  assert.equal(runtimeReadinessCheck?.status, 'pass')
+  assert.notEqual(readiness.status, 'not_ready')
 
   assert.ok(importedCanonical.analysis.compiledRuntimeArtifact)
 
@@ -138,9 +138,7 @@ test('WPLP-80 Lite package-first smoke path covers import readiness runtime deli
             package_schema_version: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
             package_raw_payload: importedCanonical.definitionPayload,
             definition_payload: importedCanonical.definitionPayload,
-            package_validation_report_json: {
-              analysis: { classifier: 'runtime_contract_v2', readinessState: { capabilities: { liveRuntimeSupported: true } } },
-            },
+            package_validation_report_json: { analysis: importedCanonical.analysis },
           }],
         } as never
       }
@@ -178,7 +176,7 @@ test('WPLP-80 Lite package-first smoke path covers import readiness runtime deli
               package_schema_version: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
               package_status: 'valid',
               definition_payload: importedCanonical.definitionPayload,
-              package_validation_report_json: { analysis: { classifier: 'runtime_contract_v2', readinessState: { capabilities: { liveRuntimeSupported: true } } } },
+              package_validation_report_json: { analysis: importedCanonical.analysis },
               assessment_status: 'in_progress',
               total_questions: 16,
               metadata_json: {
@@ -252,4 +250,40 @@ test('WPLP-80 Lite package-first smoke path covers import readiness runtime deli
   assert.equal(readModel.body.result.status, 'complete')
   assert.equal(readModel.body.result.contractVersion, 'package_contract_v2')
   assert.ok((readModel.body.result.liveRuntime?.webSummaryOutputs.length ?? 0) > 0)
+
+  const dashboardResult = await getLatestIndividualResultForUser({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessmentForUser: async () => ({
+      id: 'assessment-wplp80-lite',
+      user_id: 'user-1',
+      organisation_id: null,
+      assessment_version_id: 'version-wplp80-lite-runtime',
+      status: 'completed',
+      started_at: null,
+      completed_at: '2026-03-25T00:10:00.000Z',
+      last_activity_at: '2026-03-25T00:10:00.000Z',
+      progress_count: 16,
+      progress_percent: '100',
+      current_question_index: 16,
+      scoring_status: 'scored',
+      source: 'web',
+      metadata_json: null,
+      created_at: '2026-03-25T00:00:00.000Z',
+      updated_at: '2026-03-25T00:11:00.000Z',
+      version_key: 'wplp80-lite-runtime-v1',
+      total_questions: 16,
+    }),
+    getLatestResultForAssessment: async () => resultRow,
+    getResultById: async () => resultRow,
+    getLatestReadyResultForUser: async () => ({
+      ...resultRow,
+      assessment_started_at: null,
+      assessment_completed_at: '2026-03-25T00:10:00.000Z',
+      assessment_version_key: 'wplp80-lite-runtime-v1',
+    }),
+    getSignalsByResultId: async () => [],
+  })
+
+  assert.equal(dashboardResult.ok, true)
+  assert.equal(dashboardResult.state, 'ready_v2')
 })

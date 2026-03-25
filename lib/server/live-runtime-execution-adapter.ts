@@ -130,6 +130,29 @@ export function resolveLiveRuntimeRoutingDecision(input: {
   }
 
   if (reportPresent) {
+    if (classifier === 'canonical_contract_v2') {
+      debug.usedFallbackSupportInference = true
+      if (fallbackSupport.supported) {
+        return {
+          contractVersion: 'package_contract_v2',
+          classifier,
+          liveRuntimeSupported: true,
+          reasonCode: null,
+          reason: null,
+          blockedReasons: [],
+          debug,
+        }
+      }
+
+      return buildBlockedDecision({
+        classifier,
+        reasonCode: 'fallback_not_supported',
+        reason: fallbackSupport.issues[0]?.message ?? 'Package Contract v2 runtime support is not enabled for live execution readiness.',
+        source: 'fallback',
+        debug,
+      })
+    }
+
     if (classifier !== 'runtime_contract_v2') {
       return buildBlockedDecision({
         classifier,
@@ -182,6 +205,21 @@ export function resolveLiveRuntimeRoutingDecision(input: {
   }
 
   if (classifier !== 'runtime_contract_v2') {
+    if (classifier === 'canonical_contract_v2' && fallbackSupport.supported) {
+      return {
+        contractVersion: 'package_contract_v2',
+        classifier,
+        liveRuntimeSupported: true,
+        reasonCode: null,
+        reason: null,
+        blockedReasons: [],
+        debug: {
+          ...debug,
+          usedFallbackSupportInference: true,
+        },
+      }
+    }
+
     return buildBlockedDecision({
       classifier,
       reasonCode: 'classifier_not_runtime_v2',
