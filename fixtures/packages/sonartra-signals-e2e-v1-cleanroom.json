@@ -1,0 +1,1930 @@
+{
+  "metadata": {
+    "definitionId": "sonartra-signals-e2e",
+    "version": "v1-cleanroom",
+    "title": "Sonartra Signals End-to-End Validation Assessment",
+    "description": "Clean-room Runtime V2 validation package for full individual assessment result-path testing"
+  },
+  "questionSets": [
+    {
+      "id": "qs_behaviour",
+      "title": "Behaviour Style",
+      "order": 1
+    },
+    {
+      "id": "qs_motivators",
+      "title": "Motivators",
+      "order": 2
+    },
+    {
+      "id": "qs_leadership",
+      "title": "Leadership",
+      "order": 3
+    },
+    {
+      "id": "qs_conflict",
+      "title": "Conflict",
+      "order": 4
+    },
+    {
+      "id": "qs_culture",
+      "title": "Culture",
+      "order": 5
+    },
+    {
+      "id": "qs_stress",
+      "title": "Stress",
+      "order": 6
+    }
+  ],
+  "questions": [
+    {
+      "id": "q_behaviour_01",
+      "questionSetId": "qs_behaviour",
+      "text": "When a project scope changes suddenly, what is your first instinct?",
+      "order": 1
+    },
+    {
+      "id": "q_behaviour_02",
+      "questionSetId": "qs_behaviour",
+      "text": "In a kickoff meeting with ambiguity, how do you usually contribute?",
+      "order": 2
+    },
+    {
+      "id": "q_behaviour_03",
+      "questionSetId": "qs_behaviour",
+      "text": "When deadlines are tight and information is incomplete, you tend to:",
+      "order": 3
+    },
+    {
+      "id": "q_behaviour_04",
+      "questionSetId": "qs_behaviour",
+      "text": "In cross-functional work, your default operating rhythm is to:",
+      "order": 4
+    },
+    {
+      "id": "q_motivators_01",
+      "questionSetId": "qs_motivators",
+      "text": "Which work outcome feels most rewarding to you?",
+      "order": 1
+    },
+    {
+      "id": "q_motivators_02",
+      "questionSetId": "qs_motivators",
+      "text": "When choosing your next role, what matters most?",
+      "order": 2
+    },
+    {
+      "id": "q_motivators_03",
+      "questionSetId": "qs_motivators",
+      "text": "You feel most engaged when your work lets you:",
+      "order": 3
+    },
+    {
+      "id": "q_motivators_04",
+      "questionSetId": "qs_motivators",
+      "text": "A strong week at work is one where you:",
+      "order": 4
+    },
+    {
+      "id": "q_leadership_01",
+      "questionSetId": "qs_leadership",
+      "text": "As a team lead, how do you set direction at the start of a quarter?",
+      "order": 1
+    },
+    {
+      "id": "q_leadership_02",
+      "questionSetId": "qs_leadership",
+      "text": "When performance slips, where do you intervene first?",
+      "order": 2
+    },
+    {
+      "id": "q_leadership_03",
+      "questionSetId": "qs_leadership",
+      "text": "In planning sessions, your leadership emphasis is usually:",
+      "order": 3
+    },
+    {
+      "id": "q_leadership_04",
+      "questionSetId": "qs_leadership",
+      "text": "During growth phases, you are most likely to prioritize:",
+      "order": 4
+    },
+    {
+      "id": "q_conflict_01",
+      "questionSetId": "qs_conflict",
+      "text": "When two teams disagree on priorities, your default response is to:",
+      "order": 1
+    },
+    {
+      "id": "q_conflict_02",
+      "questionSetId": "qs_conflict",
+      "text": "In a heated meeting, you usually:",
+      "order": 2
+    },
+    {
+      "id": "q_conflict_03",
+      "questionSetId": "qs_conflict",
+      "text": "If conflict starts affecting delivery, you tend to:",
+      "order": 3
+    },
+    {
+      "id": "q_conflict_04",
+      "questionSetId": "qs_conflict",
+      "text": "When stakes are high and relationships are strained, you are most likely to:",
+      "order": 4
+    },
+    {
+      "id": "q_culture_01",
+      "questionSetId": "qs_culture",
+      "text": "Which team environment helps you do your best work?",
+      "order": 1
+    },
+    {
+      "id": "q_culture_02",
+      "questionSetId": "qs_culture",
+      "text": "When scaling operations, your preference is to:",
+      "order": 2
+    },
+    {
+      "id": "q_culture_03",
+      "questionSetId": "qs_culture",
+      "text": "A healthy culture is best described as one that:",
+      "order": 3
+    },
+    {
+      "id": "q_culture_04",
+      "questionSetId": "qs_culture",
+      "text": "When priorities conflict, culture should favor:",
+      "order": 4
+    },
+    {
+      "id": "q_stress_01",
+      "questionSetId": "qs_stress",
+      "text": "When pressure rises unexpectedly, your first pattern is to:",
+      "order": 1
+    },
+    {
+      "id": "q_stress_02",
+      "questionSetId": "qs_stress",
+      "text": "During prolonged workload spikes, you tend to:",
+      "order": 2
+    },
+    {
+      "id": "q_stress_03",
+      "questionSetId": "qs_stress",
+      "text": "If a setback threatens a key deadline, you usually:",
+      "order": 3
+    },
+    {
+      "id": "q_stress_04",
+      "questionSetId": "qs_stress",
+      "text": "When stress accumulates over several weeks, you are most likely to:",
+      "order": 4
+    }
+  ],
+  "options": [
+    {
+      "id": "opt_q_behaviour_01_01",
+      "questionId": "q_behaviour_01",
+      "text": "Push for a quick decision and clear direction.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_behaviour_01_02",
+      "questionId": "q_behaviour_01",
+      "text": "Gather data before committing to a path.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_behaviour_01_03",
+      "questionId": "q_behaviour_01",
+      "text": "Build momentum by engaging stakeholders early.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_behaviour_01_04",
+      "questionId": "q_behaviour_01",
+      "text": "Create a steady plan everyone can sustain.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_behaviour_02_01",
+      "questionId": "q_behaviour_02",
+      "text": "Set the pace and assign immediate ownership.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_behaviour_02_02",
+      "questionId": "q_behaviour_02",
+      "text": "Clarify assumptions, dependencies, and risks.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_behaviour_02_03",
+      "questionId": "q_behaviour_02",
+      "text": "Connect people and align energy around the goal.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_behaviour_02_04",
+      "questionId": "q_behaviour_02",
+      "text": "Define practical routines that keep delivery stable.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_behaviour_03_01",
+      "questionId": "q_behaviour_03",
+      "text": "Act fast, adjust on the move, and keep progress visible.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_behaviour_03_02",
+      "questionId": "q_behaviour_03",
+      "text": "Slow down briefly to test logic and likely outcomes.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_behaviour_03_03",
+      "questionId": "q_behaviour_03",
+      "text": "Talk it through with key people to secure buy-in.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_behaviour_03_04",
+      "questionId": "q_behaviour_03",
+      "text": "Stabilize workload and keep consistency under pressure.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_behaviour_04_01",
+      "questionId": "q_behaviour_04",
+      "text": "Drive pace and challenge blockers directly.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_behaviour_04_02",
+      "questionId": "q_behaviour_04",
+      "text": "Structure decisions around evidence and criteria.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_behaviour_04_03",
+      "questionId": "q_behaviour_04",
+      "text": "Maintain communication and enthusiasm across teams.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_behaviour_04_04",
+      "questionId": "q_behaviour_04",
+      "text": "Support continuity, reliability, and calm execution.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_motivators_01_01",
+      "questionId": "q_motivators_01",
+      "text": "Deepen expertise and improve how things are done.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_motivators_01_02",
+      "questionId": "q_motivators_01",
+      "text": "Hit ambitious targets and see measurable wins.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_motivators_01_03",
+      "questionId": "q_motivators_01",
+      "text": "Shape key decisions and direction.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_motivators_01_04",
+      "questionId": "q_motivators_01",
+      "text": "Operate in a dependable environment with clear expectations.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_motivators_02_01",
+      "questionId": "q_motivators_02",
+      "text": "Work with people who value craft and continuous learning.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_motivators_02_02",
+      "questionId": "q_motivators_02",
+      "text": "Take on stretch goals with visible impact.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_motivators_02_03",
+      "questionId": "q_motivators_02",
+      "text": "Have a voice in strategy and priorities.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_motivators_02_04",
+      "questionId": "q_motivators_02",
+      "text": "Have role clarity, predictable cadence, and security.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_motivators_03_01",
+      "questionId": "q_motivators_03",
+      "text": "Build capability and solve difficult problems well.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_motivators_03_02",
+      "questionId": "q_motivators_03",
+      "text": "Compete against meaningful performance goals.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_motivators_03_03",
+      "questionId": "q_motivators_03",
+      "text": "Mobilize others around important initiatives.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_motivators_03_04",
+      "questionId": "q_motivators_03",
+      "text": "Maintain dependable systems and low unnecessary risk.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_motivators_04_01",
+      "questionId": "q_motivators_04",
+      "text": "Learn something substantial that raises your standard.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_motivators_04_02",
+      "questionId": "q_motivators_04",
+      "text": "Deliver outcomes that clearly outperform expectations.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_motivators_04_03",
+      "questionId": "q_motivators_04",
+      "text": "Influence decisions that affect broader results.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_motivators_04_04",
+      "questionId": "q_motivators_04",
+      "text": "Keep commitments in a stable, sustainable rhythm.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_leadership_01_01",
+      "questionId": "q_leadership_01",
+      "text": "Define outcomes, milestones, and accountability quickly.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_leadership_01_02",
+      "questionId": "q_leadership_01",
+      "text": "Paint a future direction and connect work to long-term purpose.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_leadership_01_03",
+      "questionId": "q_leadership_01",
+      "text": "Clarify roles and coach individuals to succeed.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_leadership_01_04",
+      "questionId": "q_leadership_01",
+      "text": "Establish repeatable workflows and governance.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_leadership_02_01",
+      "questionId": "q_leadership_02",
+      "text": "Reset goals and expectations with clear performance standards.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_leadership_02_02",
+      "questionId": "q_leadership_02",
+      "text": "Reframe the bigger opportunity to renew commitment.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_leadership_02_03",
+      "questionId": "q_leadership_02",
+      "text": "Have developmental conversations and remove people blockers.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_leadership_02_04",
+      "questionId": "q_leadership_02",
+      "text": "Tighten routines, handoffs, and operating discipline.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_leadership_03_01",
+      "questionId": "q_leadership_03",
+      "text": "Execution focus with measurable delivery targets.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_leadership_03_02",
+      "questionId": "q_leadership_03",
+      "text": "Strategic narrative about where the team is headed.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_leadership_03_03",
+      "questionId": "q_leadership_03",
+      "text": "Capability building, trust, and team health.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_leadership_03_04",
+      "questionId": "q_leadership_03",
+      "text": "Systems thinking, process clarity, and quality controls.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_leadership_04_01",
+      "questionId": "q_leadership_04",
+      "text": "Faster delivery and stronger outcome ownership.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_leadership_04_02",
+      "questionId": "q_leadership_04",
+      "text": "Future-ready choices that position the team ahead.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_leadership_04_03",
+      "questionId": "q_leadership_04",
+      "text": "Succession strength and growth of emerging talent.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_leadership_04_04",
+      "questionId": "q_leadership_04",
+      "text": "Scalable processes that reduce friction and rework.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_conflict_01_01",
+      "questionId": "q_conflict_01",
+      "text": "Advocate strongly for the option you believe is best.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_conflict_01_02",
+      "questionId": "q_conflict_01",
+      "text": "Bring everyone together to build a shared solution.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_conflict_01_03",
+      "questionId": "q_conflict_01",
+      "text": "Look for a middle ground both sides can accept.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_conflict_01_04",
+      "questionId": "q_conflict_01",
+      "text": "Step back until emotions cool before re-engaging.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_conflict_02_01",
+      "questionId": "q_conflict_02",
+      "text": "Hold your line and press for a firm decision.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_conflict_02_02",
+      "questionId": "q_conflict_02",
+      "text": "Invite each perspective and integrate common ground.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_conflict_02_03",
+      "questionId": "q_conflict_02",
+      "text": "Offer concessions to move the group forward.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_conflict_02_04",
+      "questionId": "q_conflict_02",
+      "text": "Prioritize harmony even if your view is set aside.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_conflict_03_01",
+      "questionId": "q_conflict_03",
+      "text": "Escalate quickly to force clarity and commitment.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_conflict_03_02",
+      "questionId": "q_conflict_03",
+      "text": "Facilitate structured dialogue to resolve root issues.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_conflict_03_03",
+      "questionId": "q_conflict_03",
+      "text": "Negotiate trade-offs that protect key priorities.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_conflict_03_04",
+      "questionId": "q_conflict_03",
+      "text": "Temporarily disengage while tension settles.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_conflict_04_01",
+      "questionId": "q_conflict_04",
+      "text": "Compete directly for the critical outcome.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_conflict_04_02",
+      "questionId": "q_conflict_04",
+      "text": "Collaborate deeply to preserve both outcome and trust.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_conflict_04_03",
+      "questionId": "q_conflict_04",
+      "text": "Accommodate the other side to protect relationship continuity.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_conflict_04_04",
+      "questionId": "q_conflict_04",
+      "text": "Blend compromise with selective accommodation to regain momentum.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_culture_01_01",
+      "questionId": "q_culture_01",
+      "text": "Sets high standards and rewards strong execution.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_culture_01_02",
+      "questionId": "q_culture_01",
+      "text": "Defines clear authority, roles, and compliance.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_culture_01_03",
+      "questionId": "q_culture_01",
+      "text": "Builds belonging through trust and shared ownership.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_culture_01_04",
+      "questionId": "q_culture_01",
+      "text": "Encourages experimentation and rapid learning.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_culture_02_01",
+      "questionId": "q_culture_02",
+      "text": "Raise the bar with transparent performance metrics.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_culture_02_02",
+      "questionId": "q_culture_02",
+      "text": "Strengthen controls and decision rights.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_culture_02_03",
+      "questionId": "q_culture_02",
+      "text": "Invest in cross-team partnership and shared goals.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_culture_02_04",
+      "questionId": "q_culture_02",
+      "text": "Create room to test new ideas and adapt quickly.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_culture_03_01",
+      "questionId": "q_culture_03",
+      "text": "Delivers measurable results consistently.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_culture_03_02",
+      "questionId": "q_culture_03",
+      "text": "Maintains order, risk discipline, and reliability.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_culture_03_03",
+      "questionId": "q_culture_03",
+      "text": "Supports people and collective success.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_culture_03_04",
+      "questionId": "q_culture_03",
+      "text": "Learns fast, evolves, and challenges old assumptions.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_culture_04_01",
+      "questionId": "q_culture_04",
+      "text": "Performance accountability with stretch expectations.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_culture_04_02",
+      "questionId": "q_culture_04",
+      "text": "Operational control with clear guardrails.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_culture_04_03",
+      "questionId": "q_culture_04",
+      "text": "Collaborative coordination across functions.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_culture_04_04",
+      "questionId": "q_culture_04",
+      "text": "Innovation bets that unlock future advantage.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_stress_01_01",
+      "questionId": "q_stress_01",
+      "text": "Tighten structure and monitor details closely.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_stress_01_02",
+      "questionId": "q_stress_01",
+      "text": "Increase intensity and push harder for output.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_stress_01_03",
+      "questionId": "q_stress_01",
+      "text": "Pull back to reduce exposure and noise.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_stress_01_04",
+      "questionId": "q_stress_01",
+      "text": "Reach out for perspective and practical support.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_stress_02_01",
+      "questionId": "q_stress_02",
+      "text": "Create stricter plans and checkpoints.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_stress_02_02",
+      "questionId": "q_stress_02",
+      "text": "Work longer and accelerate decision cycles.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_stress_02_03",
+      "questionId": "q_stress_02",
+      "text": "Limit interaction and focus on essentials quietly.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_stress_02_04",
+      "questionId": "q_stress_02",
+      "text": "Reconnect with trusted colleagues to rebalance.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_stress_03_01",
+      "questionId": "q_stress_03",
+      "text": "Regain control through process and contingency steps.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_stress_03_02",
+      "questionId": "q_stress_03",
+      "text": "Double pace to recover lost ground quickly.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_stress_03_03",
+      "questionId": "q_stress_03",
+      "text": "Pause noncritical conversations and retreat to think.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_stress_03_04",
+      "questionId": "q_stress_03",
+      "text": "Ask for help early to protect quality and wellbeing.",
+      "order": 4
+    },
+    {
+      "id": "opt_q_stress_04_01",
+      "questionId": "q_stress_04",
+      "text": "Reassert control over priorities and boundaries.",
+      "order": 1
+    },
+    {
+      "id": "opt_q_stress_04_02",
+      "questionId": "q_stress_04",
+      "text": "Sustain overdrive until results are secured.",
+      "order": 2
+    },
+    {
+      "id": "opt_q_stress_04_03",
+      "questionId": "q_stress_04",
+      "text": "Withdraw temporarily to conserve energy.",
+      "order": 3
+    },
+    {
+      "id": "opt_q_stress_04_04",
+      "questionId": "q_stress_04",
+      "text": "Build support loops and share load intentionally.",
+      "order": 4
+    }
+  ],
+  "signalMappings": [
+    {
+      "optionId": "opt_q_behaviour_01_01",
+      "signalKey": "behaviour_style_driver",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_01_01",
+      "signalKey": "behaviour_style_analyst",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_01_02",
+      "signalKey": "behaviour_style_analyst",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_01_02",
+      "signalKey": "behaviour_style_influencer",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_01_03",
+      "signalKey": "behaviour_style_influencer",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_01_03",
+      "signalKey": "behaviour_style_stabiliser",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_01_04",
+      "signalKey": "behaviour_style_stabiliser",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_01_04",
+      "signalKey": "behaviour_style_driver",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_02_01",
+      "signalKey": "behaviour_style_driver",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_02_01",
+      "signalKey": "behaviour_style_analyst",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_02_02",
+      "signalKey": "behaviour_style_analyst",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_02_02",
+      "signalKey": "behaviour_style_influencer",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_02_03",
+      "signalKey": "behaviour_style_influencer",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_02_03",
+      "signalKey": "behaviour_style_stabiliser",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_02_04",
+      "signalKey": "behaviour_style_stabiliser",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_02_04",
+      "signalKey": "behaviour_style_driver",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_03_01",
+      "signalKey": "behaviour_style_driver",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_03_01",
+      "signalKey": "behaviour_style_analyst",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_03_02",
+      "signalKey": "behaviour_style_analyst",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_03_02",
+      "signalKey": "behaviour_style_influencer",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_03_03",
+      "signalKey": "behaviour_style_influencer",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_03_03",
+      "signalKey": "behaviour_style_stabiliser",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_03_04",
+      "signalKey": "behaviour_style_stabiliser",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_03_04",
+      "signalKey": "behaviour_style_driver",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_04_01",
+      "signalKey": "behaviour_style_driver",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_04_01",
+      "signalKey": "behaviour_style_analyst",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_04_02",
+      "signalKey": "behaviour_style_analyst",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_04_02",
+      "signalKey": "behaviour_style_influencer",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_04_03",
+      "signalKey": "behaviour_style_influencer",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_04_03",
+      "signalKey": "behaviour_style_stabiliser",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_04_04",
+      "signalKey": "behaviour_style_stabiliser",
+      "weight": 4,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_behaviour_04_04",
+      "signalKey": "behaviour_style_driver",
+      "weight": 1,
+      "domain": "behaviour_style"
+    },
+    {
+      "optionId": "opt_q_motivators_01_01",
+      "signalKey": "motivators_mastery",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_01_01",
+      "signalKey": "motivators_achievement",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_01_02",
+      "signalKey": "motivators_achievement",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_01_02",
+      "signalKey": "motivators_influence",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_01_03",
+      "signalKey": "motivators_influence",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_01_03",
+      "signalKey": "motivators_stability",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_01_04",
+      "signalKey": "motivators_stability",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_01_04",
+      "signalKey": "motivators_mastery",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_02_01",
+      "signalKey": "motivators_mastery",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_02_01",
+      "signalKey": "motivators_achievement",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_02_02",
+      "signalKey": "motivators_achievement",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_02_02",
+      "signalKey": "motivators_influence",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_02_03",
+      "signalKey": "motivators_influence",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_02_03",
+      "signalKey": "motivators_stability",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_02_04",
+      "signalKey": "motivators_stability",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_02_04",
+      "signalKey": "motivators_mastery",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_03_01",
+      "signalKey": "motivators_mastery",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_03_01",
+      "signalKey": "motivators_achievement",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_03_02",
+      "signalKey": "motivators_achievement",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_03_02",
+      "signalKey": "motivators_influence",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_03_03",
+      "signalKey": "motivators_influence",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_03_03",
+      "signalKey": "motivators_stability",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_03_04",
+      "signalKey": "motivators_stability",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_03_04",
+      "signalKey": "motivators_mastery",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_04_01",
+      "signalKey": "motivators_mastery",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_04_01",
+      "signalKey": "motivators_achievement",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_04_02",
+      "signalKey": "motivators_achievement",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_04_02",
+      "signalKey": "motivators_influence",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_04_03",
+      "signalKey": "motivators_influence",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_04_03",
+      "signalKey": "motivators_stability",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_04_04",
+      "signalKey": "motivators_stability",
+      "weight": 4,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_motivators_04_04",
+      "signalKey": "motivators_mastery",
+      "weight": 1,
+      "domain": "motivators"
+    },
+    {
+      "optionId": "opt_q_leadership_01_01",
+      "signalKey": "leadership_results",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_01_01",
+      "signalKey": "leadership_vision",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_01_02",
+      "signalKey": "leadership_vision",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_01_02",
+      "signalKey": "leadership_people",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_01_03",
+      "signalKey": "leadership_people",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_01_03",
+      "signalKey": "leadership_process",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_01_04",
+      "signalKey": "leadership_process",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_01_04",
+      "signalKey": "leadership_results",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_02_01",
+      "signalKey": "leadership_results",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_02_01",
+      "signalKey": "leadership_vision",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_02_02",
+      "signalKey": "leadership_vision",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_02_02",
+      "signalKey": "leadership_people",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_02_03",
+      "signalKey": "leadership_people",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_02_03",
+      "signalKey": "leadership_process",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_02_04",
+      "signalKey": "leadership_process",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_02_04",
+      "signalKey": "leadership_results",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_03_01",
+      "signalKey": "leadership_results",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_03_01",
+      "signalKey": "leadership_vision",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_03_02",
+      "signalKey": "leadership_vision",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_03_02",
+      "signalKey": "leadership_people",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_03_03",
+      "signalKey": "leadership_people",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_03_03",
+      "signalKey": "leadership_process",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_03_04",
+      "signalKey": "leadership_process",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_03_04",
+      "signalKey": "leadership_results",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_04_01",
+      "signalKey": "leadership_results",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_04_01",
+      "signalKey": "leadership_vision",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_04_02",
+      "signalKey": "leadership_vision",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_04_02",
+      "signalKey": "leadership_people",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_04_03",
+      "signalKey": "leadership_people",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_04_03",
+      "signalKey": "leadership_process",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_04_04",
+      "signalKey": "leadership_process",
+      "weight": 4,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_leadership_04_04",
+      "signalKey": "leadership_results",
+      "weight": 1,
+      "domain": "leadership"
+    },
+    {
+      "optionId": "opt_q_conflict_01_01",
+      "signalKey": "conflict_compete",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_01_01",
+      "signalKey": "conflict_compromise",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_01_02",
+      "signalKey": "conflict_collaborate",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_01_02",
+      "signalKey": "conflict_accommodate",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_01_03",
+      "signalKey": "conflict_compromise",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_01_03",
+      "signalKey": "conflict_collaborate",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_01_04",
+      "signalKey": "conflict_avoid",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_01_04",
+      "signalKey": "conflict_accommodate",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_02_01",
+      "signalKey": "conflict_compete",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_02_01",
+      "signalKey": "conflict_avoid",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_02_02",
+      "signalKey": "conflict_collaborate",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_02_02",
+      "signalKey": "conflict_compromise",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_02_03",
+      "signalKey": "conflict_compromise",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_02_03",
+      "signalKey": "conflict_accommodate",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_02_04",
+      "signalKey": "conflict_accommodate",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_02_04",
+      "signalKey": "conflict_avoid",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_03_01",
+      "signalKey": "conflict_compete",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_03_01",
+      "signalKey": "conflict_collaborate",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_03_02",
+      "signalKey": "conflict_collaborate",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_03_02",
+      "signalKey": "conflict_compromise",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_03_03",
+      "signalKey": "conflict_compromise",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_03_03",
+      "signalKey": "conflict_compete",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_03_04",
+      "signalKey": "conflict_avoid",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_03_04",
+      "signalKey": "conflict_accommodate",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_04_01",
+      "signalKey": "conflict_compete",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_04_01",
+      "signalKey": "conflict_compromise",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_04_02",
+      "signalKey": "conflict_collaborate",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_04_02",
+      "signalKey": "conflict_accommodate",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_04_03",
+      "signalKey": "conflict_accommodate",
+      "weight": 4,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_04_03",
+      "signalKey": "conflict_avoid",
+      "weight": 1,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_04_04",
+      "signalKey": "conflict_compromise",
+      "weight": 3,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_conflict_04_04",
+      "signalKey": "conflict_accommodate",
+      "weight": 2,
+      "domain": "conflict"
+    },
+    {
+      "optionId": "opt_q_culture_01_01",
+      "signalKey": "culture_performance",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_01_01",
+      "signalKey": "culture_control",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_01_02",
+      "signalKey": "culture_control",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_01_02",
+      "signalKey": "culture_collaboration",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_01_03",
+      "signalKey": "culture_collaboration",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_01_03",
+      "signalKey": "culture_innovation",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_01_04",
+      "signalKey": "culture_innovation",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_01_04",
+      "signalKey": "culture_performance",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_02_01",
+      "signalKey": "culture_performance",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_02_01",
+      "signalKey": "culture_control",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_02_02",
+      "signalKey": "culture_control",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_02_02",
+      "signalKey": "culture_collaboration",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_02_03",
+      "signalKey": "culture_collaboration",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_02_03",
+      "signalKey": "culture_innovation",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_02_04",
+      "signalKey": "culture_innovation",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_02_04",
+      "signalKey": "culture_performance",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_03_01",
+      "signalKey": "culture_performance",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_03_01",
+      "signalKey": "culture_control",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_03_02",
+      "signalKey": "culture_control",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_03_02",
+      "signalKey": "culture_collaboration",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_03_03",
+      "signalKey": "culture_collaboration",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_03_03",
+      "signalKey": "culture_innovation",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_03_04",
+      "signalKey": "culture_innovation",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_03_04",
+      "signalKey": "culture_performance",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_04_01",
+      "signalKey": "culture_performance",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_04_01",
+      "signalKey": "culture_control",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_04_02",
+      "signalKey": "culture_control",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_04_02",
+      "signalKey": "culture_collaboration",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_04_03",
+      "signalKey": "culture_collaboration",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_04_03",
+      "signalKey": "culture_innovation",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_04_04",
+      "signalKey": "culture_innovation",
+      "weight": 4,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_culture_04_04",
+      "signalKey": "culture_performance",
+      "weight": 1,
+      "domain": "culture"
+    },
+    {
+      "optionId": "opt_q_stress_01_01",
+      "signalKey": "stress_control",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_01_01",
+      "signalKey": "stress_overdrive",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_01_02",
+      "signalKey": "stress_overdrive",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_01_02",
+      "signalKey": "stress_withdraw",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_01_03",
+      "signalKey": "stress_withdraw",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_01_03",
+      "signalKey": "stress_support",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_01_04",
+      "signalKey": "stress_support",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_01_04",
+      "signalKey": "stress_control",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_02_01",
+      "signalKey": "stress_control",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_02_01",
+      "signalKey": "stress_overdrive",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_02_02",
+      "signalKey": "stress_overdrive",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_02_02",
+      "signalKey": "stress_withdraw",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_02_03",
+      "signalKey": "stress_withdraw",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_02_03",
+      "signalKey": "stress_support",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_02_04",
+      "signalKey": "stress_support",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_02_04",
+      "signalKey": "stress_control",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_03_01",
+      "signalKey": "stress_control",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_03_01",
+      "signalKey": "stress_overdrive",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_03_02",
+      "signalKey": "stress_overdrive",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_03_02",
+      "signalKey": "stress_withdraw",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_03_03",
+      "signalKey": "stress_withdraw",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_03_03",
+      "signalKey": "stress_support",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_03_04",
+      "signalKey": "stress_support",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_03_04",
+      "signalKey": "stress_control",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_04_01",
+      "signalKey": "stress_control",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_04_01",
+      "signalKey": "stress_overdrive",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_04_02",
+      "signalKey": "stress_overdrive",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_04_02",
+      "signalKey": "stress_withdraw",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_04_03",
+      "signalKey": "stress_withdraw",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_04_03",
+      "signalKey": "stress_support",
+      "weight": 1,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_04_04",
+      "signalKey": "stress_support",
+      "weight": 4,
+      "domain": "stress"
+    },
+    {
+      "optionId": "opt_q_stress_04_04",
+      "signalKey": "stress_control",
+      "weight": 1,
+      "domain": "stress"
+    }
+  ],
+  "scoring": {
+    "method": "weighted_sum"
+  },
+  "normalization": {
+    "method": "percentage_distribution",
+    "enforceTotal": 100
+  },
+  "output": {
+    "generateRankings": true,
+    "generateDomainSummaries": true,
+    "generateOverview": true
+  }
+}
