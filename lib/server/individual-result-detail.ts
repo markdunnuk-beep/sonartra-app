@@ -3,6 +3,7 @@ import { queryDb as defaultQueryDb } from '@/lib/db'
 import { buildIndividualResultsCategorySqlPredicate } from '@/lib/server/assessment-definition-category'
 import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants'
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth'
+import { INDIVIDUAL_ASSESSMENT_DEFINITION_CATEGORY_SQL } from '@/lib/server/assessment-definition-category'
 import { parseHybridMvpResultPayload } from '@/lib/server/hybrid-mvp-result'
 import {
   buildLiveAssessmentUserResultContract,
@@ -18,6 +19,16 @@ interface ResultDetailRow extends AssessmentResultRow {
   assessment_started_at: string | null
   assessment_completed_at: string | null
   assessment_version_key: string | null
+}
+
+interface IndividualResultDetailDependencies {
+  resolveAuthenticatedAppUser: typeof resolveAuthenticatedAppUser
+  queryDb: typeof queryDb
+}
+
+const defaultDependencies: IndividualResultDetailDependencies = {
+  resolveAuthenticatedAppUser,
+  queryDb,
 }
 
 const LAYER_ORDER = new Map<string, number>(ASSESSMENT_LAYER_KEYS.map((layerKey, index) => [layerKey, index]))
@@ -75,18 +86,10 @@ function buildLayerSummaries(signals: IndividualResultSignalSummary[]): Individu
     })
 }
 
-
-interface IndividualResultDetailDependencies {
-  resolveAuthenticatedAppUser: typeof resolveAuthenticatedAppUser
-  queryDb: typeof defaultQueryDb
-}
-
-const defaultDependencies: IndividualResultDetailDependencies = {
-  resolveAuthenticatedAppUser,
-  queryDb: defaultQueryDb,
-}
-
-export async function loadIndividualResultDetailById(resultId: string, dependencies: Partial<IndividualResultDetailDependencies> = {}): Promise<IndividualResultApiResponse> {
+export async function loadIndividualResultDetailById(
+  resultId: string,
+  dependencies: Partial<IndividualResultDetailDependencies> = {},
+): Promise<IndividualResultApiResponse> {
   const deps = { ...defaultDependencies, ...dependencies }
   const appUser = await deps.resolveAuthenticatedAppUser()
   if (!appUser) {
