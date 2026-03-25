@@ -1,7 +1,7 @@
 import { SaveResponseRequest } from '@/lib/assessment-types'
-import { withTransaction } from '@/lib/db'
+import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
+import { queryDb, withTransaction } from '@/lib/db'
 import { saveV2AssessmentResponse } from '@/lib/server/live-assessment-v2'
-import { saveHybridAssessmentResponse } from '@/lib/server/live-assessment-hybrid-mvp'
 
 interface AssessmentProgressRow {
   id: string
@@ -16,6 +16,7 @@ interface SaveAssessmentResponseInput extends Partial<SaveResponseRequest> {
 
 interface SaveAssessmentResponseDependencies {
   withTransaction: typeof withTransaction
+  queryDb: typeof queryDb
 }
 
 export type SaveAssessmentResponseResult =
@@ -54,6 +55,13 @@ type SaveAssessmentResponseTransactionResult =
 
 const defaultDependencies: SaveAssessmentResponseDependencies = {
   withTransaction,
+  queryDb,
+}
+
+interface V2QuestionCompatibilityRow {
+  user_id: string
+  package_schema_version: string | null
+  definition_payload: unknown
 }
 
 export async function saveAssessmentResponse(
@@ -67,26 +75,19 @@ export async function saveAssessmentResponse(
   if (!input.assessmentId) {
     return { status: 400, body: { error: 'assessmentId is required.' } }
   }
+  const deps = { ...defaultDependencies, ...dependencies }
 
   if (typeof input.questionId === 'string') {
-    const v2Result = await saveV2AssessmentResponse({
-      assessmentId: input.assessmentId,
-      appUserId: input.appUserId,
-      questionId: input.questionId,
-      response: input.response,
-      responseTimeMs: input.responseTimeMs,
-    })
-
-    if (!(v2Result.status === 400 && 'error' in v2Result.body && v2Result.body.error === 'Assessment is not using Package Contract v2.')) {
-      return v2Result as SaveAssessmentResponseResult
-    }
-
-    return saveHybridAssessmentResponse({
-      assessmentId: input.assessmentId,
-      appUserId: input.appUserId,
-      questionId: input.questionId,
-      response: input.response,
-    }) as Promise<SaveAssessmentResponseResult>
+    return saveV2AssessmentResponse(
+      {
+        assessmentId: input.assessmentId,
+        appUserId: input.appUserId,
+        questionId: input.questionId,
+        response: input.response,
+        responseTimeMs: input.responseTimeMs,
+      },
+      { withTransactionFn: deps.withTransaction },
+    )
   }
 
   if (!input.questionId || !Number.isInteger(input.questionId) || input.questionId < 1 || input.questionId > 80) {
@@ -104,7 +105,51 @@ export async function saveAssessmentResponse(
     return { status: 400, body: { error: 'responseTimeMs must be a non-negative integer.' } }
   }
 
-  const deps = { ...defaultDependencies, ...dependencies }
+  const compatibilityResult = await deps.queryDb<V2QuestionCompatibilityRow>(
+    `SELECT a.user_id, av.package_schema_version, av.definition_payload
+     FROM assessments a
+     INNER JOIN assessment_versions av ON av.id = a.assessment_version_id
+     WHERE a.id = $1
+     LIMIT 1`,
+    [input.assessmentId],
+  )
+  const compatibilityRow = compatibilityResult.rows[0]
+  if (!compatibilityRow || compatibilityRow.user_id !== input.appUserId) {
+    return { status: 404, body: { error: 'Assessment not found.' } }
+  }
+
+  if (compatibilityRow.package_schema_version === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
+    const pkg = parseStoredValidatedAssessmentPackageV2(compatibilityRow.definition_payload)
+    const mappedQuestion = pkg?.questions[input.questionId - 1]
+    if (!pkg || !mappedQuestion) {
+      return { status: 400, body: { error: 'Invalid question reference for this Package Contract v2 assessment.' } }
+    }
+    const responseModel = pkg.responseModels.models.find((entry) => entry.id === mappedQuestion.responseModelId)
+    const options = responseModel
+      ? [
+          ...(responseModel.optionSetId
+            ? (pkg.responseModels.optionSets ?? []).find((entry) => entry.id === responseModel.optionSetId)?.options ?? []
+            : []),
+          ...(responseModel.options ?? []),
+        ]
+      : []
+    const selectedOption = options[input.responseValue - 1]
+    if (!selectedOption) {
+      return { status: 400, body: { error: 'Invalid response option for this Package Contract v2 question.' } }
+    }
+
+    return saveV2AssessmentResponse(
+      {
+        assessmentId: input.assessmentId,
+        appUserId: input.appUserId,
+        questionId: mappedQuestion.id,
+        response: selectedOption.id,
+        responseTimeMs: input.responseTimeMs,
+      },
+      { withTransactionFn: deps.withTransaction },
+    ) as Promise<SaveAssessmentResponseResult>
+  }
+
   const assessmentId = input.assessmentId
   const questionId = input.questionId
   const responseValue = input.responseValue

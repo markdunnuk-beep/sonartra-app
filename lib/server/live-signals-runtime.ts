@@ -42,9 +42,7 @@ export interface LiveSignalsPublishedVersionResolution {
 
 export type LiveSignalsPublishedVersionDiagnosticCode =
   | 'no_published_version'
-  | 'runtime_not_materialized'
-  | 'runtime_question_count_mismatch'
-  | 'runtime_metadata_mismatch'
+  | 'legacy_runtime_decommissioned'
   | 'package_not_live_runtime_enabled'
   | 'package_not_compilable'
   | 'package_invalid'
@@ -185,43 +183,29 @@ export async function resolveLiveSignalsPublishedVersionState(
 
   if (!row.active_question_set_id) {
     return buildUnavailableState({
-      code: 'runtime_not_materialized',
-      message: 'The published Sonartra Signals version is not runnable yet because runtime materialization has not completed.',
+      code: 'legacy_runtime_decommissioned',
+      message: 'The published Sonartra Signals version is still on the legacy runtime path. New individual starts require a Package Contract v2 published version.',
     })
   }
 
   if (row.active_question_count !== row.total_questions) {
     return buildUnavailableState({
-      code: 'runtime_question_count_mismatch',
-      message: `The published Sonartra Signals version is not runnable because runtime materialization produced ${row.active_question_count} active questions but the published version expects ${row.total_questions}.`,
+      code: 'legacy_runtime_decommissioned',
+      message: 'The published Sonartra Signals version is still on the legacy runtime path. New individual starts require a Package Contract v2 published version.',
     })
   }
 
   if (row.questions_with_runtime_metadata !== row.active_question_count) {
     return buildUnavailableState({
-      code: 'runtime_metadata_mismatch',
-      message: `The published Sonartra Signals version is not runnable because runtime metadata is incomplete for ${row.active_question_count - row.questions_with_runtime_metadata} active question(s).`,
+      code: 'legacy_runtime_decommissioned',
+      message: 'The published Sonartra Signals version is still on the legacy runtime path. New individual starts require a Package Contract v2 published version.',
     })
   }
 
-  return {
-    version: {
-      assessmentDefinitionId: row.assessment_definition_id,
-      assessmentDefinitionKey: row.assessment_definition_key,
-      assessmentDefinitionSlug: row.assessment_definition_slug,
-      currentPublishedVersionId: row.current_published_version_id,
-      assessmentVersionId: row.assessment_version_id,
-      assessmentVersionKey: row.assessment_version_key,
-      assessmentVersionName: row.assessment_version_name,
-      totalQuestions: row.total_questions,
-      isActive: row.is_active,
-      contractVersion: 'legacy_v1',
-    },
-    diagnostic: {
-      code: 'no_published_version',
-      message: 'No active published Sonartra Signals version is available.',
-    },
-  }
+  return buildUnavailableState({
+    code: 'legacy_runtime_decommissioned',
+    message: 'The published Sonartra Signals version is still on the legacy runtime path. New individual starts require a Package Contract v2 published version.',
+  })
 }
 
 export async function resolveLiveSignalsPublishedVersion(
