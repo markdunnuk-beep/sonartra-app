@@ -67,6 +67,7 @@ import {
   getAssessmentRuntimeExecutableIssues,
   materializeAssessmentRuntimeFromPackage,
 } from '@/lib/admin/server/assessment-runtime-materialization'
+import { materializeRuntimeContractV2ForAssessmentVersion } from '@/lib/server/runtime-v2-materializer'
 import {
   getAdminAssessmentRuntimeSchemaCapabilities,
   getMissingAssessmentRuntimeColumns,
@@ -3884,9 +3885,8 @@ export async function publishAdminAssessmentVersion(
       const totalQuestions = evaluatedVersion.packageInfo.summary?.questionsCount ?? null
       const evaluatedSignOff = evaluatedVersion.releaseGovernance?.signOff ?? { status: 'unsigned' as const, signedOffBy: null, signedOffAt: null, isStale: false, staleReason: null }
       const publishReadiness = getAdminAssessmentVersionReadiness(evaluatedVersion)
-      // Wave-2 publish invariant (TODO): require canonical Package Contract v2 validation pass,
-      // Runtime Contract v2 compilation success, and structurally complete compiled artifact
-      // evidence before allowing lifecycle transition to `published`.
+      // Canonical Runtime Contract v2 publish gate for WPLP-80 lane:
+      // publish is allowed only after package validation, runtime compilation, and runtime-v2 materialization succeed.
 
       if (publishReadiness.status === 'not_ready') {
         const blockingSummary = publishReadiness.blockingIssues[0] ?? 'The attached package is missing or invalid.'
@@ -3983,6 +3983,27 @@ export async function publishAdminAssessmentVersion(
             ok: false,
             code: 'invalid_transition',
             message: `Publish blocked: ${blockingSummary}`,
+          }
+        }
+
+        if (runtimePackageV2.metadata.assessmentKey === 'sonartra_signals') {
+          const runtimeV2Materialization = await runPublishStage('runtime_v2_materialization', {
+            assessmentId: input.assessmentId,
+            versionId: input.versionId,
+          }, () => materializeRuntimeContractV2ForAssessmentVersion({
+            assessmentVersionId: input.versionId,
+            assessmentDefinitionId: input.assessmentId,
+            packagePayload: runtimePackageV2,
+          }))
+
+          if (!runtimeV2Materialization.success) {
+            const failureMessage = runtimeV2Materialization.errors?.[0]
+              ?? 'Runtime Contract v2 materialization failed and blocked publishing.'
+            return {
+              ok: false,
+              code: 'invalid_transition',
+              message: `Publish blocked: ${failureMessage}`,
+            }
           }
         }
       } else {

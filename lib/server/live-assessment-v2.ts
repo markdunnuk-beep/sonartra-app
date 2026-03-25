@@ -18,6 +18,12 @@ import {
 import { getLatestAssessmentResultSnapshot } from '@/lib/server/assessment-results'
 import { executeLiveRuntimeBundleWithCompatibility, resolveLiveRuntimeRoutingDecision } from '@/lib/server/live-runtime-execution-adapter'
 import { mapLiveRuntimeExecutionToPersistedCompatibilityPayload } from '@/lib/server/live-runtime-result-compat'
+import {
+  getMaterializedRuntimeVersionByAssessmentVersionId,
+  getRuntimeV2MappingsForOptions,
+  getRuntimeV2OptionsForQuestions,
+  getRuntimeV2Questions,
+} from '@/lib/server/runtime-v2-repository'
 
 export type LiveAssessmentContractVersion = 'legacy_v1' | 'package_contract_v2'
 export type RuntimeExecutionDiagnosticCode =
@@ -591,6 +597,34 @@ export async function evaluateCompletedV2Assessment(input: {
   }
 
   try {
+    const runtimeVersion = await getMaterializedRuntimeVersionByAssessmentVersionId(lifecycle.assessment.assessment_version_id)
+    if (!runtimeVersion) {
+      return {
+        httpStatus: 409,
+        body: {
+          ok: false,
+          error: 'Runtime Contract v2 materialization is missing for this published version.',
+        },
+      }
+    }
+
+    const [runtimeQuestions, runtimeOptions, runtimeMappings] = await Promise.all([
+      getRuntimeV2Questions(runtimeVersion.id),
+      getRuntimeV2OptionsForQuestions(runtimeVersion.id),
+      getRuntimeV2MappingsForOptions(runtimeVersion.id),
+    ])
+    const optionByQuestionAndOrder = new Map(runtimeOptions.map((option) => [`${option.question_id}:${option.display_order}`, option.option_id]))
+    const mappedQuestionIds = new Set(runtimeQuestions.map((question) => question.question_id))
+
+    for (const [questionId, value] of Object.entries(lifecycle.responses)) {
+      if (!mappedQuestionIds.has(questionId)) {
+        throw new Error(`Runtime v2 completion input has unknown question id "${questionId}".`)
+      }
+      if (typeof value === 'number' && !optionByQuestionAndOrder.get(`${questionId}:${value}`)) {
+        throw new Error(`Runtime v2 completion input has unknown option for question "${questionId}" and response "${value}".`)
+      }
+    }
+
     const scoredAt = new Date().toISOString()
     const executed = executeLiveRuntimeBundleWithCompatibility({
       storedDefinitionPayload: lifecycle.assessment.definition_payload,
@@ -611,6 +645,12 @@ export async function evaluateCompletedV2Assessment(input: {
       completedAt: lifecycle.assessment.completed_at,
       scoredAt,
     })
+    ;(payload as unknown as Record<string, unknown>).runtimeV2InputResolution = {
+      runtimeVersionId: runtimeVersion.id,
+      questionCount: runtimeQuestions.length,
+      optionCount: runtimeOptions.length,
+      mappingCount: runtimeMappings.length,
+    }
 
     const persisted = await runInTransaction(async (client) => {
       const result = await input.persistResult({

@@ -22,6 +22,7 @@ interface LiveSignalsPublishedVersionRow {
   active_question_set_id: string | null
   active_question_count: number
   questions_with_runtime_metadata: number
+  runtime_v2_version_id: string | null
   package_schema_version: string | null
   package_status: string | null
   definition_payload: unknown
@@ -43,6 +44,7 @@ export interface LiveSignalsPublishedVersionResolution {
 export type LiveSignalsPublishedVersionDiagnosticCode =
   | 'no_published_version'
   | 'legacy_runtime_decommissioned'
+  | 'runtime_not_materialized'
   | 'package_not_live_runtime_enabled'
   | 'package_not_compilable'
   | 'package_invalid'
@@ -94,7 +96,8 @@ export async function resolveLiveSignalsPublishedVersionState(
           AND q.metadata_json ? 'dimensionId'
          THEN q.id
          ELSE NULL
-       END)::int AS questions_with_runtime_metadata
+       END)::int AS questions_with_runtime_metadata,
+       rv2.id AS runtime_v2_version_id
      FROM assessment_definitions ad
      LEFT JOIN assessment_versions av
        ON av.id = ad.current_published_version_id
@@ -106,6 +109,9 @@ export async function resolveLiveSignalsPublishedVersionState(
      LEFT JOIN assessment_questions q
        ON q.question_set_id = qs.id
       AND q.is_active = TRUE
+     LEFT JOIN assessment_runtime_versions_v2 rv2
+       ON rv2.assessment_version_id = av.id
+      AND rv2.materialization_status = 'complete'
      WHERE ad.key = $1
        AND ad.lifecycle_status = 'published'
      GROUP BY
@@ -121,7 +127,8 @@ export async function resolveLiveSignalsPublishedVersionState(
        av.package_schema_version,
        av.package_status,
        av.definition_payload,
-       qs.id
+       qs.id,
+       rv2.id
      LIMIT 1`,
     [LIVE_SIGNALS_ASSESSMENT_KEY],
   )
@@ -149,6 +156,13 @@ export async function resolveLiveSignalsPublishedVersionState(
       return buildUnavailableState({
         code: 'package_invalid',
         message: 'The published Sonartra Signals Package Contract v2 payload is missing or invalid for live runtime use.',
+      })
+    }
+
+    if (!row.runtime_v2_version_id) {
+      return buildUnavailableState({
+        code: 'package_not_compilable',
+        message: 'The published Sonartra Signals Package Contract v2 version is not materialized into Runtime Contract v2 tables yet.',
       })
     }
 

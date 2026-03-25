@@ -41,6 +41,7 @@ test('resolveLiveSignalsPublishedVersionState recognizes an eligible published P
           active_question_set_id: null,
           active_question_count: 0,
           questions_with_runtime_metadata: 0,
+          runtime_v2_version_id: 'runtime-v2-1',
           package_schema_version: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
           package_status: 'valid',
           definition_payload: pkg,
