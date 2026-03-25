@@ -2,6 +2,7 @@ import type { AssessmentResultRow } from '@/lib/assessment-types'
 import type { AssessmentRepositoryItem } from '@/lib/assessment/assessment-repository-types'
 import { loadLiveAssessmentRepositoryInventory } from '@/lib/server/assessment-repository-inventory'
 import { queryDb } from '@/lib/db'
+import { buildIndividualResultsCategorySqlPredicate } from '@/lib/assessment/assessment-category-taxonomy'
 
 export type IndividualAssessmentPrimaryAction = 'start' | 'resume' | 'view_status'
 
@@ -121,8 +122,7 @@ export async function loadIndividualResultsViewModel(
      WHERE a.user_id = $1
        AND a.organisation_id IS NULL
        AND (
-         ad.category IS NULL
-         OR LOWER(BTRIM(ad.category)) = 'individual'
+         ${buildIndividualResultsCategorySqlPredicate('ad.category')}
        )
      ORDER BY ar.created_at DESC`,
     [userId],
