@@ -287,3 +287,101 @@ test('WPLP-80 Lite package-first smoke path covers import readiness runtime deli
   assert.equal(dashboardResult.ok, true)
   assert.equal(dashboardResult.state, 'ready_v2')
 })
+
+test('WPLP-80 Lite definition-scoped latest-result retrieval remains ready_v2 across fresh fetches', async () => {
+  const importedCanonical = importAssessmentPackagePayload(structuredClone(liteFixture))
+  const deterministic = buildDeterministicResponses(importedCanonical.definitionPayload as Record<string, any>)
+
+  const resultRow: AssessmentResultRow = {
+    id: 'result-wplp80-lite-fresh',
+    assessment_id: 'assessment-wplp80-lite-fresh',
+    assessment_version_id: 'version-wplp80-lite-runtime',
+    version_key: 'wplp80-lite-runtime-v1',
+    scoring_model_key: 'package-contract-v2-runtime',
+    snapshot_version: 1,
+    status: 'complete',
+    result_payload: {
+      contractVersion: 'package_contract_v2',
+      packageMetadata: {
+        assessmentName: 'WPLP-80 Lite',
+        packageSemver: '1.0.0',
+      },
+      materializedOutputs: {
+        webSummaryOutputs: [{
+          id: 'summary:wplp80-lite',
+          key: 'wplp80-lite',
+          title: 'WPLP-80 Lite',
+          label: 'WPLP-80 Lite',
+          status: 'available',
+          severity: null,
+          band: 'Balanced',
+          value: { score: 73 },
+          explanation: { text: 'Latest package-first output remains visible.' },
+          visibleInProduct: true,
+        }],
+      },
+      liveRuntimeV2: deterministic,
+    },
+    response_quality_payload: null,
+    completed_at: '2026-03-25T00:10:00.000Z',
+    scored_at: '2026-03-25T00:11:00.000Z',
+    created_at: '2026-03-25T00:11:00.000Z',
+    updated_at: '2026-03-25T00:11:00.000Z',
+  }
+
+  const definitionId = '11111111-1111-1111-1111-111111111111'
+  const callLog: Array<{ fn: string; definitionId: string | null | undefined }> = []
+
+  const getDependencies = () => ({
+    resolveAuthenticatedUserId: async () => 'user-1',
+    getLatestAssessmentForUser: async (_userId: string, scopedDefinitionId?: string | null) => {
+      callLog.push({ fn: 'getLatestAssessmentForUser', definitionId: scopedDefinitionId })
+      return {
+        id: 'assessment-wplp80-lite-fresh',
+        user_id: 'user-1',
+        organisation_id: null,
+        assessment_version_id: 'version-wplp80-lite-runtime',
+        status: 'completed' as const,
+        started_at: null,
+        completed_at: '2026-03-25T00:10:00.000Z',
+        last_activity_at: '2026-03-25T00:10:00.000Z',
+        progress_count: 16,
+        progress_percent: '100',
+        current_question_index: 16,
+        scoring_status: 'scored' as const,
+        source: 'web' as const,
+        metadata_json: null,
+        created_at: '2026-03-25T00:00:00.000Z',
+        updated_at: '2026-03-25T00:11:00.000Z',
+        version_key: 'wplp80-lite-runtime-v1',
+        total_questions: 16,
+      }
+    },
+    getLatestResultForAssessment: async () => resultRow,
+    getResultById: async () => resultRow,
+    getLatestReadyResultForUser: async (_userId: string, scopedDefinitionId?: string | null) => {
+      callLog.push({ fn: 'getLatestReadyResultForUser', definitionId: scopedDefinitionId })
+      return {
+        ...resultRow,
+        assessment_started_at: null,
+        assessment_completed_at: '2026-03-25T00:10:00.000Z',
+        assessment_version_key: 'wplp80-lite-runtime-v1',
+      }
+    },
+    getSignalsByResultId: async () => [],
+  })
+
+  const firstFetch = await getLatestIndividualResultForUser({ definitionId }, getDependencies())
+  const secondFetch = await getLatestIndividualResultForUser({ definitionId }, getDependencies())
+
+  assert.equal(firstFetch.ok, true)
+  assert.equal(firstFetch.state, 'ready_v2')
+  assert.equal(secondFetch.ok, true)
+  assert.equal(secondFetch.state, 'ready_v2')
+  assert.deepEqual(callLog, [
+    { fn: 'getLatestAssessmentForUser', definitionId },
+    { fn: 'getLatestReadyResultForUser', definitionId },
+    { fn: 'getLatestAssessmentForUser', definitionId },
+    { fn: 'getLatestReadyResultForUser', definitionId },
+  ])
+})

@@ -116,7 +116,7 @@ const defaultDependencies: IndividualResultsDependencies = {
     const appUser = await resolveAuthenticatedAppUser();
     return appUser?.dbUserId ?? null;
   },
-  async getLatestAssessmentForUser(userId) {
+  async getLatestAssessmentForUser(userId, definitionId) {
     const result = await queryDb<AssessmentContextRow>(
       `SELECT a.id, a.user_id, a.organisation_id, a.assessment_version_id, a.status, a.started_at,
               a.completed_at, a.last_activity_at, a.progress_count, a.progress_percent,
@@ -125,9 +125,11 @@ const defaultDependencies: IndividualResultsDependencies = {
        FROM assessments a
        LEFT JOIN assessment_versions av ON av.id = a.assessment_version_id
        WHERE a.user_id = $1
+         AND a.organisation_id IS NULL
+         AND ($2::uuid IS NULL OR av.assessment_definition_id = $2::uuid)
        ORDER BY a.created_at DESC
        LIMIT 1`,
-      [userId],
+      [userId, definitionId ?? null],
     );
 
     return result.rows[0] ?? null;
@@ -159,7 +161,7 @@ const defaultDependencies: IndividualResultsDependencies = {
 
     return result.rows[0] ?? null;
   },
-  async getLatestReadyResultForUser(userId) {
+  async getLatestReadyResultForUser(userId, definitionId) {
     const reportArtifactProjection = await getAssessmentResultReportArtifactSelectProjection('ar.report_artifact_json')
     const result = await queryDb<ReadyResultContextRow>(
       `SELECT ar.id, ar.assessment_id, ar.assessment_version_id, ar.version_key, ar.scoring_model_key, ar.snapshot_version,
@@ -170,6 +172,7 @@ const defaultDependencies: IndividualResultsDependencies = {
        LEFT JOIN assessment_versions av ON av.id = a.assessment_version_id
        WHERE a.user_id = $1
          AND a.organisation_id IS NULL
+         AND ($2::uuid IS NULL OR av.assessment_definition_id = $2::uuid)
          AND ar.status = 'complete'
          AND (
            EXISTS (
@@ -179,7 +182,7 @@ const defaultDependencies: IndividualResultsDependencies = {
          )
        ORDER BY a.completed_at DESC NULLS LAST, ar.created_at DESC
        LIMIT 1`,
-      [userId],
+      [userId, definitionId ?? null],
     );
 
     return result.rows[0] ?? null;
