@@ -142,18 +142,21 @@ export interface SaveV2AssessmentResponseInput {
   responseTimeMs?: number
 }
 
-export interface SaveV2AssessmentResponseResult {
-  status: 200 | 400 | 401 | 404 | 409
-  body:
-    | { error: string }
-    | {
+export type SaveV2AssessmentResponseResult =
+  | {
+      status: 200
+      body: {
         assessmentId: string
         questionId: string
         response: unknown
         progressCount: number
         progressPercent: number
       }
-}
+    }
+  | {
+      status: 400 | 401 | 404 | 409
+      body: { error: string }
+    }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)

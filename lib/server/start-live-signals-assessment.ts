@@ -1,4 +1,5 @@
 import { queryDb, withTransaction } from '@/lib/db'
+import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 } from '@/lib/admin/domain/assessment-package-v2'
 import { linkLatestAssignmentToAssessment } from '@/lib/server/assessment-assignments'
 import type { AuthenticatedAppUser } from '@/lib/server/auth'
 import {
@@ -98,10 +99,11 @@ export async function startLiveSignalsAssessment(
      WHERE ara.target_user_id = $1
        AND ($2::uuid IS NULL OR ara.assessment_definition_id = $2::uuid)
        AND av.lifecycle_status = 'published'
+       AND av.package_schema_version = $3
        AND ara.status IN ('assigned', 'in_progress', 'completed_processing')
      ORDER BY ara.assigned_at DESC
      LIMIT 1`,
-    [appUser.dbUserId, input.assessmentDefinitionId ?? null],
+    [appUser.dbUserId, input.assessmentDefinitionId ?? null, SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2],
   )
   const assignedVersion = assignedVersionResult.rows[0] ?? null
 
@@ -132,6 +134,7 @@ export async function startLiveSignalsAssessment(
       status: 404,
       body: {
         error: 'No launchable published assignment found for this assessment.',
+        code: 'legacy_runtime_decommissioned',
       },
     }
   }

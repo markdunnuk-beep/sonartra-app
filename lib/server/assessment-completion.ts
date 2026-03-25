@@ -16,7 +16,6 @@ import {
 import { getLatestAssessmentResultSnapshot, persistFailedAssessmentResult, persistStructuredAssessmentResult, persistSuccessfulAssessmentResult } from '@/lib/server/assessment-results';
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2 } from '@/lib/admin/domain/assessment-package-v2';
 import { evaluateCompletedV2Assessment } from '@/lib/server/live-assessment-v2';
-import { evaluateCompletedHybridAssessment, isHybridMvpRuntimeDefinition } from '@/lib/server/live-assessment-hybrid-mvp';
 
 interface CompletionCheckRow {
   id: string;
@@ -65,6 +64,19 @@ interface DbErrorLike {
   hint?: string;
   message?: string;
 }
+
+type CompletionLifecycleResult =
+  | {
+      kind: 'ok';
+      assessment: CompletionCheckRow;
+      latestResult: { id: string; status: 'pending' | 'complete' | 'failed' } | null;
+      shouldScore: boolean;
+    }
+  | {
+      kind: 'error';
+      httpStatus: number;
+      error: string;
+    };
 
 function isMissingRelationError(error: unknown): boolean {
   return Boolean((error as DbErrorLike | null)?.code === '42P01');
@@ -176,26 +188,6 @@ export async function completeAssessmentWithResults(
 
   const runtimeVersion = versionInfo.rows[0];
 
-
-
-  if (isHybridMvpRuntimeDefinition(runtimeVersion?.definition_payload)) {
-    return evaluateCompletedHybridAssessment({
-      assessmentId,
-      ownerUserId: runtimeVersion.user_id,
-      persistResult: async (input, client) => persistStructuredAssessmentResult({
-        assessmentId: input.assessmentId,
-        assessmentVersionId: input.assessmentVersionId,
-        versionKey: input.versionKey,
-        scoringModelKey: 'hybrid-mvp-v1-runtime',
-        snapshotVersion: 1,
-        status: input.status === 'complete' ? 'complete' : 'failed',
-        resultPayload: input.resultPayload,
-        responseQualityPayload: input.responseQualityPayload,
-        completedAt: input.completedAt,
-        scoredAt: input.scoredAt,
-      }, client),
-    }) as Promise<CompleteAssessmentResult>
-  }
   if (runtimeVersion?.package_schema_version === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
     return evaluateCompletedV2Assessment({
       assessmentId,
@@ -215,7 +207,15 @@ export async function completeAssessmentWithResults(
     }) as Promise<CompleteAssessmentResult>
   }
 
-  const lifecycle = await runtimeDependencies.runInTransaction(async (client) => {
+  return {
+    httpStatus: 409,
+    body: {
+      ok: false,
+      error: 'This assessment uses a legacy runtime contract. Newly completed individual assessments must run through Package Contract v2.',
+    },
+  };
+
+  const lifecycle: CompletionLifecycleResult = await runtimeDependencies.runInTransaction(async (client) => {
     let stage = 'load_assessment';
 
     const logFailure = (error: unknown) => {
@@ -321,10 +321,14 @@ export async function completeAssessmentWithResults(
   });
 
   if (lifecycle.kind === 'error') {
-    return { httpStatus: lifecycle.httpStatus, body: { ok: false, error: lifecycle.error } };
+    const errorLifecycle = lifecycle as Extract<CompletionLifecycleResult, { kind: 'error' }>;
+
+    return { httpStatus: errorLifecycle.httpStatus ?? 500, body: { ok: false, error: errorLifecycle.error } };
   }
 
-  if (!lifecycle.shouldScore) {
+  const successLifecycle = lifecycle as Extract<CompletionLifecycleResult, { kind: 'ok' }>;
+
+  if (!successLifecycle.shouldScore) {
     return {
       httpStatus: 200,
       body: {
@@ -332,29 +336,29 @@ export async function completeAssessmentWithResults(
         assessmentId,
         assessmentStatus: 'completed',
         resultStatus:
-          lifecycle.latestResult?.status === 'failed'
+          successLifecycle.latestResult?.status === 'failed'
             ? 'failed'
-            : lifecycle.latestResult?.status === 'pending'
+            : successLifecycle.latestResult?.status === 'pending'
               ? 'pending'
               : 'succeeded',
-        resultId: lifecycle.latestResult?.id ?? null,
+        resultId: successLifecycle.latestResult?.id ?? null,
       },
     };
   }
 
   try {
-    const scoringInput = await dependencies.fetchScoringInput(lifecycle.assessment);
+    const scoringInput = await dependencies.fetchScoringInput(successLifecycle.assessment);
     const scored = dependencies.score(scoringInput);
 
     const successInput: PersistSuccessfulAssessmentResultInput = {
       assessmentId,
-      assessmentVersionId: lifecycle.assessment.assessment_version_id,
-      versionKey: lifecycle.assessment.version_key,
+      assessmentVersionId: successLifecycle.assessment.assessment_version_id,
+      versionKey: successLifecycle.assessment.version_key,
       scoringModelKey: WPLP80_SCORING_MODEL_KEY,
       snapshotVersion: 1,
       resultPayload: scored.snapshot,
       responseQualityPayload: scored.responseQuality,
-      completedAt: lifecycle.assessment.completed_at,
+      completedAt: successLifecycle.assessment.completed_at,
       scoredAt: scored.snapshot.scoredAt,
       signalRows: scored.signals,
     };
@@ -377,21 +381,27 @@ export async function completeAssessmentWithResults(
       },
     };
   } catch (error) {
+    const errorWithMessage = error as { message?: unknown };
+    const errorMessage =
+      typeof errorWithMessage?.message === 'string'
+        ? errorWithMessage.message
+        : 'Unexpected error';
+
     console.error('[assessment.complete] scoring pipeline failed', {
       assessmentId,
       stage: 'completion_orchestration',
-      message: error instanceof Error ? error.message : 'Unexpected error',
+      message: errorMessage,
     });
 
-    const metadata = toFailureMetadata(lifecycle.assessment.version_key, 'completion_orchestration', error);
+    const metadata = toFailureMetadata(successLifecycle.assessment.version_key, 'completion_orchestration', error);
 
     const failedInput: PersistFailedAssessmentResultInput = {
       assessmentId,
-      assessmentVersionId: lifecycle.assessment.assessment_version_id,
-      versionKey: lifecycle.assessment.version_key,
+      assessmentVersionId: successLifecycle.assessment.assessment_version_id,
+      versionKey: successLifecycle.assessment.version_key,
       scoringModelKey: WPLP80_SCORING_MODEL_KEY,
       snapshotVersion: 1,
-      completedAt: lifecycle.assessment.completed_at,
+      completedAt: successLifecycle.assessment.completed_at,
       scoredAt: null,
       failure: metadata,
     };
@@ -408,10 +418,16 @@ export async function completeAssessmentWithResults(
 
       failedResultId = failed.assessmentResultId;
     } catch (persistError) {
+      const persistErrorWithMessage = persistError as { message?: unknown };
+      const persistErrorMessage =
+        typeof persistErrorWithMessage?.message === 'string'
+          ? persistErrorWithMessage.message
+          : 'Unexpected error';
+
       console.error('[assessment.complete] failed to persist failed result metadata', {
         assessmentId,
         stage: 'result_persist',
-        message: persistError instanceof Error ? persistError.message : 'Unexpected error',
+        message: persistErrorMessage,
       });
 
       await runtimeDependencies.runInTransaction(async (client) => markScoringStatus(client, assessmentId, 'failed'));

@@ -55,50 +55,31 @@ test('blocks starts when no active published Signals version is available', asyn
   assert.equal(transactionCalled, false)
 })
 
-test('starts from an explicitly assigned published version when live runtime resolution is unavailable', async () => {
+test('does not start from legacy assigned versions when v2 runtime resolution is unavailable', async () => {
   const result = await startLiveSignalsAssessment(
     { appUser, source: 'workspace' },
     {
       queryDb: async (sql) => {
-        if (/FROM assessment_repository_assignments/i.test(sql)) {
-          return {
-            rows: [{
-              assignment_id: 'assignment-1',
-              version_id: 'version-assigned',
-              version_key: 'signals-hybrid-v1',
-              version_name: 'Assigned Signals Hybrid v1',
-              total_questions: 64,
-              assessment_definition_id: 'definition-signals',
-              is_active: true,
-            }],
-          } as never
-        }
-
+        void sql
         return { rows: [] } as never
       },
       resolveLiveSignalsPublishedVersionState: async () => ({
         version: null,
         diagnostic: {
-          code: 'runtime_not_materialized',
-          message: 'The published Sonartra Signals version is not runnable yet because runtime materialization has not completed.',
+          code: 'legacy_runtime_decommissioned',
+          message: 'The published Sonartra Signals version is still on the legacy runtime path. New individual starts require a Package Contract v2 published version.',
         },
       }),
-      withTransaction: async (work) =>
-        work({
-          query: async () => ({ rows: [{ id: 'assessment-new' }] }),
-        } as never),
+      withTransaction: async () => {
+        throw new Error('should not create legacy starts')
+      },
       linkLatestAssignmentToAssessment: async () => {},
     },
   )
 
-  assert.equal(result.kind, 'ok')
-  assert.equal(result.status, 201)
-  assert.deepEqual(result.body.version, {
-    id: 'version-assigned',
-    key: 'signals-hybrid-v1',
-    name: 'Assigned Signals Hybrid v1',
-    totalQuestions: 64,
-  })
+  assert.equal(result.kind, 'unavailable')
+  assert.equal(result.status, 404)
+  assert.equal(result.body.code, 'legacy_runtime_decommissioned')
 })
 
 test('start helper blocks launches when the published live Signals version is not materialized for runtime execution', async () => {
@@ -116,8 +97,8 @@ test('start helper blocks launches when the published live Signals version is no
       resolveLiveSignalsPublishedVersionState: async () => ({
         version: null,
         diagnostic: {
-          code: 'runtime_not_materialized',
-          message: 'The published Sonartra Signals version is not runnable yet because runtime materialization has not completed.',
+          code: 'legacy_runtime_decommissioned',
+          message: 'The published Sonartra Signals version is still on the legacy runtime path. New individual starts require a Package Contract v2 published version.',
         },
       }),
       withTransaction: async () => {
@@ -128,8 +109,8 @@ test('start helper blocks launches when the published live Signals version is no
 
   assert.equal(response.status, 404)
   assert.deepEqual(response.body, {
-    error: 'The published Sonartra Signals version is not runnable yet because runtime materialization has not completed.',
-    code: 'runtime_not_materialized',
+    error: 'The published Sonartra Signals version is still on the legacy runtime path. New individual starts require a Package Contract v2 published version.',
+    code: 'legacy_runtime_decommissioned',
   })
 })
 
