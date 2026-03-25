@@ -64,7 +64,7 @@ export function resolveAssessmentCompletionClientOutcome(response: CompleteAsses
   switch (response.resultStatus) {
     case 'succeeded':
       return {
-        redirectTo: '/results/individual',
+        redirectTo: '/individual/results',
         lifecycleState: 'ready',
         workspaceEntryState: 'results_ready',
         clearActiveAssessment: true,
@@ -72,7 +72,7 @@ export function resolveAssessmentCompletionClientOutcome(response: CompleteAsses
       }
     case 'failed':
       return {
-        redirectTo: '/results/individual',
+        redirectTo: '/individual/results',
         lifecycleState: 'error',
         workspaceEntryState: 'attention_required',
         clearActiveAssessment: true,
@@ -81,7 +81,7 @@ export function resolveAssessmentCompletionClientOutcome(response: CompleteAsses
     case 'pending':
     default:
       return {
-        redirectTo: '/results/individual',
+        redirectTo: '/individual/results',
         lifecycleState: 'completed_processing',
         workspaceEntryState: 'results_processing',
         clearActiveAssessment: true,

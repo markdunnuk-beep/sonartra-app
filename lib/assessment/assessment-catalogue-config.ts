@@ -34,7 +34,7 @@ export const assessmentCatalogueDefinitions: AssessmentCatalogueDefinition[] = [
     isVisibleInRepository: true,
     releaseState: 'live',
     assessmentHref: individualAssessmentPath,
-    resultsHref: '/results/individual',
+    resultsHref: '/individual/results',
     workspaceFraming: {
       title: 'Sonartra Signals Assessment',
       subtitle: 'Behavioural baseline diagnostic for leadership tendencies, operating style, and signal interpretation.',

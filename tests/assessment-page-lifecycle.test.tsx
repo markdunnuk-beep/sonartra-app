@@ -4,7 +4,7 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import TestRenderer, { act } from 'react-test-renderer'
 
-import { AssessmentRepositoryPage } from '../components/assessment/AssessmentRepositoryPage'
+import { AssessmentRepositoryPage } from '../components/individual/assessments/AssessmentRepositoryPage'
 import {
   buildAssessmentSections,
   buildAssessmentSummaryMetrics,
@@ -20,8 +20,8 @@ import {
   getVisibleAssessmentDefinitions,
   resolveRepositoryItemStatus,
   resolveRepositoryVisibilityState,
-} from '../lib/assessment/assessment-repository-selectors'
-import { getCurrentAssessmentRepositoryContext } from '../lib/assessment/assessment-repository-context'
+} from '../lib/individual/assessments/individual/assessments-repository-selectors'
+import { getCurrentAssessmentRepositoryContext } from '../lib/individual/assessments/individual/assessments-repository-context'
 
 const context = getCurrentAssessmentRepositoryContext()
 const snapshot = createAssessmentCatalogueSnapshot()
@@ -95,7 +95,7 @@ test('recommendation selector prioritises reviewing baseline results when no act
     title: 'Review Sonartra Signals results',
     rationale:
       'The baseline diagnostic is complete and ready for interpretation. Reviewing those results first provides the clearest reference point for any follow-on assessment.',
-    cta: { label: 'View Results', href: '/results/individual', action: 'view_results' },
+    cta: { label: 'View Results', href: '/individual/results', action: 'view_results' },
     metadata: ['Individual diagnostic', '10 min', 'Complete'],
     itemId: 'signals',
   })
@@ -113,7 +113,7 @@ test('recommendation selector falls back to the best launchable next assessment 
     title: 'Start Sonartra Signals',
     rationale:
       'This is the baseline individual diagnostic for the repository. Completing it establishes the reference profile used to sequence deeper individual and team diagnostics.',
-    cta: { label: 'Start Assessment', href: '/assessment/workspace', action: 'launch' },
+    cta: { label: 'Start Assessment', href: '/individual/assessments/workspace', action: 'launch' },
     metadata: ['Individual diagnostic', '10 min', 'Not Started'],
     itemId: 'signals',
   })
@@ -131,7 +131,7 @@ test('recommendation CTA preserves canonical routing for Sonartra Signals launch
   )
   const recommendation = getAssessmentRepositoryRecommendation(launchInventory)
 
-  assert.equal(recommendation?.cta.href, '/assessment/workspace')
+  assert.equal(recommendation?.cta.href, '/individual/assessments/workspace')
 })
 
 test('recommendation selector stays safe when repository inventory is empty or partially unavailable', () => {
@@ -293,8 +293,8 @@ test('derived repository item exposes admin-ready catalogue and availability met
 test('repository inventory preserves the canonical direct-launch workspace route for Sonartra Signals', () => {
   const signals = inventory.find((item) => item.id === 'signals')
 
-  assert.equal(signals?.assessmentHref, '/assessment/workspace')
-  assert.equal(getCollapsedAction(signals!)?.href, '/results/individual')
+  assert.equal(signals?.assessmentHref, '/individual/assessments/workspace')
+  assert.equal(getCollapsedAction(signals!)?.href, '/individual/results')
 })
 
 test('ui still renders expected inventory from derived selectors', () => {

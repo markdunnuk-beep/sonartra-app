@@ -21,7 +21,7 @@ const lifecyclePresentationMap: Record<IndividualLifecycleState, LifecyclePresen
   not_started: {
     dashboardStatusLabel: 'Not started',
     dashboardActionLabel: 'Start assessment',
-    dashboardActionHref: '/assessment',
+    dashboardActionHref: '/individual/assessments',
     dashboardDetailTitle: 'Assessment not started',
     dashboardDetailBody: 'Complete the assessment to unlock Individual Results.',
     dashboardDetailMetaLabel: 'Assessment status',
@@ -37,7 +37,7 @@ const lifecyclePresentationMap: Record<IndividualLifecycleState, LifecyclePresen
   in_progress: {
     dashboardStatusLabel: 'In progress',
     dashboardActionLabel: 'Resume assessment',
-    dashboardActionHref: '/assessment',
+    dashboardActionHref: '/individual/assessments',
     dashboardDetailTitle: 'Assessment in progress',
     dashboardDetailBody: 'Continue the assessment to complete your profile.',
     dashboardDetailMetaLabel: 'Live status',
@@ -69,7 +69,7 @@ const lifecyclePresentationMap: Record<IndividualLifecycleState, LifecyclePresen
   ready: {
     dashboardStatusLabel: 'Results available',
     dashboardActionLabel: 'View Results',
-    dashboardActionHref: '/results/individual',
+    dashboardActionHref: '/individual/results',
     dashboardDetailTitle: 'Results available',
     dashboardDetailBody: 'Your latest completed profile is ready to view.',
     dashboardDetailMetaLabel: 'Latest cycle',
@@ -78,7 +78,7 @@ const lifecyclePresentationMap: Record<IndividualLifecycleState, LifecyclePresen
     assessmentTitle: 'Assessment complete',
     assessmentBody: 'Your latest behavioural signal capture is complete.',
     assessmentPrimaryActionLabel: 'View Results',
-    assessmentPrimaryActionHref: '/results/individual',
+    assessmentPrimaryActionHref: '/individual/results',
     assessmentSecondaryActionLabel: 'Return to Dashboard',
     assessmentSecondaryActionHref: '/dashboard',
   },

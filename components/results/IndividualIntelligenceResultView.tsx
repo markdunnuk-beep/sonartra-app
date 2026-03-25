@@ -75,7 +75,7 @@ export function IndividualIntelligenceResultView({ model, firstName }: { model: 
             title="No completed Individual Intelligence result is available yet"
             description={model.message ?? 'Complete the assessment flow to generate your persisted Individual Intelligence result.'}
             ctaLabel="Start or resume assessment"
-            ctaHref="/assessment"
+            ctaHref="/individual/assessments"
           />,
         )}
       </ResultsWorkspaceShell>
@@ -91,7 +91,7 @@ export function IndividualIntelligenceResultView({ model, firstName }: { model: 
             title="Assessment is in progress"
             description={model.message ?? 'Your latest assessment is still in progress, so results are not available yet.'}
             ctaLabel="Resume assessment"
-            ctaHref="/assessment"
+            ctaHref="/individual/assessments"
           />,
         )}
       </ResultsWorkspaceShell>
@@ -107,7 +107,7 @@ export function IndividualIntelligenceResultView({ model, firstName }: { model: 
             title="Your assessment is complete and results are processing"
             description={model.message ?? 'Your latest assessment has been submitted successfully. Results will appear here once processing completes.'}
             ctaLabel="Back to assessment workspace"
-            ctaHref="/assessment"
+            ctaHref="/individual/assessments"
           />,
         )}
       </ResultsWorkspaceShell>

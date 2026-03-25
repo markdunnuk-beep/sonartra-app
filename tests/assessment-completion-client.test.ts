@@ -31,7 +31,7 @@ test('completion outcome redirects to results when scoring is ready immediately'
   })
 
   assert.deepEqual(outcome, {
-    redirectTo: '/results/individual',
+    redirectTo: '/individual/results',
     lifecycleState: 'ready',
     workspaceEntryState: 'results_ready',
     clearActiveAssessment: true,
@@ -49,7 +49,7 @@ test('completion outcome redirects to results while scoring is still pending', (
   })
 
   assert.deepEqual(outcome, {
-    redirectTo: '/results/individual',
+    redirectTo: '/individual/results',
     lifecycleState: 'completed_processing',
     workspaceEntryState: 'results_processing',
     clearActiveAssessment: true,
@@ -71,7 +71,7 @@ test('completion outcome redirects to results and surfaces explicit failure stat
   })
 
   assert.deepEqual(outcome, {
-    redirectTo: '/results/individual',
+    redirectTo: '/individual/results',
     lifecycleState: 'error',
     workspaceEntryState: 'attention_required',
     clearActiveAssessment: true,

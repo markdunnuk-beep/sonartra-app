@@ -7,13 +7,13 @@ import { getSidebarLinks } from '../lib/navigation';
 test('sidebar links hide individual results when user has no completed assessment', () => {
   const labels = getSidebarLinks(false).map((link) => link.label);
 
-  assert.deepEqual(labels, ['Dashboard', 'Assessment', 'Organisation', 'Settings']);
+  assert.deepEqual(labels, ['Dashboard', 'Assessments', 'Results', 'Organisation', 'Settings']);
 });
 
 test('sidebar links include individual results when user has completed assessment', () => {
   const labels = getSidebarLinks(true).map((link) => link.label);
 
-  assert.deepEqual(labels, ['Dashboard', 'Assessment', 'Individual Results', 'Organisation', 'Settings']);
+  assert.deepEqual(labels, ['Dashboard', 'Assessments', 'Results', 'Organisation', 'Settings']);
 });
 
 test('admin users see the admin link in the primary signed-in navigation', () => {
@@ -21,7 +21,7 @@ test('admin users see the admin link in the primary signed-in navigation', () =>
   const labels = links.map((link) => link.label)
   const adminLink = links.find((link) => link.label === 'Admin')
 
-  assert.deepEqual(labels, ['Dashboard', 'Assessment', 'Individual Results', 'Admin', 'Organisation', 'Settings'])
+  assert.deepEqual(labels, ['Dashboard', 'Assessments', 'Results', 'Admin', 'Organisation', 'Settings'])
   assert.equal(adminLink?.href, canonicalAdminLandingHref)
   assert.equal(adminLink?.startsWith, canonicalAdminLandingHref)
 })

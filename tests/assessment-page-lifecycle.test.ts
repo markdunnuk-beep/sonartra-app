@@ -46,7 +46,7 @@ test('completed users never render begin assessment CTA in shared presentation',
 
 test('dashboard and assessment presentation share the same lifecycle mapper semantics', async () => {
   const [assessmentSource, dashboardSource] = await Promise.all([
-    readFile(new URL('../app/assessment/workspace/AssessmentWorkspaceClient.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../app/individual/assessments/workspace/AssessmentWorkspaceClient.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../components/dashboard/DashboardPageView.tsx', import.meta.url), 'utf8'),
   ])
 
@@ -56,7 +56,7 @@ test('dashboard and assessment presentation share the same lifecycle mapper sema
   const readyPresentation = mapLifecyclePresentation('ready')
   const processingPresentation = mapLifecyclePresentation('completed_processing')
 
-  assert.equal(readyPresentation.dashboardActionHref, '/results/individual')
-  assert.equal(readyPresentation.assessmentPrimaryActionHref, '/results/individual')
+  assert.equal(readyPresentation.dashboardActionHref, '/individual/results')
+  assert.equal(readyPresentation.assessmentPrimaryActionHref, '/individual/results')
   assert.equal(processingPresentation.dashboardDetailBody, processingPresentation.assessmentBody)
 })
