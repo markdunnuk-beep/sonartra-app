@@ -1,7 +1,7 @@
 import { SaveResponseRequest } from '@/lib/assessment-types'
 import { SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2, parseStoredValidatedAssessmentPackageV2 } from '@/lib/admin/domain/assessment-package-v2'
 import { queryDb, withTransaction } from '@/lib/db'
-import { saveV2AssessmentResponse } from '@/lib/server/live-assessment-v2'
+import { saveV2AssessmentResponse, type SaveV2AssessmentResponseResult } from '@/lib/server/live-assessment-v2'
 
 interface AssessmentProgressRow {
   id: string
@@ -19,26 +19,26 @@ interface SaveAssessmentResponseDependencies {
   queryDb: typeof queryDb
 }
 
+type LegacySaveAssessmentResponseSuccessResult = {
+  status: 200
+  body: {
+    assessmentId: string
+    questionId: number
+    responseValue: number
+    progressCount: number
+    progressPercent: number
+  }
+}
+
+type LegacySaveAssessmentResponseErrorResult = {
+  status: 400 | 401 | 404 | 409
+  body: { error: string }
+}
+
 export type SaveAssessmentResponseResult =
-  | { status: 401 | 400 | 404 | 409; body: { error: string } }
-  | {
-      status: 200
-      body:
-        | {
-            assessmentId: string
-            questionId: number
-            responseValue: number
-            progressCount: number
-            progressPercent: number
-          }
-        | {
-            assessmentId: string
-            questionId: string
-            response: unknown
-            progressCount: number
-            progressPercent: number
-          }
-    }
+  | LegacySaveAssessmentResponseSuccessResult
+  | LegacySaveAssessmentResponseErrorResult
+  | SaveV2AssessmentResponseResult
 
 type SaveAssessmentResponseTransactionResult =
   | { status: 404 | 409; error: string }
@@ -147,7 +147,7 @@ export async function saveAssessmentResponse(
         responseTimeMs: input.responseTimeMs,
       },
       { withTransactionFn: deps.withTransaction },
-    ) as Promise<SaveAssessmentResponseResult>
+    )
   }
 
   const assessmentId = input.assessmentId
