@@ -64,6 +64,51 @@ interface V2QuestionCompatibilityRow {
   definition_payload: unknown
 }
 
+interface V2MappedResponseInput {
+  questionId: string
+  response: string
+}
+
+/**
+ * Transitional input adapter for historic numeric UI payloads.
+ *
+ * New clients should post canonical v2 ids directly. This mapper exists only to
+ * bridge old numeric submissions into the single v2 persistence path.
+ */
+function mapLegacyNumericPayloadToV2Input(input: {
+  packagePayload: unknown
+  questionId: number
+  responseValue: number
+}): { ok: true; value: V2MappedResponseInput } | { ok: false; error: string } {
+  const pkg = parseStoredValidatedAssessmentPackageV2(input.packagePayload)
+  const mappedQuestion = pkg?.questions[input.questionId - 1]
+  if (!pkg || !mappedQuestion) {
+    return { ok: false, error: 'Invalid question reference for this Package Contract v2 assessment.' }
+  }
+
+  const responseModel = pkg.responseModels.models.find((entry) => entry.id === mappedQuestion.responseModelId)
+  const options = responseModel
+    ? [
+        ...(responseModel.optionSetId
+          ? (pkg.responseModels.optionSets ?? []).find((entry) => entry.id === responseModel.optionSetId)?.options ?? []
+          : []),
+        ...(responseModel.options ?? []),
+      ]
+    : []
+  const selectedOption = options[input.responseValue - 1]
+  if (!selectedOption) {
+    return { ok: false, error: 'Invalid response option for this Package Contract v2 question.' }
+  }
+
+  return {
+    ok: true,
+    value: {
+      questionId: mappedQuestion.id,
+      response: selectedOption.id,
+    },
+  }
+}
+
 export async function saveAssessmentResponse(
   input: SaveAssessmentResponseInput,
   dependencies: Partial<SaveAssessmentResponseDependencies> = {},
@@ -119,31 +164,21 @@ export async function saveAssessmentResponse(
   }
 
   if (compatibilityRow.package_schema_version === SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2) {
-    const pkg = parseStoredValidatedAssessmentPackageV2(compatibilityRow.definition_payload)
-    const mappedQuestion = pkg?.questions[input.questionId - 1]
-    if (!pkg || !mappedQuestion) {
-      return { status: 400, body: { error: 'Invalid question reference for this Package Contract v2 assessment.' } }
-    }
-    const responseModel = pkg.responseModels.models.find((entry) => entry.id === mappedQuestion.responseModelId)
-    const options = responseModel
-      ? [
-          ...(responseModel.optionSetId
-            ? (pkg.responseModels.optionSets ?? []).find((entry) => entry.id === responseModel.optionSetId)?.options ?? []
-            : []),
-          ...(responseModel.options ?? []),
-        ]
-      : []
-    const selectedOption = options[input.responseValue - 1]
-    if (!selectedOption) {
-      return { status: 400, body: { error: 'Invalid response option for this Package Contract v2 question.' } }
+    const mappedV2Input = mapLegacyNumericPayloadToV2Input({
+      packagePayload: compatibilityRow.definition_payload,
+      questionId: input.questionId,
+      responseValue: input.responseValue,
+    })
+    if (!mappedV2Input.ok) {
+      return { status: 400, body: { error: mappedV2Input.error } }
     }
 
     return saveV2AssessmentResponse(
       {
         assessmentId: input.assessmentId,
         appUserId: input.appUserId,
-        questionId: mappedQuestion.id,
-        response: selectedOption.id,
+        questionId: mappedV2Input.value.questionId,
+        response: mappedV2Input.value.response,
         responseTimeMs: input.responseTimeMs,
       },
       { withTransactionFn: deps.withTransaction },

@@ -2,14 +2,11 @@ import { AssessmentResultRow, AssessmentResultSignalRow, AssessmentRow } from '@
 import { queryDb } from '@/lib/db';
 import { ASSESSMENT_LAYER_KEYS } from '@/lib/scoring/constants';
 import { resolveIndividualLifecycleState } from '@/lib/server/assessment-readiness';
-import { parseHybridMvpResultPayload, type HybridMvpResultPayloadViewModel } from '@/lib/server/hybrid-mvp-result';
+import type { HybridMvpResultPayloadViewModel } from '@/lib/server/hybrid-mvp-result';
 import { resolveAuthenticatedAppUser } from '@/lib/server/auth';
 import { getAssessmentResultReportArtifactSelectProjection } from '@/lib/server/assessment-result-schema-capabilities';
-import {
-  buildLiveAssessmentUserResultContract,
-  isPackageContractV2Result,
-  type LiveAssessmentUserResultContract,
-} from '@/lib/server/live-assessment-user-result';
+import type { LiveAssessmentUserResultContract } from '@/lib/server/live-assessment-user-result';
+import { classifyIndividualResultContract } from '@/lib/server/individual-result-contract';
 
 export type IndividualResultsState =
   | 'unauthenticated'
@@ -338,8 +335,23 @@ export async function getLatestIndividualResultForUser(
       return { ok: false, state: 'error', message: 'Ready result metadata could not be loaded.' };
     }
 
-    const hybridPayload = parseHybridMvpResultPayload(snapshot.result_payload);
-    if (hybridPayload) {
+    const contractShape = classifyIndividualResultContract(snapshot);
+
+    if (contractShape.kind === 'canonical_v2') {
+      const contract = contractShape.contract;
+      if (contract.status === 'completed') {
+        return { ok: true, state: 'ready_v2', data: contract };
+      }
+
+      return {
+        ok: true,
+        state: contract.status === 'pending' ? 'completed_processing' : 'results_unavailable',
+        message: contract.statusMessage,
+        userResult: contract,
+      };
+    }
+
+    if (contractShape.kind === 'historic_hybrid') {
       return {
         ok: true,
         state: 'ready_hybrid',
@@ -354,43 +366,8 @@ export async function getLatestIndividualResultForUser(
             updatedAt: snapshot.updated_at,
             scoredAt: snapshot.scored_at,
           },
-          hybrid: hybridPayload,
+          hybrid: contractShape.payload,
         },
-      };
-    }
-
-    if (isPackageContractV2Result(snapshot)) {
-      const contract = buildLiveAssessmentUserResultContract({
-        assessment: {
-          id: readySnapshot.assessmentId,
-          user_id: lifecycle.userId,
-          organisation_id: null,
-          assessment_version_id: snapshot.assessment_version_id,
-          status: 'completed',
-          started_at: readySnapshot.assessmentStartedAt,
-          completed_at: readySnapshot.assessmentCompletedAt,
-          last_activity_at: readySnapshot.assessmentCompletedAt,
-          progress_count: 0,
-          progress_percent: '100',
-          current_question_index: 0,
-          scoring_status: 'scored',
-          source: 'web',
-          metadata_json: null,
-          created_at: snapshot.created_at,
-          updated_at: snapshot.updated_at,
-        },
-        result: snapshot,
-      });
-
-      if (contract.status === 'completed') {
-        return { ok: true, state: 'ready_v2', data: contract };
-      }
-
-      return {
-        ok: true,
-        state: contract.status === 'pending' ? 'completed_processing' : 'results_unavailable',
-        message: contract.statusMessage,
-        userResult: contract,
       };
     }
 

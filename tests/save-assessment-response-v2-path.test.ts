@@ -67,3 +67,32 @@ test('numeric save payloads are routed to package-contract-v2 persistence withou
   if (result.status !== 200 || typeof result.body.questionId !== 'string') return
   assert.equal(result.body.questionId, pkg.questions[0]?.id)
 })
+
+
+test('numeric compatibility adapter rejects numeric payloads that cannot map to v2 question ids', async () => {
+  const pkg = await loadExamplePackage()
+
+  const result = await saveAssessmentResponse(
+    {
+      appUserId: 'user-1',
+      assessmentId: 'assessment-1',
+      questionId: Math.min(80, pkg.questions.length + 1),
+      responseValue: 2,
+    },
+    {
+      queryDb: async () => ({
+        rows: [{
+          user_id: 'user-1',
+          package_schema_version: SONARTRA_ASSESSMENT_PACKAGE_SCHEMA_V2,
+          definition_payload: pkg,
+        }],
+      }) as never,
+      withTransaction: async () => {
+        throw new Error('should not reach persistence when compatibility mapping fails')
+      },
+    },
+  )
+
+  assert.equal(result.status, 400)
+  assert.match(result.body.error, /Invalid question reference/)
+})

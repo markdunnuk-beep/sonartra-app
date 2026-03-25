@@ -131,16 +131,17 @@ test('returns in-progress state when latest assessment is not completed', async 
   assert.equal(response.state, 'in_progress');
 });
 
-test('returns completed-processing state when completed assessment has no successful snapshot', async () => {
+test('returns error when completed assessment remains pending beyond the recovery window', async () => {
   const response = await getLatestIndividualResultForUser({
     resolveAuthenticatedUserId: async () => 'user-1',
     getLatestAssessmentForUser: async () => ({ ...baseAssessmentContext }),
-    getLatestResultForAssessment: async () => null,
+    getLatestResultForAssessment: async () => ({ ...completeResult, status: 'pending' }),
     getLatestReadyResultForUser: async () => null,
+    getSignalsByResultId: async () => [],
   });
 
-  assert.equal(response.ok, true);
-  assert.equal(response.state, 'completed_processing');
+  assert.equal(response.ok, false);
+  assert.equal(response.state, 'error');
 });
 
 test('returns error state when completed assessment latest snapshot failed and no ready fallback exists', async () => {
