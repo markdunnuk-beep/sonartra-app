@@ -8,6 +8,9 @@ import { validateHybridMvpDefinitionPayload } from '@/lib/admin/domain/hybrid-mv
 import type { AssessmentImportConflict, AssessmentPackageIdentity } from '@/lib/admin/domain/assessment-management'
 import { deriveReadinessState, type AdminAssessmentReadinessState } from '@/lib/admin/domain/assessment-readiness'
 import type { AssessmentPipelineBoundary } from '@/lib/admin/domain/assessment-pipeline-boundaries'
+import { validatePackageV2 } from '@/lib/server/package-validator-v2'
+import { compilePackageToRuntimeContract } from '@/lib/server/package-compiler-v2'
+import type { SonartraRuntimeContractV2 } from '@/lib/contracts/runtime-contract-v2'
 
 export type AdminAssessmentPackageDetectedVersion = 'legacy_v1' | 'package_contract_v2' | 'hybrid_mvp_v1' | 'unknown'
 export type AssessmentPackageContractClassifier = 'legacy_contract_v1' | 'canonical_contract_v2' | 'runtime_contract_v2' | 'hybrid_mvp_contract_v1' | 'unknown_or_invalid'
@@ -103,6 +106,35 @@ export interface ImportedAssessmentPackageResult {
 export interface AssessmentPackageIdentityExtractionResult {
   identity: AssessmentPackageIdentity | null
   conflicts: AssessmentImportConflict[]
+}
+
+function runCanonicalV2ContractHook(input: unknown): {
+  attempted: boolean
+  validationErrors: string[]
+  compiledArtifact: SonartraRuntimeContractV2 | null
+} {
+  if (!isRecord(input) || !('metadata' in input) || !('questionSets' in input)) {
+    return {
+      attempted: false,
+      validationErrors: [],
+      compiledArtifact: null,
+    }
+  }
+
+  const validation = validatePackageV2(input)
+  if (!validation.valid || !validation.normalized) {
+    return {
+      attempted: true,
+      validationErrors: validation.errors,
+      compiledArtifact: null,
+    }
+  }
+
+  return {
+    attempted: true,
+    validationErrors: [],
+    compiledArtifact: compilePackageToRuntimeContract(validation.normalized),
+  }
 }
 
 function asTrimmedString(value: unknown): string | null {
@@ -605,6 +637,15 @@ function withValidationSummary(input: Omit<ImportedAssessmentPackageResult, 'val
 }
 
 export function analyzePackageForImport(input: unknown): ImportedAssessmentPackageResult {
+  const additiveCanonicalHookResult = runCanonicalV2ContractHook(input)
+  if (!additiveCanonicalHookResult.attempted) {
+    // no-op: additive hook only runs against canonical package-v2-shaped payloads
+  } else if (additiveCanonicalHookResult.compiledArtifact) {
+    console.info('[admin-import-v2-hook] Canonical v2 contract validated and compiled in-memory.')
+  } else if (additiveCanonicalHookResult.validationErrors.length > 0) {
+    console.warn('[admin-import-v2-hook] Canonical v2 contract validation failed.', additiveCanonicalHookResult.validationErrors)
+  }
+
   const detected = classifyPackageContract(input)
   const validated = validateDetectedPackage(input, detected)
   const readiness = summarizeImportReadiness({
