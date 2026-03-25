@@ -1,4 +1,4 @@
-import type { CompleteAssessmentResponse } from '@/lib/assessment-types'
+import type { CompleteAssessmentOutcomeResponse } from '@/lib/assessment-types'
 import { deriveAssessmentSessionState } from '@/lib/assessment-session'
 import type { AssessmentWorkspaceEntryState } from '@/lib/assessment/assessment-workspace-framing'
 import type { IndividualLifecycleState } from '@/lib/server/assessment-readiness'
@@ -50,7 +50,7 @@ export function buildAssessmentCompletionSubmissionPlan(
   }
 }
 
-export function resolveAssessmentCompletionClientOutcome(response: CompleteAssessmentResponse): AssessmentCompletionClientOutcome {
+export function resolveAssessmentCompletionClientOutcome(response: CompleteAssessmentOutcomeResponse): AssessmentCompletionClientOutcome {
   if (!response.ok) {
     return {
       redirectTo: null,
@@ -61,10 +61,10 @@ export function resolveAssessmentCompletionClientOutcome(response: CompleteAsses
     }
   }
 
-  switch (response.resultStatus) {
-    case 'succeeded':
+  switch (response.status) {
+    case 'ready':
       return {
-        redirectTo: '/individual/results',
+        redirectTo: response.resultId ? `/individual/results/${response.resultId}` : '/individual/results',
         lifecycleState: 'ready',
         workspaceEntryState: 'results_ready',
         clearActiveAssessment: true,
@@ -72,13 +72,13 @@ export function resolveAssessmentCompletionClientOutcome(response: CompleteAsses
       }
     case 'failed':
       return {
-        redirectTo: '/individual/results',
+        redirectTo: null,
         lifecycleState: 'error',
         workspaceEntryState: 'attention_required',
-        clearActiveAssessment: true,
-        notice: response.warning?.message ?? 'Assessment completed but result generation failed.',
+        clearActiveAssessment: false,
+        notice: response.failure?.message ?? 'Assessment completed but result generation failed.',
       }
-    case 'pending':
+    case 'processing':
     default:
       return {
         redirectTo: '/individual/results',

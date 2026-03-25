@@ -15,6 +15,7 @@ export interface CompleteAssessmentRequest {
   assessmentId: string;
 }
 
+export type AssessmentCompletionOutcomeStatus = 'ready' | 'processing' | 'failed';
 
 export type CompleteAssessmentResponse =
   | { ok: false; error: string }
@@ -25,6 +26,19 @@ export type CompleteAssessmentResponse =
       resultStatus: 'pending' | 'succeeded' | 'failed';
       resultId: string | null;
       warning?: {
+        code: 'RESULT_GENERATION_FAILED';
+        message: string;
+      };
+    };
+
+export type CompleteAssessmentOutcomeResponse =
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      status: AssessmentCompletionOutcomeStatus;
+      assessmentId: string;
+      resultId?: string;
+      failure?: {
         code: 'RESULT_GENERATION_FAILED';
         message: string;
       };
