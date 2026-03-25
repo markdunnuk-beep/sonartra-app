@@ -114,12 +114,12 @@ export async function loadIndividualResultsViewModel(
   const result = await deps.queryDb<IndividualResultListRow>(
     `SELECT ar.id, ar.assessment_id, ar.assessment_version_id, ar.version_key, ar.scoring_model_key, ar.snapshot_version,
             ar.status, ar.result_payload, ar.response_quality_payload, ar.completed_at, ar.scored_at, ar.created_at, ar.updated_at,
-            ad.id AS definition_id,
-            ad.name AS definition_name
+            COALESCE(ad.id::text, ar.assessment_version_id::text) AS definition_id,
+            COALESCE(NULLIF(ad.name, ''), NULLIF(ar.version_key, ''), 'Assessment result') AS definition_name
      FROM assessment_results ar
      INNER JOIN assessments a ON a.id = ar.assessment_id
-     INNER JOIN assessment_versions av ON av.id = a.assessment_version_id
-     INNER JOIN assessment_definitions ad ON ad.id = av.assessment_definition_id
+     LEFT JOIN assessment_versions av ON av.id = COALESCE(ar.assessment_version_id, a.assessment_version_id)
+     LEFT JOIN assessment_definitions ad ON ad.id = av.assessment_definition_id
      WHERE a.user_id = $1
        AND a.organisation_id IS NULL
        AND (

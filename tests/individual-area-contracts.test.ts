@@ -115,9 +115,43 @@ test('results query includes canonical individual-like categories and excludes t
   assert.ok(
     sqlStatements.some(
       (sql) =>
-        /ad\.category IS NULL/i.test(sql)
+        /LEFT JOIN assessment_versions av ON av\.id = COALESCE\(ar\.assessment_version_id, a\.assessment_version_id\)/i.test(sql)
+        && /LEFT JOIN assessment_definitions ad ON ad\.id = av\.assessment_definition_id/i.test(sql)
+        && /COALESCE\(ad\.id::text, ar\.assessment_version_id::text\) AS definition_id/i.test(sql)
+        && /ad\.category IS NULL/i.test(sql)
         && /LOWER\(BTRIM\(ad\.category\)\) IN \('individual', 'behavioural_intelligence'\)/i.test(sql)
         && !/team_dynamics/i.test(sql),
     ),
   )
+})
+
+test('results contract keeps rows renderable when definition joins are unavailable for legacy snapshots', async () => {
+  const model = await loadIndividualResultsViewModel('user-1', {
+    queryDb: async () =>
+      ({
+        rows: [
+          {
+            id: 'result-legacy',
+            assessment_id: 'assessment-legacy',
+            assessment_version_id: 'version-legacy',
+            version_key: 'legacy-v1',
+            scoring_model_key: 'model',
+            snapshot_version: 1,
+            status: 'complete',
+            result_payload: null,
+            response_quality_payload: null,
+            completed_at: '2026-03-20T09:10:00.000Z',
+            scored_at: '2026-03-20T09:10:10.000Z',
+            created_at: '2026-03-20T09:10:10.000Z',
+            updated_at: '2026-03-20T09:10:10.000Z',
+            definition_id: 'version-legacy',
+            definition_name: 'Assessment result',
+          },
+        ],
+      }) as never,
+  })
+
+  assert.equal(model.length, 1)
+  assert.equal(model[0]?.definitionId, 'version-legacy')
+  assert.equal(model[0]?.assessmentTitle, 'Assessment result')
 })

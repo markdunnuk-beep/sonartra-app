@@ -68,7 +68,14 @@ test('direct detail access resolves behavioural_intelligence category results', 
 
   assert.equal(response.ok, true)
   assert.equal(response.state, 'ready')
-  assert.ok(sqlStatements.some((sql) => /LOWER\(BTRIM\(ad\.category\)\) IN \('individual', 'behavioural_intelligence'\)/i.test(sql)))
+  assert.ok(
+    sqlStatements.some(
+      (sql) =>
+        /LEFT JOIN assessment_versions av ON av\.id = COALESCE\(ar\.assessment_version_id, a\.assessment_version_id\)/i.test(sql)
+        && /LEFT JOIN assessment_definitions ad ON ad\.id = av\.assessment_definition_id/i.test(sql)
+        && /LOWER\(BTRIM\(ad\.category\)\) IN \('individual', 'behavioural_intelligence'\)/i.test(sql),
+    ),
+  )
 })
 
 test('direct detail access blocks results from non-individual categories', async () => {

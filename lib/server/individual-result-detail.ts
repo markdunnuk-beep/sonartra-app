@@ -104,8 +104,8 @@ export async function loadIndividualResultDetailById(
             av.key AS assessment_version_key
      FROM assessment_results ar
      INNER JOIN assessments a ON a.id = ar.assessment_id
-     INNER JOIN assessment_versions av ON av.id = a.assessment_version_id
-     INNER JOIN assessment_definitions ad ON ad.id = av.assessment_definition_id
+     LEFT JOIN assessment_versions av ON av.id = COALESCE(ar.assessment_version_id, a.assessment_version_id)
+     LEFT JOIN assessment_definitions ad ON ad.id = av.assessment_definition_id
      WHERE ar.id = $1
        AND a.user_id = $2
        AND a.organisation_id IS NULL
